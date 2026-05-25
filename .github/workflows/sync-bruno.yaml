@@ -29,11 +29,11 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan github.com >> ~/.ssh/known_hosts
 
-#      - name: Push bruno folder to target repo
+      - name: Push bruno folder to target repo
         run: |
           set -euo pipefail
 
-#          git remote add bruno-target git@github.com:vetostudiospvtltd/schoolfirst-api-collection.git
+          git remote add bruno-target git@github.com:lifeboattechnologieshyd/schoolfirst_erp_backend.git
           split_sha="$(git subtree split --prefix=bruno)"
 
           if ! git push bruno-target "$split_sha":development; then
