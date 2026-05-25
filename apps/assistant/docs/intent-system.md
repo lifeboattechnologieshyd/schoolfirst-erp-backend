@@ -22,21 +22,21 @@ flowchart LR
 
 | File | Purpose |
 |------|---------|
-| [registry.py](file:///Users/karthiknarayan/veto/samsr-backend/apps/assistant/intents/registry.py) | Static intent definitions (name, handler, thresholds, schemas) |
-| [general_qa.py](file:///Users/karthiknarayan/veto/samsr-backend/apps/assistant/intents/handlers/general_qa.py) | Handler for generic QA — passes through to LLM |
-| [intent_dispatcher.py](file:///Users/karthiknarayan/veto/samsr-backend/apps/assistant/services/intent_dispatcher.py) | Dynamic `importlib`-based handler resolution & execution |
+| [registry.py](file:///Users/karthiknarayan/veto/schoolfirst-backend/apps/assistant/intents/registry.py) | Static intent definitions (name, handler, thresholds, schemas) |
+| [general_qa.py](file:///Users/karthiknarayan/veto/schoolfirst-backend/apps/assistant/intents/handlers/general_qa.py) | Handler for generic QA — passes through to LLM |
+| [intent_dispatcher.py](file:///Users/karthiknarayan/veto/schoolfirst-backend/apps/assistant/services/intent_dispatcher.py) | Dynamic `importlib`-based handler resolution & execution |
 
 ### Modified Files
 
 | File | Change |
 |------|--------|
-| [llm_service.py](file:///Users/karthiknarayan/veto/samsr-backend/apps/assistant/services/llm_service.py) | Static registry integration, `execute_intent()` method |
-| [base.py](file:///Users/karthiknarayan/veto/samsr-backend/apps/assistant/services/providers/base.py) | Added `_extract_json()` helper for markdown fence stripping |
-| [aws_bedrock_native.py](file:///Users/karthiknarayan/veto/samsr-backend/apps/assistant/services/providers/aws_bedrock_native.py) | Real AI intent classification via Converse API |
-| [fake.py](file:///Users/karthiknarayan/veto/samsr-backend/apps/assistant/services/providers/fake.py) | Returns `general_qa` instead of `GENERAL` |
-| [chat.py](file:///Users/karthiknarayan/veto/samsr-backend/apps/assistant/views/chat.py) | AI classification → dynamic handler dispatch flow |
-| [message.py](file:///Users/karthiknarayan/veto/samsr-backend/apps/assistant/models/message.py) | `intent_id` (UUID) → `intent_name` (CharField) |
-| [message.py](file:///Users/karthiknarayan/veto/samsr-backend/apps/assistant/serializers/message.py) | Updated serializer fields |
+| [llm_service.py](file:///Users/karthiknarayan/veto/schoolfirst-backend/apps/assistant/services/llm_service.py) | Static registry integration, `execute_intent()` method |
+| [base.py](file:///Users/karthiknarayan/veto/schoolfirst-backend/apps/assistant/services/providers/base.py) | Added `_extract_json()` helper for markdown fence stripping |
+| [aws_bedrock_native.py](file:///Users/karthiknarayan/veto/schoolfirst-backend/apps/assistant/services/providers/aws_bedrock_native.py) | Real AI intent classification via Converse API |
+| [fake.py](file:///Users/karthiknarayan/veto/schoolfirst-backend/apps/assistant/services/providers/fake.py) | Returns `general_qa` instead of `GENERAL` |
+| [chat.py](file:///Users/karthiknarayan/veto/schoolfirst-backend/apps/assistant/views/chat.py) | AI classification → dynamic handler dispatch flow |
+| [message.py](file:///Users/karthiknarayan/veto/schoolfirst-backend/apps/assistant/models/message.py) | `intent_id` (UUID) → `intent_name` (CharField) |
+| [message.py](file:///Users/karthiknarayan/veto/schoolfirst-backend/apps/assistant/serializers/message.py) | Updated serializer fields |
 
 ### Intent Schema
 
@@ -94,7 +94,7 @@ Dispatching intent handler: handler=apps.assistant.intents.handlers.general_qa.h
 
 To add a new intent:
 
-1. Add an entry to `INTENT_REGISTRY` in [registry.py](file:///Users/karthiknarayan/veto/samsr-backend/apps/assistant/intents/registry.py)
+1. Add an entry to `INTENT_REGISTRY` in [registry.py](file:///Users/karthiknarayan/veto/schoolfirst-backend/apps/assistant/intents/registry.py)
 2. Create a handler in `apps/assistant/intents/handlers/your_intent.py` with a `handle(query, history, intent_config, llm_service, stream=False)` function
    - Non-streaming: return `LLMResponse` (from `providers.base`)
    - Streaming: return `Iterator[str | dict]` (text chunks + citation dicts)

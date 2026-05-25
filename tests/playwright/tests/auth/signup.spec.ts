@@ -68,7 +68,7 @@ test.describe('Signup Flow', () => {
             port: parseInt(process.env.POSTGRES_DB_PORT || '5432', 10),
             user: process.env.POSTGRES_DB_USER || 'postgres',
             password: process.env.POSTGRES_DB_PASSWORD || 'postgres',
-            database: process.env.POSTGRES_DB_NAME || 'samsr',
+            database: process.env.POSTGRES_DB_NAME || 'schoolfirst',
         });
 
         let otp = '';

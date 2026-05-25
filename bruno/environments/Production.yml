@@ -1,9 +1,9 @@
 name: Production
 variables:
   - name: base_url
-    value: https://api.samsr.us/
+    value: https://api.schoolfirst.us/
   - name: email
-    value: admin@samsr.us
+    value: admin@schoolfirst.us
   - name: password
     value: secure_password
   - name: folder_id

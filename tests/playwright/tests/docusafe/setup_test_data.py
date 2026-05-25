@@ -5,7 +5,7 @@ import django
 from dotenv import load_dotenv
 
 # Setup Django environment
-BASE_DIR = "/Users/karthiknarayan/veto/samsr-backend"
+BASE_DIR = "/Users/karthiknarayan/veto/schoolfirst-backend"
 sys.path.append(BASE_DIR)
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings.development")
@@ -21,7 +21,7 @@ logger = structlog.get_logger(__name__)
 
 def setup_test_data():
     owner_email = "test@example.com"
-    guest_email = "admin@samsr.us"
+    guest_email = "admin@schoolfirst.us"
 
     owner = UserMaster.objects.filter(email=owner_email).first()
     guest = UserMaster.objects.filter(email=guest_email).first()

@@ -10,6 +10,6 @@ EMAIL_USE_SSL = get_from_env("EMAIL_USE_SSL", False, type_cast=str_to_bool)
 EMAIL_TIMEOUT = get_from_env("EMAIL_TIMEOUT", 10, type_cast=int)
 DEFAULT_FROM_EMAIL = get_from_env(
     "DEFAULT_FROM_EMAIL",
-    EMAIL_HOST_USER or "noreply@samsr.local",
+    EMAIL_HOST_USER or "noreply@schoolfirst.local",
 )
 SERVER_EMAIL = get_from_env("SERVER_EMAIL", DEFAULT_FROM_EMAIL)

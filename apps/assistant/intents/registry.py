@@ -77,7 +77,7 @@ SYSTEM_CONFIG = SystemConfig(intent_classifier=_get_intent_classifier_config())
 
 INTENT_REGISTRY: list[IntentConfig] = [
     IntentConfig(
-        name="samsr_assistant",
+        name="schoolfirst_assistant",
         description=(
             "General knowledge questions, internet lookups, factual answers, casual conversation, "
             "profile queries and updates, family management (listing families, viewing members, "

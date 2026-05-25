@@ -10,7 +10,7 @@ http:
     type: json
     data: |-
       {
-        "email": "admin@samsr.us",
+        "email": "admin@schoolfirst.us",
       //   "password": "password"
         "password":"Admin@123"
       }
@@ -53,7 +53,7 @@ examples:
         type: json
         data: |-
           {
-            "email": "admin@samsr.us",
+            "email": "admin@schoolfirst.us",
             "password": "password"
           }
     response:
@@ -85,12 +85,12 @@ examples:
               "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc3OTE1OTA3NSwiaWF0IjoxNzc4NTU0Mjc1LCJqdGkiOiI2MTBiZjBhODUwNjE0ZDUxYWIxNzkzYWU0Nzk2ZGEwMyIsInVzZXJfaWQiOiJiN2RjZTFjMC01ODQ3LTRhMTEtYmQzZS1mZDA5NGVlZWRjNDkifQ.dJ6UsVWIv4dWAtQIsw9y6giZHKe_QRrtwdUhz-h6MzI",
               "user": {
                 "id": "b7dce1c0-5847-4a11-bd3e-fd094eeedc49",
-                "email": "admin@samsr.us",
+                "email": "admin@schoolfirst.us",
                 "first_name": "John",
                 "last_name": "Doe",
                 "gender": "male",
                 "dob": "1990-01-15",
-                "profile_image": "https://samsr-dev.s3.amazonaws.com/profiles/b7dce1c0-5847-4a11-bd3e-fd094eeedc49/IMG_0122_5c37e814.jpeg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAYDMF43AF7JJOR6SY%2F20260512%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20260512T025115Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=2b057754e292b37301a31e0ed95b84aefdc03d54543b449638dca32e5764b85f",
+                "profile_image": "https://schoolfirst-dev.s3.amazonaws.com/profiles/b7dce1c0-5847-4a11-bd3e-fd094eeedc49/IMG_0122_5c37e814.jpeg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAYDMF43AF7JJOR6SY%2F20260512%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20260512T025115Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=2b057754e292b37301a31e0ed95b84aefdc03d54543b449638dca32e5764b85f",
                 "is_profile_updated": true,
                 "is_password_updated": true
               }
@@ -106,7 +106,7 @@ examples:
         type: json
         data: |-
           {
-            "email": "admin@samsr.us"
+            "email": "admin@schoolfirst.us"
           }
     response:
       status: 200
@@ -147,7 +147,7 @@ examples:
         type: json
         data: |-
           {
-            "email": "admin@samsr.us",
+            "email": "admin@schoolfirst.us",
             "password": "wrongpassword"
           }
     response:

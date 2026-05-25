@@ -103,7 +103,7 @@ examples:
         type: json
         data: |-
           {
-            "email": "admin@samsr.us",
+            "email": "admin@schoolfirst.us",
             "invite_code": "56VUTU"
           }
     response:

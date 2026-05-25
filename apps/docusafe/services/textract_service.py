@@ -119,7 +119,7 @@ def _extract_blocks_sync(file_path: str) -> list[dict[str, Any]]:
 def _extract_blocks_async(file_path: str) -> list[dict[str, Any]]:
     """Async Textract: returns raw blocks (not parsed text)."""
     client = _get_textract_client()
-    bucket = getattr(settings, "AWS_S3_BUCKET", "samsr")
+    bucket = getattr(settings, "AWS_S3_BUCKET", "schoolfirst")
 
     try:
         start_response = client.start_document_analysis(

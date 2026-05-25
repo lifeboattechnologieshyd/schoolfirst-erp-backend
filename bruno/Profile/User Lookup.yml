@@ -31,7 +31,7 @@ examples:
         type: json
         data: |-
           {
-            "email": "admin@samsr.us"
+            "email": "admin@schoolfirst.us"
           }
     response:
       status: 200
@@ -59,7 +59,7 @@ examples:
             "message": null,
             "data": {
               "id": "b7dce1c0-5847-4a11-bd3e-fd094eeedc49",
-              "email": "admin@samsr.us",
+              "email": "admin@schoolfirst.us",
               "first_name": "John",
               "last_name": "Doe",
               "gender": "male",
@@ -117,7 +117,7 @@ examples:
         type: json
         data: |-
           {
-            "email": "admin@samsr.us"
+            "email": "admin@schoolfirst.us"
           }
     response:
       status: 401

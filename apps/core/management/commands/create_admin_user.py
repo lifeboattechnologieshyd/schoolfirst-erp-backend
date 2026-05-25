@@ -9,14 +9,14 @@ from shared.enums import UserStatus
 
 
 class Command(BaseCommand):
-    help = "Create an admin user with profile (email: admin@samsr.us)"
+    help = "Create an admin user with profile (email: admin@schoolfirst.us)"
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--email",
             type=str,
-            default="admin@samsr.us",
-            help="Email address for the admin user (default: admin@samsr.us)",
+            default="admin@schoolfirst.us",
+            help="Email address for the admin user (default: admin@schoolfirst.us)",
         )
         parser.add_argument(
             "--password",

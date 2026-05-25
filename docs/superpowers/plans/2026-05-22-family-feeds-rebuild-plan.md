@@ -35,7 +35,7 @@ To prevent N+1 queries when loading feeds and their associated comments/reaction
 
 ### 1. Database & Models (`apps/feed/models/`)
 
-#### [MODIFY] [feed.py](file:///Users/karthiknarayan/veto/samsr-backend/apps/feed/models/feed.py)
+#### [MODIFY] [feed.py](file:///Users/karthiknarayan/veto/schoolfirst-backend/apps/feed/models/feed.py)
 Redesign and replace all existing model classes with generic feed entities:
 
 ```python
@@ -118,7 +118,7 @@ class FeedShare(AuditModel):
 
 ### 2. Services (`apps/feed/services/`)
 
-#### [MODIFY] [feed_service.py](file:///Users/karthiknarayan/veto/samsr-backend/apps/feed/services/feed_service.py)
+#### [MODIFY] [feed_service.py](file:///Users/karthiknarayan/veto/schoolfirst-backend/apps/feed/services/feed_service.py)
 * Re-implement `FeedService` logic:
   - **Security Access Check (`_get_visible_feed`)**:
     Checks if a post is visible to a user before performing reading, commenting, reacting, or sharing. Visibility checks build filters dynamically (using family lists and close group lists) matching the scopes of `SocialGraphService` (similar to Calendar logic).
@@ -145,7 +145,7 @@ class FeedShare(AuditModel):
 
 ### 3. Serializers (`apps/feed/serializers/`)
 
-#### [MODIFY] [feed.py](file:///Users/karthiknarayan/veto/samsr-backend/apps/feed/serializers/feed.py)
+#### [MODIFY] [feed.py](file:///Users/karthiknarayan/veto/schoolfirst-backend/apps/feed/serializers/feed.py)
 * Update serializers:
   - `FeedListSerializer`:
     * Map `text` -> `body_text`.
@@ -161,7 +161,7 @@ class FeedShare(AuditModel):
 
 ### 4. Views & Routing (`apps/feed/views/`, `apps/feed/urls.py`)
 
-#### [MODIFY] [feed.py](file:///Users/karthiknarayan/veto/samsr-backend/apps/feed/views/feed.py)
+#### [MODIFY] [feed.py](file:///Users/karthiknarayan/veto/schoolfirst-backend/apps/feed/views/feed.py)
 * Re-implement View classes:
   - `FeedListCreateView` (GET `/api/v1/feed`, POST `/api/v1/feed`)
   - `FeedDetailView` — GET, PUT, PATCH, DELETE `/api/v1/feed/{feed_id}`
@@ -170,7 +170,7 @@ class FeedShare(AuditModel):
   - `FeedReactionView` (POST `/api/v1/feed/<uuid:feed_id>/react`)
   - `FeedShareView` (POST `/api/v1/feed/<uuid:feed_id>/share`)
 
-#### [MODIFY] [urls.py](file:///Users/karthiknarayan/veto/samsr-backend/apps/feed/urls.py)
+#### [MODIFY] [urls.py](file:///Users/karthiknarayan/veto/schoolfirst-backend/apps/feed/urls.py)
 * Map urls:
   - `path("v1/feed", FeedListCreateView.as_view())`
   - `path("v1/feed/<uuid:feed_id>", FeedDetailView.as_view())`
@@ -194,7 +194,7 @@ class FeedShare(AuditModel):
 
 ### 6. Playwright Tests (`tests/playwright/tests/feed/`)
 
-#### [MODIFY] [feed.spec.ts](file:///Users/karthiknarayan/veto/samsr-backend/tests/playwright/tests/feed/feed.spec.ts)
+#### [MODIFY] [feed.spec.ts](file:///Users/karthiknarayan/veto/schoolfirst-backend/tests/playwright/tests/feed/feed.spec.ts)
 * Update tests to validate:
   - Access validation for reacting/commenting/sharing posts.
   - Verification of incremented reaction/comment/share counters.

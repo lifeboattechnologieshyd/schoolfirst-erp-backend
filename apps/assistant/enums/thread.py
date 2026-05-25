@@ -2,7 +2,7 @@ from django.db import models
 
 DEFAULT_THREAD_NAME = "New Chat"
 DEFAULT_MODEL_NAME = "assistant-model"
-DEFAULT_INTENT = "samsr_assistant"
+DEFAULT_INTENT = "schoolfirst_assistant"
 
 
 class ThreadStatus(models.TextChoices):

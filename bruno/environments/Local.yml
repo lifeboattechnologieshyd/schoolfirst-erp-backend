@@ -3,7 +3,7 @@ variables:
   - name: base_url
     value: http://localhost:8000/
   - name: email
-    value: admin@samsr.us
+    value: admin@schoolfirst.us
   - name: password
     value: Admin@123
   - name: folder_id

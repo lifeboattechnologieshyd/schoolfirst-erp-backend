@@ -11,7 +11,7 @@ http:
     data: |-
       {
           "name": "John",
-          "email": "john@samsr.us",
+          "email": "john@schoolfirst.us",
           "mobile": "+919876543210",
           "source": "Youtube",
           "remarks": "I have read about SamsR through youtube video, it's very great and I want to Join the club"

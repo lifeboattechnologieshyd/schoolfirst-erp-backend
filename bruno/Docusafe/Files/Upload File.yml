@@ -12,7 +12,7 @@ http:
       - name: file
         type: file
         value:
-          - /Users/karthiknarayan/veto/samsr-backend/CHANGELOG.md
+          - /Users/karthiknarayan/veto/schoolfirst-backend/CHANGELOG.md
       - name: file_name
         type: text
         value: CHANGELOG.md
@@ -93,7 +93,7 @@ examples:
               "folder_id": "57993c3c-e70f-4563-a6ae-d07604fc3095",
               "file_extension": ".png",
               "checksum": "08d2521273459ce20781173ac9cbf8f162880a70420b236ab5641a795bb02b54",
-              "file_url": "https://samsr-dev.s3.amazonaws.com/docusafe/b7dce1c0-5847-4a11-bd3e-fd094eeedc49/57993c3c-e70f-4563-a6ae-d07604fc3095/56da33e7-a9a1-4e62-a3c4-9028a1a4a8e8_sample.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAYDMF43AF7JJOR6SY%2F20260512%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20260512T032205Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host&X-Amz-Signature=ce61d7b47108cbdecd7f4608da966577ebba88ebbf1941ef5f39ad788f141f4d",
+              "file_url": "https://schoolfirst-dev.s3.amazonaws.com/docusafe/b7dce1c0-5847-4a11-bd3e-fd094eeedc49/57993c3c-e70f-4563-a6ae-d07604fc3095/56da33e7-a9a1-4e62-a3c4-9028a1a4a8e8_sample.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAYDMF43AF7JJOR6SY%2F20260512%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20260512T032205Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host&X-Amz-Signature=ce61d7b47108cbdecd7f4608da966577ebba88ebbf1941ef5f39ad788f141f4d",
               "updated_at": "2026-05-12T03:22:05.692682Z"
             },
             "error": null,

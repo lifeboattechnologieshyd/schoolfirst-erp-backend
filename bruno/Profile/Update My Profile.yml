@@ -10,7 +10,7 @@ http:
     type: json
     data: |-
       {
-        "email": "admin@samsr.us",
+        "email": "admin@schoolfirst.us",
         "first_name": "John",
         "last_name": "Doe",
         "gender": "male",
@@ -65,12 +65,12 @@ examples:
             "message": null,
             "data": {
               "id": "b7dce1c0-5847-4a11-bd3e-fd094eeedc49",
-              "email": "admin@samsr.us",
+              "email": "admin@schoolfirst.us",
               "first_name": "John",
               "last_name": "Doe",
               "gender": "male",
               "dob": "1990-01-15",
-              "profile_image": "https://samsr-dev.s3.amazonaws.com/profiles/b7dce1c0-5847-4a11-bd3e-fd094eeedc49/IMG_0122_5c37e814.jpeg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAYDMF43AF7JJOR6SY%2F20260512%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20260512T031756Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=9855416ab71d2eafa5e110956b5a1b76a92ff9150addd0f8f54f8b744e063395",
+              "profile_image": "https://schoolfirst-dev.s3.amazonaws.com/profiles/b7dce1c0-5847-4a11-bd3e-fd094eeedc49/IMG_0122_5c37e814.jpeg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAYDMF43AF7JJOR6SY%2F20260512%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20260512T031756Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=9855416ab71d2eafa5e110956b5a1b76a92ff9150addd0f8f54f8b744e063395",
               "is_profile_updated": true
             },
             "error": null,

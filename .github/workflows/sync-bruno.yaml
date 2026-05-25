@@ -33,10 +33,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          git remote add bruno-target git@github.com:vetostudiospvtltd/samsr-api-collection.git
+          git remote add bruno-target git@github.com:vetostudiospvtltd/schoolfirst-api-collection.git
           split_sha="$(git subtree split --prefix=bruno)"
 
           if ! git push bruno-target "$split_sha":development; then
-            echo "::error::Bruno sync push was not a fast-forward. samsr-api-collection/development is expected to be sync-owned; frontend consumers should only use git pull from that repository." >&2
+            echo "::error::Bruno sync push was not a fast-forward. schoolfirst-api-collection/development is expected to be sync-owned; frontend consumers should only use git pull from that repository." >&2
             exit 1
           fi

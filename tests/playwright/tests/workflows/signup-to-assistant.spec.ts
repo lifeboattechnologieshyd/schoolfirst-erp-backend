@@ -42,7 +42,7 @@ test.describe('End-to-End Workflow', () => {
             email: testEmail,
             invite_code: inviteCode,
             client: {
-                app: { app_id: 'com.samsr.test' },
+                app: { app_id: 'com.schoolfirst.test' },
                 device: { device_id: 'test-device-id', os: 'iOS' }
             }
         };
@@ -59,7 +59,7 @@ test.describe('End-to-End Workflow', () => {
             port: parseInt(process.env.POSTGRES_DB_PORT || '5432', 10),
             user: process.env.POSTGRES_DB_USER || 'postgres',
             password: process.env.POSTGRES_DB_PASSWORD || 'postgres',
-            database: process.env.POSTGRES_DB_NAME || 'samsr',
+            database: process.env.POSTGRES_DB_NAME || 'schoolfirst',
         });
 
         try {

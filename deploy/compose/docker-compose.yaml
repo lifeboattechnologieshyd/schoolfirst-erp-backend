@@ -1,7 +1,7 @@
 services:
   minio:
     image: minio/minio:latest
-    container_name: samsr-minio
+    container_name: schoolfirst-minio
     restart: always
     env_file:
       - ../../.env.docker
@@ -16,7 +16,7 @@ services:
     volumes:
       - minio_data:/data
     networks:
-      - samsr-network
+      - schoolfirst-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${MINIO_S3_PORT:-9000}/minio/health/live"]
       interval: 5s
@@ -25,7 +25,7 @@ services:
 
   minio-init:
     image: minio/mc
-    container_name: samsr-minio-init
+    container_name: schoolfirst-minio-init
     depends_on:
       minio:
         condition: service_healthy
@@ -33,30 +33,30 @@ services:
       /bin/sh -c "
       sleep 5;
       mc alias set local http://minio:${MINIO_S3_PORT:-9000} ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
-      mc mb -p local/samsr || true;
-      mc anonymous set download local/samsr;
+      mc mb -p local/schoolfirst || true;
+      mc anonymous set download local/schoolfirst;
       exit 0;
       "
     networks:
-      - samsr-network
+      - schoolfirst-network
 
   postgres:
     image: postgres:17
-    container_name: samsr-postgres
+    container_name: schoolfirst-postgres
     restart: unless-stopped
     env_file:
       - ../../.env.docker
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_DB=${POSTGRES_DB:-samsr}
+      - POSTGRES_DB=${POSTGRES_DB:-schoolfirst}
       - PGSSLMODE=${PGSSLMODE:-disable}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     networks:
-      - samsr-network
+      - schoolfirst-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready"]
       interval: 10s
@@ -65,7 +65,7 @@ services:
 
   qdrant:
     image: qdrant/qdrant:latest
-    container_name: samsr-qdrant
+    container_name: schoolfirst-qdrant
     restart: unless-stopped
     ports:
       - "${QDRANT_PORT:-6333}:6333"
@@ -73,7 +73,7 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     networks:
-      - samsr-network
+      - schoolfirst-network
     healthcheck:
       test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
       interval: 10s
@@ -82,7 +82,7 @@ services:
 
   mailpit:
     image: axllent/mailpit:latest
-    container_name: samsr-mailpit
+    container_name: schoolfirst-mailpit
     restart: unless-stopped
     ports:
       - "${MAILPIT_SMTP_PORT:-1025}:1025" # SMTP
@@ -90,23 +90,23 @@ services:
     volumes:
       - mailpit_data:/data
     networks:
-      - samsr-network
+      - schoolfirst-network
 
   backend:
-    image: samsr-backend:latest
+    image: schoolfirst-backend:latest
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
       tags:
-        - samsr-backend:latest
-    container_name: samsr-backend
+        - schoolfirst-backend:latest
+    container_name: schoolfirst-backend
     restart: unless-stopped
     env_file:
       - ../../.env
     ports:
       - "${HTTP_PORT:-8000}:8000"
     networks:
-      - samsr-network
+      - schoolfirst-network
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/').read()"]
       interval: 10s
@@ -120,5 +120,5 @@ volumes:
   mailpit_data:
 
 networks:
-  samsr-network:
+  schoolfirst-network:
     external: true

@@ -10,19 +10,19 @@
 
 ## Build Image
 
-`docker buildx build --platform linux/amd64,linux/arm64 -t samsr-backend:latest --load .`
+`docker buildx build --platform linux/amd64,linux/arm64 -t schoolfirst-backend:latest --load .`
 
 ## Push Image
 
-`docker push samsr-backend:latest`
+`docker push schoolfirst-backend:latest`
 
 ## Build and Push
 
-`docker buildx build --platform linux/amd64,linux/arm64 -t samsr-backend:latest --push .`
+`docker buildx build --platform linux/amd64,linux/arm64 -t schoolfirst-backend:latest --push .`
 
 ## Pull Image
 
-`docker pull samsr-backend:latest`
+`docker pull schoolfirst-backend:latest`
 
 ## Local Setup
 
@@ -31,7 +31,7 @@
 3. Install dependencies: ```pip install -r requirements/development.txt```
 4. Create .env file with necessary environment variables (refer to .env.example for guidance)
 5. Run the migrations: ```python manage.py migrate```
-6. Create the admin user if needed: ```python manage.py create_admin_user --email admin@samsr.us --password Admin@123 --first-name John --last-name Doe```
+6. Create the admin user if needed: ```python manage.py create_admin_user --email admin@schoolfirst.us --password Admin@123 --first-name John --last-name Doe```
 7. Start the development server: ```python manage.py runserver```
 
 Note:- If using docker for local development, run ```docker compose -f ./deploy/compose/docker-compose.yaml up -d --build --remove-orphans postgres qdrant mailpit``` to start the necessary services, before running the migrations and starting the development server.

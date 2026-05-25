@@ -77,7 +77,7 @@ examples:
         type: json
         data: |-
           {
-            "email": "admin@samsr.us"
+            "email": "admin@schoolfirst.us"
           }
     response:
       status: 400

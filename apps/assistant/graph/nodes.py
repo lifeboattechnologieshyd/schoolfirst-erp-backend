@@ -30,7 +30,7 @@ def intent_router_node(state: AssistantState, config: RunnableConfig) -> dict[st
 
     Two intents are currently active:
       - "docusafe_qa": for threads with module_name="docusafe" in module_settings
-      - DEFAULT_INTENT ("samsr_assistant"): for all other threads
+      - DEFAULT_INTENT ("schoolfirst_assistant"): for all other threads
 
     LLM-based multi-intent classification is not active. All non-docusafe threads
     are routed directly to the default intent.

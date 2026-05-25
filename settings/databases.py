@@ -7,7 +7,7 @@ APP_TO_DB_MAPPING = {}
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": get_from_env("POSTGRES_DB_NAME", "samsr"),
+        "NAME": get_from_env("POSTGRES_DB_NAME", "schoolfirst"),
         "USER": get_from_env("POSTGRES_DB_USER", "postgres"),
         "PASSWORD": get_from_env("POSTGRES_DB_PASSWORD", "postgres"),
         "HOST": get_from_env("POSTGRES_DB_HOST", "localhost"),

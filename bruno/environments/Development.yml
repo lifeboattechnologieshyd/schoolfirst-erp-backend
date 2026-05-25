@@ -1,9 +1,9 @@
 name: Development
 variables:
   - name: base_url
-    value: https://dev.api.samsr.us/
+    value: https://dev.api.schoolfirst.us/
   - name: email
-    value: dev.admin@samsr.us
+    value: dev.admin@schoolfirst.us
   - name: password
     value: password123
   - name: folder_id
