@@ -30,7 +30,7 @@ jobs:
           cd schoolfirst_erp_backend
           git checkout development
           git pull
-          docker network create samsr-network || true
+#          docker network create samsr-network || true
           # Explicitly start ONLY deployment-required services (ignores profiled minio/qdrant)
           docker compose -f ./deploy/compose/docker-compose.yaml up -d --build --remove-orphans postgres backend
           # Clean up old/dangling images to save space without breaking cache
