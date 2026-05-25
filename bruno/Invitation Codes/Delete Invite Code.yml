@@ -1,0 +1,114 @@
+info:
+  name: Delete Invite Code
+  type: http
+  seq: 7
+
+http:
+  method: DELETE
+  url: "{{base_url}}api/v1/auth/invitations/{{invite_code}}/delete"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: Soft delete an invitation code. Only creator can delete.
+
+examples:
+  - name: Error - Not Found
+    request:
+      url: "{{base_url}}api/v1/auth/invitations/{{invite_code}}/delete"
+      method: DELETE
+    response:
+      status: 404
+      statusText: Not Found
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: DELETE, OPTIONS
+        - name: content-length
+          value: 146
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": "Invitation code not found",
+            "data": null,
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "Invitation code not found"
+            },
+            "meta": null
+          }
+  - name: Error - Unauthorized
+    request:
+      url: "{{base_url}}api/v1/auth/invitations/{{invite_code}}/delete"
+      method: DELETE
+    response:
+      status: 401
+      statusText: Unauthorized
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: DELETE, OPTIONS
+        - name: content-length
+          value: 58
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "detail": "Authentication credentials were not provided."
+          }
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/auth/invitations/{{invite_code}}/delete"
+      method: DELETE
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: DELETE, OPTIONS
+        - name: content-length
+          value: 102
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Invitation code deleted successfully",
+            "data": null,
+            "error": null,
+            "meta": null
+          }

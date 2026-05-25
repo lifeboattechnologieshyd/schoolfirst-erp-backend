@@ -1,0 +1,155 @@
+info:
+  name: Bulk Upload Files to Folder
+  type: http
+  seq: 8
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/docusafe/folders/{{folder_id}}/files/bulk"
+  body:
+    type: multipart-form
+    data:
+      - name: files
+        type: file
+        value:
+          - /Users/karthiknarayan/veto/samsr-backend/AGENTS.md
+      - name: descriptions
+        type: text
+        value: "{}"
+  auth: inherit
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        try {
+            let response = res.getBody();
+
+            // Check if token is expired
+            if (response && response.success === true) {
+              console.log("Updating File ID Variable");
+              var file_id = response.data.id;
+              bru.setEnvVar("file_id", file_id);
+            }
+        } catch (e) {
+            console.error("❌ Error in collection-level post-request script:", e);
+        }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/docusafe/folders/{{folder_id}}/files/bulk"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "files": "<multipart>",
+            "descriptions": "[{\"file_name\":\"bulk1.png\",\"description\":\"First bulk file\"}]"
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 1068
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Successfully uploaded 1 files. Failed: 0 files.",
+            "data": {
+              "success_files": [
+                {
+                  "id": "77caefa7-69b7-4814-b1ef-1282eefc0106",
+                  "file_name": "bulk1.png",
+                  "file_size": 67,
+                  "mime_type": "image/png",
+                  "is_shared": false,
+                  "status": "ACTIVE",
+                  "llm_status": "PENDING",
+                  "created_at": "2026-05-12T03:22:06.490852Z",
+                  "description": "First bulk file",
+                  "summary": null,
+                  "embedding_model": null,
+                  "folder_id": "57993c3c-e70f-4563-a6ae-d07604fc3095",
+                  "file_extension": ".png",
+                  "checksum": "08d2521273459ce20781173ac9cbf8f162880a70420b236ab5641a795bb02b54",
+                  "file_url": "https://samsr-dev.s3.amazonaws.com/docusafe/b7dce1c0-5847-4a11-bd3e-fd094eeedc49/57993c3c-e70f-4563-a6ae-d07604fc3095/77caefa7-69b7-4814-b1ef-1282eefc0106_bulk1.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAYDMF43AF7JJOR6SY%2F20260512%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20260512T032206Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host&X-Amz-Signature=a568f5d11c019a15fbedf918d193eb8904ea3aed88911798688d408e240df95c",
+                  "updated_at": "2026-05-12T03:22:06.490868Z"
+                }
+              ],
+              "failed_files": []
+            },
+            "error": null,
+            "meta": null
+          }
+  - name: Error - Invalid Descriptions
+    request:
+      url: "{{base_url}}api/v1/docusafe/folders/{{folder_id}}/files/bulk"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "files": "<multipart>",
+            "descriptions": "invalid_json"
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 236
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "Invalid descriptions format.",
+              "details": [
+                {
+                  "type": "field",
+                  "field": "descriptions",
+                  "issue": null,
+                  "message": "Value must be valid JSON."
+                }
+              ]
+            },
+            "meta": null
+          }

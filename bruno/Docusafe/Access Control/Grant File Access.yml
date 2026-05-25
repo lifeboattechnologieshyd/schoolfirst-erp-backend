@@ -1,0 +1,128 @@
+info:
+  name: Grant File Access
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/docusafe/access/grant"
+  body:
+    type: json
+    data: |-
+      {
+        "file_ids": ["{{file_id}}"],
+        "access_type": "FAMILY",
+        "family_id": "{{family_id}}"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: Grant read-only access to one or more files. access_type can be FAMILY (all family members) or USER (specific users). When access_type is USER, user_ids is required.
+
+examples:
+  - name: Error - Missing Fields
+    request:
+      url: "{{base_url}}api/v1/docusafe/access/grant"
+      method: POST
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 423
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "There was a validation error with your request.",
+              "details": [
+                {
+                  "type": "field",
+                  "field": "file_ids",
+                  "issue": null,
+                  "message": "This field is required."
+                },
+                {
+                  "type": "field",
+                  "field": "access_type",
+                  "issue": null,
+                  "message": "This field is required."
+                },
+                {
+                  "type": "field",
+                  "field": "family_id",
+                  "issue": null,
+                  "message": "This field is required."
+                }
+              ]
+            },
+            "meta": null
+          }
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/docusafe/access/grant"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "file_ids": [
+              "56da33e7-a9a1-4e62-a3c4-9028a1a4a8e8"
+            ],
+            "access_type": "FAMILY",
+            "family_id": "5eacaf61-d7dd-419c-9772-e6f049ad51a5"
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 190
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Access granted successfully for 1 instances.",
+            "data": {
+              "count": 1
+            },
+            "errorCode": 0,
+            "description": "Access granted successfully for 1 instances.",
+            "total": 0,
+            "error": null
+          }

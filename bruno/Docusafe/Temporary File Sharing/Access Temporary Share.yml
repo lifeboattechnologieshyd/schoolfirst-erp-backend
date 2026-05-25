@@ -1,0 +1,216 @@
+info:
+  name: Access Temporary Share
+  type: http
+  seq: 6
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/docusafe/shares/access/{{share_id}}"
+  body:
+    type: json
+    data: |-
+      {
+        "password": "secure123"
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/docusafe/shares/access/{{share_id}}"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "password": "newpassword123"
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 359
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Access granted.",
+            "data": {
+              "files": [
+                {
+                  "file_id": "56da33e7-a9a1-4e62-a3c4-9028a1a4a8e8",
+                  "file_name": "updated_sample.png",
+                  "file_size": 67,
+                  "mime_type": "image/png"
+                }
+              ],
+              "total_files": 1,
+              "title": "Patched Title",
+              "expires_at": "2026-12-31T23:59:59+00:00",
+              "shared_by": "John Doe"
+            },
+            "errorCode": 0,
+            "description": "Access granted.",
+            "total": 0,
+            "error": null
+          }
+  - name: Error - Wrong Password
+    request:
+      url: "{{base_url}}api/v1/docusafe/shares/access/{{share_id}}"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "password": "wrongpassword"
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 260
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "There was a validation error with your request.",
+              "details": [
+                {
+                  "type": "global",
+                  "field": null,
+                  "issue": null,
+                  "message": "Invalid password. 4 attempts remaining."
+                }
+              ]
+            },
+            "meta": null
+          }
+  - name: Error - Missing Password
+    request:
+      url: "{{base_url}}api/v1/docusafe/shares/access/{{share_id}}"
+      method: POST
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 249
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "There was a validation error with your request.",
+              "details": [
+                {
+                  "type": "field",
+                  "field": "password",
+                  "issue": null,
+                  "message": "This field is required."
+                }
+              ]
+            },
+            "meta": null
+          }
+  - name: Error - Not Found
+    request:
+      url: "{{base_url}}api/v1/docusafe/shares/access/{{share_id}}"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "password": "newpassword123"
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 237
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "There was a validation error with your request.",
+              "details": [
+                {
+                  "type": "global",
+                  "field": null,
+                  "issue": null,
+                  "message": "Share not found."
+                }
+              ]
+            },
+            "meta": null
+          }

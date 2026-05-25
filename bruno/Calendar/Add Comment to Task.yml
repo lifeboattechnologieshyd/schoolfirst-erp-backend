@@ -1,0 +1,77 @@
+info:
+  name: Add Comment to Task
+  type: http
+  seq: 17
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/calendar/tasks/{{task_id}}/comments"
+  body:
+    type: json
+    data: |-
+      {
+        "comment": "I'll handle this one.",
+        "occurrence_date": "2026-10-23"
+      }
+  auth: inherit
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        try {
+          let response = res.getBody();
+          if (response && response.success === true) {
+            bru.setEnvVar("task_comment_id", response.data.id);
+          }
+        } catch (e) {
+          console.error("Error:", e);
+        }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Comment On A Recurring Occurrence
+    request:
+      url: "{{base_url}}api/v1/calendar/tasks/{{task_id}}/comments"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "comment": "I'll handle this one.",
+            "occurrence_date": "2026-10-23"
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - name: content-type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": {
+              "id": "13b808f2-73b9-4af6-a94f-f12f77f9a8f1",
+              "parent_type": "task",
+              "parent_id": "4cd93f56-0b72-41c4-9d09-6c1d6a552222",
+              "user_id": "{{user_id}}",
+              "comment": "I'll handle this one.",
+              "created_at": "2026-05-12T03:15:59.236464Z",
+              "deleted_at": null
+            },
+            "error": null,
+            "meta": null
+          }
+
+docs: |-
+  Add a comment to a task.
+  comment is required.
+  occurrence_date is optional and targets a specific recurring occurrence. When provided, the backend creates or reuses the matching override row and stores the comment there.

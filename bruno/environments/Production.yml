@@ -1,0 +1,22 @@
+name: Production
+variables:
+  - name: base_url
+    value: https://api.samsr.us/
+  - name: email
+    value: admin@samsr.us
+  - name: password
+    value: secure_password
+  - name: folder_id
+    value: ""
+  - name: file_id
+    value: ""
+  - name: share_id
+    value: ""
+  - name: thread_id
+    value: ""
+  - name: invite_code
+    value: ""
+  - name: member_id
+    value: ""
+  - name: family_id
+    value: ""

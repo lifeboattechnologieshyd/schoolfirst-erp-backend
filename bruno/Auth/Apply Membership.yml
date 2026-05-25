@@ -1,0 +1,147 @@
+info:
+  name: Apply Membership
+  type: http
+  seq: 7
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/membership/apply"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "John",
+        "email": "john@samsr.us",
+        "mobile": "+919876543210",
+        "source": "Youtube",
+        "remarks": "I have read about SamsR through youtube video, it's very great and I want to Join the club"
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Error - Missing Email
+    request:
+      url: "{{base_url}}api/v1/membership/apply"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "first_name": "Test",
+            "last_name": "User"
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: "85"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": "Email is mandatory",
+            "data": null,
+            "error": null,
+            "meta": null
+          }
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/membership/apply"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "first_name": "Test",
+            "last_name": "Applicant",
+            "email": "newapplicant@example.com",
+            "mobile": "+1234567890"
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: "100"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Application submitted successfully",
+            "data": null,
+            "error": null,
+            "meta": null
+          }
+  - name: Error - Already Applied
+    request:
+      url: "{{base_url}}api/v1/membership/apply"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "first_name": "Test",
+            "last_name": "Applicant",
+            "email": "newapplicant@example.com",
+            "mobile": "+1234567890"
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: "96"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": "Application already submitted",
+            "data": null,
+            "error": null,
+            "meta": null
+          }

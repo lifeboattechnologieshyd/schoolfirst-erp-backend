@@ -1,0 +1,216 @@
+info:
+  name: Add Close Group Member
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/close-group/{{close_group_id}}/members"
+  body:
+    type: json
+    data: |-
+      {
+        "email": "friend1@example.com"
+      }
+  auth: inherit
+
+runtime:
+  variables:
+    - name: close_group_id
+      value: 8786fe5e-66f3-4b60-97ba-0c5325d7c7ad
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Error - Missing Email
+    request:
+      url: "{{base_url}}api/v1/close-group/{{close_group_id}}/members"
+      method: POST
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, POST, HEAD, OPTIONS
+        - name: content-length
+          value: "246"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "There was a validation error with your request.",
+              "details": [
+                {
+                  "type": "field",
+                  "field": "email",
+                  "issue": null,
+                  "message": "This field is required."
+                }
+              ]
+            },
+            "meta": null
+          }
+  - name: Error - Cannot Add Yourself
+    request:
+      url: "{{base_url}}api/v1/close-group/{{close_group_id}}/members"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "email": "admin@samsr.us"
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, POST, HEAD, OPTIONS
+        - name: content-length
+          value: "263"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "There was a validation error with your request.",
+              "details": [
+                {
+                  "type": "field",
+                  "field": "email",
+                  "issue": null,
+                  "message": "Cannot add yourself to your close group."
+                }
+              ]
+            },
+            "meta": null
+          }
+  - name: Error - Already In Close Group
+    request:
+      url: "{{base_url}}api/v1/close-group/{{close_group_id}}/members"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "email": "brother@example.com"
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, POST, HEAD, OPTIONS
+        - name: content-length
+          value: "265"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "There was a validation error with your request.",
+              "details": [
+                {
+                  "type": "field",
+                  "field": "email",
+                  "issue": null,
+                  "message": "This email is already in your close group."
+                }
+              ]
+            },
+            "meta": null
+          }
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/close-group/{{close_group_id}}/members"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "email": "newfriend@example.com"
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, POST, HEAD, OPTIONS
+        - name: content-length
+          value: "280"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": {
+              "id": "add1c7b5-342e-4569-8341-0dc5254bd055",
+              "user": null,
+              "email": "cg_test_1778555343@example.com",
+              "first_name": null,
+              "last_name": null,
+              "profile_image": null,
+              "status": "INVITED",
+              "created_at": "2026-05-12T03:09:04.154110Z"
+            },
+            "error": null,
+            "meta": null
+          }

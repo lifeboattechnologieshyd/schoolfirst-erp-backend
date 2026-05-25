@@ -1,0 +1,179 @@
+info:
+  name: Create Family
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/family"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "My New Family"
+      //   "family_picture": "temp/c96c5e82-e75f-483a-b780-8fc2fb261b35/IMG_0122_d73abbd5.jpeg"
+      }
+  auth: inherit
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        try {
+            let response = res.getBody();
+
+            // Check if token is expired
+            if (response && response.success === true) {
+              console.log("Updating Family ID Variable");
+              var family_id = response.data.id;
+              bru.setEnvVar("family_id", family_id);
+            }
+        } catch (e) {
+            console.error("❌ Error in family freation post-request script:", e);
+        }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Error - Missing Name
+    request:
+      url: "{{base_url}}api/v1/family"
+      method: POST
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, POST, HEAD, OPTIONS
+        - name: content-length
+          value: "245"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "There was a validation error with your request.",
+              "details": [
+                {
+                  "type": "field",
+                  "field": "name",
+                  "issue": null,
+                  "message": "This field is required."
+                }
+              ]
+            },
+            "meta": null
+          }
+  - name: Error - Already Owns Family
+    request:
+      url: "{{base_url}}api/v1/family"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "name": "Duplicate Family"
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, POST, HEAD, OPTIONS
+        - name: content-length
+          value: "290"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "There was a validation error with your request.",
+              "details": [
+                {
+                  "type": "global",
+                  "field": null,
+                  "issue": null,
+                  "message": "You have already created a family. A user can only create one family."
+                }
+              ]
+            },
+            "meta": null
+          }
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/family"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "name": "Temp Test Family"
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, POST, HEAD, OPTIONS
+        - name: content-length
+          value: "277"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": {
+              "id": "934784b3-4347-4369-879c-a966c131d9b1",
+              "name": "Temp Test Family",
+              "family_picture": null,
+              "owner_name": "temp_family_test@example.com",
+              "member_count": 0,
+              "is_owner": true,
+              "created_at": "2026-05-12T03:08:58.177117Z"
+            },
+            "error": null,
+            "meta": null
+          }

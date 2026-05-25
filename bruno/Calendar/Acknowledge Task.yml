@@ -1,0 +1,62 @@
+info:
+  name: Acknowledge Task
+  type: http
+  seq: 14
+
+http:
+  method: PUT
+  url: "{{base_url}}api/v1/calendar/tasks/{{task_id}}/status/acknowledge"
+  body:
+    type: json
+    data: |-
+      {
+        "action": "accept"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Success Response
+    request:
+      url: "{{base_url}}api/v1/calendar/tasks/{{task_id}}/status/acknowledge"
+      method: PUT
+      body:
+        type: json
+        data: |-
+          {
+            "action": "accept"
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, PUT, DELETE, HEAD, OPTIONS
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": {
+              "task_id": "6a0a4a78-e93c-4878-a14e-aeb20ba25902",
+              "acknowledged_at": "2026-05-12T02:29:59.210644Z",
+              "is_visible": false
+            },
+            "error": null,
+            "meta": null
+          }
+
+docs: |-
+  Creator acknowledges a done task via PUT /tasks/<id>/status/acknowledge.
+  action: "accept" — sets acknowledged_at and is_visible=false (hides the task from their view).
+  action: "reject" — reverts to pending, clears done_by/completed_at, sets is_visible=true.
+  Only the creator can call this endpoint (403 for anyone else).
+  Returns 400 if task is still pending, already acknowledged, or self-completed by creator.

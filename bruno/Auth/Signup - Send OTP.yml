@@ -1,0 +1,228 @@
+info:
+  name: Signup - Send OTP
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/auth/signup/email"
+  body:
+    type: json
+    data: |-
+      {
+        "email": "contact@karthiknarayan.dev",
+        "invite_code": "6DILIP"
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/auth/signup/email"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "email": "newuser@example.com",
+            "invite_code": "56VUTU"
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: "88"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "OTP sent successfully.",
+            "data": null,
+            "error": null,
+            "meta": null
+          }
+  - name: Error - Missing Fields
+    request:
+      url: "{{base_url}}api/v1/auth/signup/email"
+      method: POST
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: "165"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": "Email and invite code are required.",
+            "data": null,
+            "error": {
+              "code": "REQUIRED",
+              "message": "Email and invite code are required."
+            },
+            "meta": null
+          }
+  - name: Error - Already Registered
+    request:
+      url: "{{base_url}}api/v1/auth/signup/email"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "email": "admin@samsr.us",
+            "invite_code": "56VUTU"
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: "153"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": "User already registered.",
+            "data": null,
+            "error": {
+              "code": "ALREADY_REGISTERED",
+              "message": "User already registered."
+            },
+            "meta": null
+          }
+  - name: Error - Invalid Invite Code
+    request:
+      url: "{{base_url}}api/v1/auth/signup/email"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "email": "brandnew@example.com",
+            "invite_code": "FAKEXXX"
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: "139"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": "Invalid invite code.",
+            "data": null,
+            "error": {
+              "code": "INVALID_CODE",
+              "message": "Invalid invite code."
+            },
+            "meta": null
+          }
+  - name: Error - Email Mismatch
+    request:
+      url: "{{base_url}}api/v1/auth/signup/email"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "email": "different@example.com",
+            "invite_code": "MVKQDK"
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: "164"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": "Invite not valid for this email.",
+            "data": null,
+            "error": {
+              "code": "INVALID_EMAIL",
+              "message": "Invite not valid for this email."
+            },
+            "meta": null
+          }
+
+docs: |-
+  Step 1 of signup. Validates the invite code for the given email and sends an OTP.
+  On success the OTP is delivered by email and a signup session is created (valid 10 min).
+  Use the returned session with Signup - Verify OTP next.

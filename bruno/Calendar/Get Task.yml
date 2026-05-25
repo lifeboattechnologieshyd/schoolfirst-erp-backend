@@ -1,0 +1,86 @@
+info:
+  name: Get Task
+  type: http
+  seq: 10
+
+http:
+  method: GET
+  url: "{{base_url}}api/v1/calendar/tasks/{{task_id}}"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Success Response
+    request:
+      url: "{{base_url}}api/v1/calendar/tasks/{{task_id}}"
+      method: GET
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": {
+              "id": "6a0a4a78-e93c-4878-a14e-aeb20ba25902",
+              "creator_id": "{{user_id}}",
+              "title": "Review contract draft",
+              "description": "Leave comments before Friday",
+              "task_type": "review",
+              "access_type": "group",
+              "access_family_ids": [
+                "{{family_id}}"
+              ],
+              "access_close_group": false,
+              "access_user_ids": [],
+              "status": "pending",
+              "done_by": null,
+              "completed_at": null,
+              "acknowledged_at": null,
+              "is_visible": true,
+              "priority": "high",
+              "agent_assist": false,
+              "deadline_datetime": "2026-10-20T10:00:00Z",
+              "reminder_datetime": null,
+              "reminder_types": null,
+              "location": null,
+              "attachments": [
+                "tasks/6a0a4a78-e93c-4878-a14e-aeb20ba25902/contract.pdf"
+              ],
+              "rrule": null,
+              "parent_task_id": null,
+              "occurrence_date": null,
+              "recurrence_end_date": null,
+              "comment_count": 1,
+              "is_deleted_instance": false,
+              "created_at": "2026-05-12T02:29:58.871579Z",
+              "updated_at": "2026-05-12T02:29:58.871584Z",
+              "comments": [
+                {
+                  "id": "13b808f2-73b9-4af6-a94f-f12f77f9a8f1",
+                  "parent_type": "task",
+                  "parent_id": "6a0a4a78-e93c-4878-a14e-aeb20ba25902",
+                  "user_id": "{{user_id}}",
+                  "comment": "Will pay by end of day",
+                  "created_at": "2026-05-12T03:15:59.236464Z",
+                  "deleted_at": null
+                }
+              ]
+            },
+            "error": null,
+            "meta": null
+          }
+
+docs: |-
+  Get a single task by ID.
+  Detail responses include comment_count and an inline comments array.

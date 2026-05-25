@@ -1,0 +1,22 @@
+name: Development
+variables:
+  - name: base_url
+    value: https://dev.api.samsr.us/
+  - name: email
+    value: dev.admin@samsr.us
+  - name: password
+    value: password123
+  - name: folder_id
+    value: ""
+  - name: file_id
+    value: ""
+  - name: share_id
+    value: ""
+  - name: thread_id
+    value: ""
+  - name: invite_code
+    value: ""
+  - name: member_id
+    value: ""
+  - name: family_id
+    value: ""

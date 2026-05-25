@@ -1,0 +1,101 @@
+# =============================
+# Python Bytecode & Cache Files
+# =============================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.mypy_cache/
+.pytest_cache/
+.cache/
+
+# =============================
+# Database & Log Files
+# =============================
+*.db
+*.sqlite3
+*.log
+*.pot
+*.bak
+*.tmp
+
+# =============================
+# Editor & IDE Folders
+# =============================
+.idea/
+.vscode/
+
+# =============================
+# Environment & Secrets
+# =============================
+.env
+.env.*
+.envrc
+local_settings.py
+
+# =============================
+# Coverage & Test Output
+# =============================
+*.coverage
+.coverage
+htmlcov/
+.tox/
+.test/
+
+# =============================
+# Python Packaging
+# =============================
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# =============================
+# Node.js & Frontend
+# =============================
+node_modules/
+
+# =============================
+# Virtual Environment Folders
+# =============================
+venv/
+.venv/
+env/
+
+# =============================
+# Docker Related Files
+# =============================
+Dockerfile*
+docker-compose*.yaml
+# Keep most deploy files ignored, but allow docker helpers needed at build time
+deploy/compose/
+# Allow docker helper scripts included in the build context
+!deploy/docker/entrypoint.sh
+!deploy/docker/prestop.sh
+# If you later need other files under deploy/docker, add them here as needed
+
+# =============================
+# Documentation
+# =============================
+*.md
+
+# =============================
+# OS Generated Files
+# =============================
+Thumbs.db
+.DS_Store
+
+# =============================
+# Git
+# =============================
+.git/
+.gitignore
+
+# =============================
+# Project Specific
+# =============================
+.postman/
+.sql/
+.gitignore
+.vscode/

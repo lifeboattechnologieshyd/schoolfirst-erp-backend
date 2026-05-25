@@ -1,0 +1,93 @@
+info:
+  name: Update Event
+  type: http
+  seq: 6
+
+http:
+  method: PUT
+  url: "{{base_url}}api/v1/calendar/events/{{event_id}}"
+  body:
+    type: json
+    data: |-
+      {
+        "title": "Weekly Family Dinner (Late Start)",
+        "start_at": "2026-10-19T19:00:00Z",
+        "update_scope": "this",
+        "occurrence_date": "2026-10-19"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Update One Occurrence
+    request:
+      url: "{{base_url}}api/v1/calendar/events/{{event_id}}"
+      method: PUT
+      body:
+        type: json
+        data: |-
+          {
+            "title": "Weekly Family Dinner (Late Start)",
+            "start_at": "2026-10-19T19:00:00Z",
+            "update_scope": "this",
+            "occurrence_date": "2026-10-19"
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": {
+              "id": "0f2b6c5d-8f5f-47d5-b7fd-c98e4c1b1111",
+              "creator_id": "{{user_id}}",
+              "title": "Weekly Family Dinner (Late Start)",
+              "description": "Bring dessert",
+              "event_type": "family_time",
+              "access_type": "mixed",
+              "access_family_ids": [
+                "{{family_id}}"
+              ],
+              "access_close_group_ids": [],
+              "access_user_ids": [],
+              "start_at": "2026-10-19T19:00:00Z",
+              "end_at": "2026-10-19T21:00:00Z",
+              "all_day": false,
+              "reminder_datetime": null,
+              "reminder_types": null,
+              "location": null,
+              "attachments": [],
+              "rrule": null,
+              "parent_event_id": "b67c3a9e-7e03-4e85-b264-9fb51491e435",
+              "occurrence_date": "2026-10-19",
+              "recurrence_end_date": null,
+              "comment_count": 0,
+              "is_deleted_instance": false,
+              "created_at": "2026-05-12T04:00:00.000000Z",
+              "updated_at": "2026-05-12T04:05:00.000000Z",
+              "comments": []
+            },
+            "error": null,
+            "meta": null
+          }
+
+docs: |-
+  Update an event (creator only). Send only fields to change.
+  update_scope: "all" | "this" | "this_and_future" (default: "all").
+  occurrence_date (YYYY-MM-DD) is required when update_scope is "this" or "this_and_future".
+  If start_at changes on a recurring event and end_at is omitted, the occurrence keeps the original duration relative to the new start_at.
+  For mixed access, access_close_group_ids must be close groups owned by the creator. access_user_ids must be reachable via the creator's families or close groups.
+  event_type remains a free-form string.
+  If attachments are sent, they must be valid temp file paths from POST /api/v1/upload.
+  Validation errors use the standard details array: [{type, field, issue, message}].

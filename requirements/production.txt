@@ -1,0 +1,8 @@
+-r base.txt
+
+# postgres client (psycopg3)
+psycopg>=3.0,<4
+# http server
+gunicorn==26.0.*
+# # web socket server
+# daphne==4.2.*

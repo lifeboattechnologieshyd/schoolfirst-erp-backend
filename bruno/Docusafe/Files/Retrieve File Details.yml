@@ -1,0 +1,107 @@
+info:
+  name: Retrieve File Details
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{base_url}}api/v1/docusafe/folders/{{folder_id}}/files/{{file_id}}"
+  auth: inherit
+
+docs: |
+  Returns full file metadata including a pre-signed download URL (`file_url`) valid for 15 minutes.
+  The `file_url_expiry` field returns the absolute expiry datetime for the pre-signed URL.
+  The `file_url` field is `null` when the file is in `PENDING_UPLOAD` state.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/docusafe/folders/{{folder_id}}/files/{{file_id}}"
+      method: GET
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, PUT, PATCH, DELETE, HEAD, OPTIONS
+        - name: content-length
+          value: 1053
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Retrieved successfully.",
+            "data": {
+              "id": "56da33e7-a9a1-4e62-a3c4-9028a1a4a8e8",
+              "file_name": "sample.png",
+              "file_size": 67,
+              "mime_type": "image/png",
+              "is_shared": false,
+              "status": "ACTIVE",
+              "llm_status": "PENDING",
+              "created_at": "2026-05-12T03:22:05.692665Z",
+              "description": "Sample image",
+              "summary": null,
+              "embedding_model": null,
+              "folder_id": "57993c3c-e70f-4563-a6ae-d07604fc3095",
+              "file_extension": ".png",
+              "checksum": "08d2521273459ce20781173ac9cbf8f162880a70420b236ab5641a795bb02b54",
+              "file_url": "https://samsr-dev.s3.amazonaws.com/docusafe/b7dce1c0-5847-4a11-bd3e-fd094eeedc49/57993c3c-e70f-4563-a6ae-d07604fc3095/56da33e7-a9a1-4e62-a3c4-9028a1a4a8e8_sample.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAYDMF43AF7JJOR6SY%2F20260512%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20260512T032207Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host&X-Amz-Signature=e769495bc7dd7f30f43185e3ff331faaeea310545d4791123d5840c069c91c36",
+              "updated_at": "2026-05-12T03:22:05.692682Z",
+              "file_url_expiry": "2026-05-12T03:36:57.604287Z"
+            },
+            "error": null,
+            "meta": null
+          }
+  - name: Error - Not Found
+    request:
+      url: "{{base_url}}api/v1/docusafe/folders/{{folder_id}}/files/{{file_id}}"
+      method: GET
+    response:
+      status: 404
+      statusText: Not Found
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, PUT, PATCH, DELETE, HEAD, OPTIONS
+        - name: content-length
+          value: 135
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "The requested resource was not found."
+            },
+            "meta": null
+          }

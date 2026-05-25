@@ -1,0 +1,89 @@
+info:
+  name: Delete Folder
+  type: http
+  seq: 2
+
+http:
+  method: DELETE
+  url: "{{base_url}}api/v1/docusafe/folders/{{folder_id}}"
+  body:
+    type: json
+    data: ""
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Error - Not Found
+    request:
+      url: "{{base_url}}api/v1/docusafe/folders/{{folder_id}}"
+      method: DELETE
+    response:
+      status: 404
+      statusText: Not Found
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, PUT, PATCH, DELETE, HEAD, OPTIONS
+        - name: content-length
+          value: 135
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "The requested resource was not found."
+            },
+            "meta": null
+          }
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/docusafe/folders/{{folder_id}}"
+      method: DELETE
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, PUT, PATCH, DELETE, HEAD, OPTIONS
+        - name: content-length
+          value: 99
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Deleted successfully.",
+            "data": {
+              "deleted": true
+            },
+            "error": null,
+            "meta": null
+          }

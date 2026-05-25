@@ -1,0 +1,139 @@
+info:
+  name: Access Token
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/auth/refresh"
+  body:
+    type: json
+    data: |-
+      {
+          "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc3MDcwNTU5MCwiaWF0IjoxNzY5NDA5NTkwLCJqdGkiOiJkOWM2ZDlkZGE1N2M0OThhODNlMzY3ZGJlMGM2NTUzMCIsInVzZXJfaWQiOiIzYmM2ODVhZi1jODliLTQ3NTItYWEzOC1jMTIwNGRiMTZjNzMifQ.BrOIl3qjgArXBWLNHpywrBPgMxvAusgPpPtJ-bhQ2ME"
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/auth/refresh"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "refresh_token": "<valid_refresh_token>"
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 673
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Token refreshed successfully.",
+            "data": {
+              "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzc4NjQwNjc1LCJpYXQiOjE3Nzg1NTQyNzUsImp0aSI6IjRiYWVlOGE3Yzc5NTQ4ZmQ4ZWM3NjIzODZkZmRjOGFkIiwidXNlcl9pZCI6ImI3ZGNlMWMwLTU4NDctNGExMS1iZDNlLWZkMDk0ZWVlZGM0OSJ9.QDX3J3JOLU3kyTVobd8PkofJ1j_u10gA8H60npW5UoY",
+              "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc3OTE1OTA3NCwiaWF0IjoxNzc4NTU0Mjc0LCJqdGkiOiJjZGNmY2NhYjMzMjg0OGRmOGNhYTkwOTkwZjQxZmYwMyIsInVzZXJfaWQiOiJiN2RjZTFjMC01ODQ3LTRhMTEtYmQzZS1mZDA5NGVlZWRjNDkifQ.4Uj_uqxXCu-liXBu6GBILxBxAWRJN0nszUGfDozP9Rw"
+            },
+            "error": null,
+            "meta": null
+          }
+  - name: Error - Missing Refresh Token
+    request:
+      url: "{{base_url}}api/v1/auth/refresh"
+      method: POST
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 147
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": "Refresh token is required.",
+            "data": null,
+            "error": {
+              "code": "REQUIRED",
+              "message": "Refresh token is required."
+            },
+            "meta": null
+          }
+  - name: Error - Invalid Token
+    request:
+      url: "{{base_url}}api/v1/auth/refresh"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "refresh_token": "invalid.token.value"
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 132
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": "Token is invalid",
+            "data": null,
+            "error": {
+              "code": "INVALID_TOKEN",
+              "message": "Token is invalid"
+            },
+            "meta": null
+          }

@@ -1,0 +1,207 @@
+info:
+  name: Add Family Member
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/family/{{family_id}}/members"
+  body:
+    type: json
+    data: |-
+      {
+        "email": "brother@example.com",
+        "relation": "brother",
+        "first_name": "Asha",
+        "last_name": "Rao",
+        "gender": "female"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Error - Missing Email
+    request:
+      url: "{{base_url}}api/v1/family/{{family_id}}/members"
+      method: POST
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, POST, HEAD, OPTIONS
+        - name: content-length
+          value: "246"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "There was a validation error with your request.",
+              "details": [
+                {
+                  "type": "field",
+                  "field": "email",
+                  "issue": null,
+                  "message": "This field is required."
+                }
+              ]
+            },
+            "meta": null
+          }
+  - name: Error - Not Family Owner
+    request:
+      url: "{{base_url}}api/v1/family/{{family_id}}/members"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "email": "someone@example.com"
+          }
+    response:
+      status: 403
+      statusText: Forbidden
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, POST, HEAD, OPTIONS
+        - name: content-length
+          value: "51"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "detail": "Only the family owner can add members."
+          }
+  - name: Error - Already A Member
+    request:
+      url: "{{base_url}}api/v1/family/{{family_id}}/members"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "email": "sister@example.com"
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, POST, HEAD, OPTIONS
+        - name: content-length
+          value: "278"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "There was a validation error with your request.",
+              "details": [
+                {
+                  "type": "field",
+                  "field": "email",
+                  "issue": null,
+                  "message": "This email is already a member or has a pending invite."
+                }
+              ]
+            },
+            "meta": null
+          }
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/family/{{family_id}}/members"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "email": "newfriend@example.com",
+            "relation": "friend",
+            "first_name": "Asha",
+            "last_name": "Rao",
+            "gender": "female"
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, POST, HEAD, OPTIONS
+        - name: content-length
+          value: "326"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Member added to your family.",
+            "data": {
+              "id": "f3c51608-ae41-46d2-8379-924e27d0643c",
+              "user": null,
+              "email": "new_family_member_1778555339@example.com",
+              "first_name": "Asha",
+              "last_name": "Rao",
+              "gender": "female",
+              "profile_image": null,
+              "role": "member",
+              "status": "invited",
+              "relation": "friend",
+              "created_at": "2026-05-12T03:08:59.967818Z"
+            },
+            "error": null,
+            "meta": null
+          }

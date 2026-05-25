@@ -1,0 +1,91 @@
+info:
+  name: Get My Profile
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{base_url}}api/v1/user/profile"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Get the authenticated user's profile.
+  Returns: id, email, first_name, last_name, dob, gender, profile_image, is_profile_updated.
+  Family data is not included here — use GET /api/v1/family/ for that.
+
+examples:
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/user/profile"
+      method: GET
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, PATCH, HEAD, OPTIONS
+        - name: content-length
+          value: 623
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": {
+              "id": "b7dce1c0-5847-4a11-bd3e-fd094eeedc49",
+              "email": "admin@samsr.us",
+              "first_name": "John",
+              "last_name": "Doe",
+              "gender": "male",
+              "dob": "1990-01-15",
+              "profile_image": "https://samsr-dev.s3.amazonaws.com/profiles/b7dce1c0-5847-4a11-bd3e-fd094eeedc49/IMG_0122_5c37e814.jpeg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAYDMF43AF7JJOR6SY%2F20260512%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20260512T031755Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=49564f84b357b35ff680f9b5287e8d1d7fa1746e8ec75f00d048b5254126f82e",
+              "is_profile_updated": true
+            },
+            "error": null,
+            "meta": null
+          }
+  - name: Error - Unauthorized
+    request:
+      url: "{{base_url}}api/v1/user/profile"
+      method: GET
+    response:
+      status: 401
+      statusText: Unauthorized
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, PATCH, HEAD, OPTIONS
+        - name: content-length
+          value: 58
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "detail": "Authentication credentials were not provided."
+          }

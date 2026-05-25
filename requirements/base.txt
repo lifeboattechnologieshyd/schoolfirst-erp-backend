@@ -1,0 +1,68 @@
+# base requirements
+
+# django
+Django==5.2.*
+# rest framework
+djangorestframework==3.17.*
+# web sockets
+channels==4.3.*
+# JWT Authentication
+djangorestframework-simplejwt==5.5.*
+PyJWT==2.12.*
+# CORS
+django-cors-headers==4.9.*
+# filters
+django-filter==25.2.*
+# storage
+django-storages==1.14.*
+boto3==1.43.*
+pillow==12.2.*
+# django migrations
+django-migration-linter==6.0.*
+# global user context
+django-crum==0.7.*
+# environment variables
+python-dotenv==1.2.*
+# logging
+structlog==25.5.*
+django-structlog==10.0.*
+# timezone
+pytz==2026.2
+# documentation
+drf-spectacular==0.29.*
+# Excel File Handling
+pandas==3.0.*
+openpyxl==3.1.*
+# crons
+django-crontab==0.7.*
+# resource monitoring
+psutil==7.2.*
+# health check
+django-health-check==4.4.*
+# OpenTelemetry core packages
+opentelemetry-api==1.41.*
+opentelemetry-sdk==1.41.*
+opentelemetry-exporter-otlp==1.41.*
+# OpenTelemetry instrumentations
+opentelemetry-instrumentation-django==0.62b1
+opentelemetry-instrumentation-requests==0.62b1
+opentelemetry-instrumentation-psycopg==0.62b1
+opentelemetry-instrumentation-logging==0.62b1
+
+# AI
+google-genai==2.0.*
+langchain==1.2.*
+langchain-aws==1.4.*
+langgraph==1.1.*
+langchain-community==0.4.*
+tavily-python==0.7.*
+# User agent parsing (for Docusafe ShareViewLog device info)
+user-agents==2.2.*
+# Vector Store
+qdrant-client==1.17.*
+# Text extraction (Textract response parser)
+amazon-textract-textractor[pdf]==1.9.*
+# Structured document parsing (Docusafe embedding pipeline)
+python-docx==1.2.*
+python-pptx==1.0.*
+PyYAML==6.0.*

@@ -1,0 +1,117 @@
+info:
+  name: Send Message
+  type: http
+  seq: 6
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/assistant/threads/{{thread_id}}/chat"
+  body:
+    type: json
+    data: |-
+      {
+        "content": "What is todays gold price and in which family I am in",
+        "stream": true
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Send a message to the thread and get an AI response (AWS Bedrock via OpenAI SDK).
+
+  Provider:  AWSBedrockOpenAISDKLLMProvider
+  Model:     anthropic.claude-sonnet-4-6
+
+  Fields:
+    - content  (string, required): The user message.
+    - stream   (bool, optional, default false):
+        false → JSON response with { message, user_message }
+        true  → Server-Sent Events stream (text/event-stream).
+                Each chunk: "data: <text chunk>\n\n"
+                Final marker: "data: [DONE]\n\n"
+                The full response is saved to DB after streaming ends.
+    - attachments (array of temp paths, optional): Files to attach.
+
+  Intent: Always resolved to GENERAL intent for now.
+
+examples:
+  - name: Non-Streaming Response (stream=false)
+    request:
+      url: "{{base_url}}api/v1/assistant/threads/{{thread_id}}/chat"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "content": "What is today's gold price?",
+            "stream": false
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": {
+              "message": {
+                "id": "uuid-of-assistant-message",
+                "thread_id": "uuid-of-thread",
+                "role": "assistant",
+                "content": "The current gold price is approximately $3,200 per troy ounce.",
+                "created_at": "2026-05-12T10:00:00Z"
+              },
+              "user_message": {
+                "id": "uuid-of-user-message",
+                "thread_id": "uuid-of-thread",
+                "role": "user",
+                "content": "What is today's gold price?",
+                "created_at": "2026-05-12T10:00:00Z"
+              }
+            },
+            "error": null,
+            "meta": null
+          }
+  - name: Streaming Response (stream=true) - SSE Format
+    request:
+      url: "{{base_url}}api/v1/assistant/threads/{{thread_id}}/chat"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "content": "What is today's gold price?",
+            "stream": true
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: text/event-stream
+        - name: vary
+          value: origin
+      body:
+        type: text
+        data: |-
+          data: The current
+
+          data:  gold price
+
+          data:  is approximately
+
+          data:  $3,200 per troy ounce.
+
+          data: [DONE]

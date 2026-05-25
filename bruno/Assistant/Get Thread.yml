@@ -1,0 +1,63 @@
+info:
+  name: Get Thread
+  type: http
+  seq: 3
+
+http:
+  method: GET
+  url: "{{base_url}}api/v1/assistant/threads/{{thread_id}}"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: Retrieve details of a specific thread by ID.
+
+examples:
+  - name: Success Response
+    request:
+      url: "{{base_url}}api/v1/assistant/threads/{{thread_id}}"
+      method: GET
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, PUT, PATCH, DELETE, HEAD, OPTIONS
+        - name: content-length
+          value: 368
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": {
+              "id": "4ab0fd32-717b-4560-a431-b1c9c212fb38",
+              "user_id": "b7dce1c0-5847-4a11-bd3e-fd094eeedc49",
+              "name": "New Chat",
+              "status": "ACTIVE",
+              "summary": null,
+              "model": null,
+              "settings": null,
+              "module_settings": null,
+              "is_temporary": false,
+              "created_at": "2026-05-12T02:29:57.618074Z",
+              "updated_at": "2026-05-12T02:29:57.618083Z"
+            },
+            "error": null,
+            "meta": null
+          }

@@ -1,0 +1,112 @@
+info:
+  name: Revoke File Access
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/docusafe/access/revoke"
+  body:
+    type: json
+    data: |-
+      {
+        "access_ids": ["{{access_id}}"]
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: Revoke previously granted file access by access grant ID(s).
+
+examples:
+  - name: Error - Missing Fields
+    request:
+      url: "{{base_url}}api/v1/docusafe/access/revoke"
+      method: POST
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 251
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "There was a validation error with your request.",
+              "details": [
+                {
+                  "type": "field",
+                  "field": "access_ids",
+                  "issue": null,
+                  "message": "This field is required."
+                }
+              ]
+            },
+            "meta": null
+          }
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/docusafe/access/revoke"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "access_ids": [
+              "afe93775-e8f7-490f-9141-070aad835a0f"
+            ]
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 190
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Access revoked successfully for 1 instances.",
+            "data": {
+              "count": 1
+            },
+            "errorCode": 0,
+            "description": "Access revoked successfully for 1 instances.",
+            "total": 0,
+            "error": null
+          }

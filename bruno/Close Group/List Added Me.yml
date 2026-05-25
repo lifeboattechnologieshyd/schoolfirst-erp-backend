@@ -1,0 +1,92 @@
+info:
+  name: List Added Me
+  type: http
+  seq: 6
+
+http:
+  method: GET
+  url: "{{base_url}}api/v1/close-group/added-me?page=1&page_size=50"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/close-group/added-me?page=1&page_size=50"
+      method: GET
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, HEAD, OPTIONS
+        - name: content-length
+          value: "308"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": [
+              {
+                "id": "b7dce1c0-5847-4a11-bd3e-fd094eeedc49",
+                "email": "admin@samsr.us",
+                "first_name": "John",
+                "last_name": "Doe",
+                "profile_image": "profiles/b7dce1c0-5847-4a11-bd3e-fd094eeedc49/IMG_0122_5c37e814.jpeg"
+              }
+            ],
+            "error": null,
+            "meta": {
+              "total": 1,
+              "page": 1,
+              "page_size": 50,
+              "total_pages": 1
+            }
+          }
+  - name: Error - Unauthorized
+    request:
+      url: "{{base_url}}api/v1/close-group/added-me?page=1&page_size=50"
+      method: GET
+    response:
+      status: 401
+      statusText: Unauthorized
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, HEAD, OPTIONS
+        - name: content-length
+          value: "58"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "detail": "Authentication credentials were not provided."
+          }
+
+docs: Returns users who have added me to their close group but whom I have NOT yet added back.

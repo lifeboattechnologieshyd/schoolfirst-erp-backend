@@ -1,0 +1,126 @@
+info:
+  name: List Events
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: "{{base_url}}api/v1/calendar/events"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Success Response
+    request:
+      url: "{{base_url}}api/v1/calendar/events?from_date=2026-10-19&to_date=2026-10-19&page_size=20"
+      method: GET
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": [
+              {
+                "id": "b67c3a9e-7e03-4e85-b264-9fb51491e435",
+                "creator_id": "{{user_id}}",
+                "title": "Dad's 60th Birthday",
+                "description": "Dinner at home",
+                "event_type": "family_birthday",
+                "access_type": "group",
+                "access_family_ids": [
+                  "{{family_id}}"
+                ],
+                "access_close_group": false,
+                "access_user_ids": [],
+                "start_at": "2026-10-19T18:00:00Z",
+                "end_at": null,
+                "all_day": false,
+                "reminder_datetime": "2026-10-19T09:00:00Z",
+                "reminder_types": [
+                  "push"
+                ],
+                "location": null,
+                "attachments": [
+                  "events/b67c3a9e-7e03-4e85-b264-9fb51491e435/agenda_5c37e814.txt"
+                ],
+                "rrule": null,
+                "parent_event_id": null,
+                "occurrence_date": null,
+                "recurrence_end_date": null,
+                "comment_count": 0,
+                "is_deleted_instance": false,
+                "created_at": "2026-05-12T02:29:58.494511Z",
+                "updated_at": "2026-05-12T02:29:58.494523Z"
+              },
+              {
+                "id": "eed3f39e-4b93-462b-944b-f960ce53ee26",
+                "creator_id": "{{user_id}}",
+                "title": "Weekly Standup",
+                "description": null,
+                "event_type": "team_sync",
+                "access_type": "group",
+                "access_family_ids": [
+                  "{{family_id}}"
+                ],
+                "access_close_group": false,
+                "access_user_ids": [],
+                "start_at": "2026-10-05T10:00:00Z",
+                "end_at": "2026-10-05T10:30:00Z",
+                "all_day": false,
+                "reminder_datetime": null,
+                "reminder_types": null,
+                "location": null,
+                "attachments": [],
+                "rrule": {
+                  "until": "2026-11-30",
+                  "by_day": [
+                    "MO"
+                  ],
+                  "interval": 1,
+                  "frequency": "weekly"
+                },
+                "parent_event_id": null,
+                "occurrence_date": null,
+                "recurrence_end_date": "2026-11-30",
+                "comment_count": 0,
+                "is_deleted_instance": false,
+                "created_at": "2026-05-12T04:00:00.000000Z",
+                "updated_at": "2026-05-12T04:00:00.000000Z"
+              }
+            ],
+            "error": null,
+            "meta": {
+              "total": 2,
+              "page": 1,
+              "page_size": 20
+            }
+          }
+  - name: Daily Recurrence Window Example
+    request:
+      url: "{{base_url}}api/v1/calendar/events?from_date=2026-05-01&to_date=2026-05-30&creator_id={{user_id}}&page_size=100"
+      method: GET
+
+docs: |-
+  List events with optional filters: from_date, to_date, event_type, creator_id, access_type, sort, page, page_size.
+  sort accepts one or more comma-separated field names with an optional "-" prefix for descending order.
+  Example: sort=start_at (asc), sort=-start_at (desc), sort=start_at,-created_at (multi-field).
+  Allowed sort fields: start_at, created_at, updated_at. Default: start_at.
+  from_date and to_date can be supplied together for a recurrence-aware date window or independently as lower/upper date bounds.
+  Returned items are ordered by start_at ascending by default, so earlier event dates and times come first.
+  List items mirror the detail payload except they omit the inline comments array.
+  comment_count is included for each returned event item.
+  When from_date and to_date are provided, recurring series collapse to one parent row when at least one visible occurrence overlaps the window.
+  Example: an event created on 2026-04-05 with frequency=daily and until=2026-10-05 returns one parent row for a query from 2026-05-01 to 2026-05-30.
+  Validation errors use the standard details array: [{type, field, issue, message}].

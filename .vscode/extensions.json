@@ -1,0 +1,10 @@
+{
+    "recommendations": [
+        "ms-python.python",
+        "astral-sh.ty",
+        "charliermarsh.ruff",
+        "vscode-icons-team.vscode-icons",
+        "ms-azuretools.vscode-containers",
+        "eamodio.gitlens"
+    ]
+}

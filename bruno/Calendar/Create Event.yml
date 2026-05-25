@@ -1,0 +1,179 @@
+info:
+  name: Create Event
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/calendar/events"
+  body:
+    type: json
+    data: |-
+      {
+        "title": "Weekly Family Dinner",
+        "start_at": "2026-05-20T19:00:00Z",
+        "end_at": null,
+        "all_day": false,
+        "description": "Every weekday, evening dinner together",
+        "event_type": "family_dinner",
+        "access_type": "mixed", //only_me, mixed, all
+        "access_family_ids": ["{{family_id}}"],
+        "access_close_group_ids": ["{{close_group_id}}"],
+        "access_user_ids": [],
+        "reminder_datetime": "2026-06-01T17:00:00Z",
+        "reminder_types": ["push"],
+        "location": {
+          "name": "Home",
+          "address": "123 Main St",
+          "lat": 17.4126,
+          "lng": 78.4071,
+          "place_id": "ChIJxxx",
+          "maps_url": "https://maps.google.com/?q=..."
+        },
+        "attachments": [
+      //     "temp/b7dce1c0-5847-4a11-bd3e-fd094eeedc49/README_5bf6d70b.md"
+        ],
+        "rrule": {
+          "frequency": "daily",
+          "interval": 1,
+          "by_day": ["MO","TU","WE","TH","FR"],
+          "until": "2026-05-31"
+        }
+      }
+  auth: inherit
+
+runtime:
+  variables:
+    - name: close_group_id
+      value: 2c5a3baf-e30e-4a66-aed3-9f7fbdaeaa92
+  scripts:
+    - type: after-response
+      code: |-
+        try {
+          let response = res.getBody();
+          if (response && response.success === true) {
+            bru.setEnvVar("event_id", response.data.id);
+          }
+        } catch (e) {
+          console.error("Error:", e);
+        }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Success Response
+    request:
+      url: "{{base_url}}api/v1/calendar/events"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "title": "Weekly Family Dinner",
+            "start_at": "2026-06-01T19:00:00Z",
+            "end_at": "2026-06-01T21:00:00Z",
+            "all_day": false,
+            "description": "Every Monday evening dinner together",
+            "event_type": "family_dinner",
+            "access_type": "mixed",
+            "access_family_ids": ["{{family_id}}"],
+            "access_close_group_ids": [],
+            "access_user_ids": [],
+            "reminder_datetime": "2026-06-01T17:00:00Z",
+            "reminder_types": ["push"],
+            "location": {
+              "name": "Home",
+              "address": "123 Main St",
+              "lat": 17.4126,
+              "lng": 78.4071,
+              "place_id": "ChIJxxx",
+              "maps_url": "https://maps.google.com/?q=..."
+            },
+            "attachments": [
+              "temp/{{user_id}}/agenda_5c37e814.txt"
+            ],
+            "rrule": {
+              "frequency": "weekly",
+              "interval": 1,
+              "by_day": ["MO"],
+              "until": "2026-12-28"
+            }
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - name: content-type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": {
+              "id": "b67c3a9e-7e03-4e85-b264-9fb51491e435",
+              "creator_id": "{{user_id}}",
+              "title": "Weekly Family Dinner",
+              "description": "Every Monday evening dinner together",
+              "event_type": "family_dinner",
+              "access_type": "mixed",
+              "access_family_ids": [
+                "{{family_id}}"
+              ],
+              "access_close_group_ids": [],
+              "access_user_ids": [],
+              "start_at": "2026-06-01T19:00:00Z",
+              "end_at": "2026-06-01T21:00:00Z",
+              "all_day": false,
+              "reminder_datetime": "2026-06-01T17:00:00Z",
+              "reminder_types": [
+                "push"
+              ],
+              "location": {
+                "name": "Home",
+                "address": "123 Main St",
+                "lat": 17.4126,
+                "lng": 78.4071,
+                "place_id": "ChIJxxx",
+                "maps_url": "https://maps.google.com/?q=..."
+              },
+              "attachments": [
+                "events/b67c3a9e-7e03-4e85-b264-9fb51491e435/agenda_5c37e814.txt"
+              ],
+              "rrule": {
+                "frequency": "weekly",
+                "interval": 1,
+                "by_day": ["MO"],
+                "until": "2026-12-28"
+              },
+              "parent_event_id": null,
+              "recurrence_date": null,
+              "recurrence_end_date": "2026-12-28",
+              "is_deleted_instance": false,
+              "created_at": "2026-05-13T10:00:00.000000Z",
+              "updated_at": "2026-05-13T10:00:00.000000Z",
+              "comments": []
+            },
+            "error": null,
+            "meta": null
+          }
+
+docs: |-
+  Create a new event. Required: title, start_at (timezone-aware ISO 8601).
+  end_at is optional and may be null. If provided, it must be greater than or equal to start_at.
+  For recurring events, end_at defines the duration of the anchor occurrence; generated occurrences keep the same duration, including overnight spans.
+  access_type: only_me | all | mixed
+  For all access, no ID arrays required. For mixed access, at least one ID in any access array is required.
+  For mixed access, access_close_group_ids must be close groups owned by the creator. access_user_ids must be reachable via the creator's families or close groups.
+  interval controls how many frequency units to skip between occurrences.
+    Example: frequency=weekly with interval=2 means every 2 weeks.
+  attachments: list of temp file paths returned by POST /api/v1/upload.
+    Valid temp files are moved into the events/ directory on create. Unknown or invalid paths return 400.
+  event_type is a free-form string.
+  Recurring series return recurrence_end_date from rrule.until in responses.
+  Validation errors use the standard details array: [{type, field, issue, message}].

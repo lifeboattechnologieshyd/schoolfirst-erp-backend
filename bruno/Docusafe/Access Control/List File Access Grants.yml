@@ -1,0 +1,131 @@
+info:
+  name: List File Access Grants
+  type: http
+  seq: 3
+
+http:
+  method: GET
+  url: "{{base_url}}api/v1/docusafe/access/file/{{file_id}}?page=1&page_size=20"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: List all active access grants for a specific file. Only the file owner can view this.
+
+examples:
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/docusafe/access/file/{{file_id}}?page=1&page_size=20"
+      method: GET
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, HEAD, OPTIONS
+        - name: content-length
+          value: 448
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": [
+              {
+                "id": "afe93775-e8f7-490f-9141-070aad835a0f",
+                "file_id": "56da33e7-a9a1-4e62-a3c4-9028a1a4a8e8",
+                "access_type": "FAMILY",
+                "family_id": "5eacaf61-d7dd-419c-9772-e6f049ad51a5",
+                "user_id": null,
+                "owner_id": "b7dce1c0-5847-4a11-bd3e-fd094eeedc49",
+                "is_active": true,
+                "created_at": "2026-05-12T03:22:08.612289Z",
+                "updated_at": "2026-05-12T03:22:08.612317Z"
+              }
+            ],
+            "error": null,
+            "meta": {
+              "total": 1,
+              "page": 1,
+              "page_size": 1,
+              "total_pages": 1
+            }
+          }
+  - name: Error - File Not Found
+    request:
+      url: "{{base_url}}api/v1/docusafe/access/file/{{file_id}}?page=1&page_size=20"
+      method: GET
+    response:
+      status: 404
+      statusText: Not Found
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, HEAD, OPTIONS
+        - name: content-length
+          value: 135
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "The requested resource was not found."
+            },
+            "meta": null
+          }
+  - name: Error - Unauthorized
+    request:
+      url: "{{base_url}}api/v1/docusafe/access/file/{{file_id}}?page=1&page_size=20"
+      method: GET
+    response:
+      status: 401
+      statusText: Unauthorized
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, HEAD, OPTIONS
+        - name: content-length
+          value: 58
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "detail": "Authentication credentials were not provided."
+          }

@@ -1,0 +1,12 @@
+-r base.txt
+
+# postgres client (psycopg3)
+psycopg[binary]>=3.0,<4
+# django silk
+django-silk==5.5.*
+# linters and formatters
+ruff
+# security linter
+bandit
+# pre-commit
+pre-commit

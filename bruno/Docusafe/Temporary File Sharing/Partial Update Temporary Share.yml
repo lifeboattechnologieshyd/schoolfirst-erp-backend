@@ -1,0 +1,130 @@
+info:
+  name: Partial Update Temporary Share
+  type: http
+  seq: 5
+
+http:
+  method: PATCH
+  url: "{{base_url}}api/v1/docusafe/shares/{{share_id}}"
+  body:
+    type: json
+    data: |-
+      {
+        "expires_at": "2026-12-31T23:59:59Z"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: Partially update a temporary share. Only include the fields you want to change.
+
+examples:
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/docusafe/shares/{{share_id}}"
+      method: PATCH
+      body:
+        type: json
+        data: |-
+          {
+            "title": "Patched Title"
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, PUT, PATCH, DELETE, HEAD, OPTIONS
+        - name: content-length
+          value: 664
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Updated successfully.",
+            "data": {
+              "id": "eb73fd2d-fcab-46ee-be64-da7e18eee8c5",
+              "title": "Patched Title",
+              "status": "ACTIVE",
+              "expires_at": "2026-12-31T23:59:59Z",
+              "view_count": 0,
+              "file_count": 1,
+              "created_at": "2026-05-12T03:22:11.250333Z",
+              "max_views": 20,
+              "failed_attempts": 0,
+              "max_failed_attempts": 5,
+              "owner_id": "b7dce1c0-5847-4a11-bd3e-fd094eeedc49",
+              "recipient_emails": [
+                "recipient@example.com"
+              ],
+              "views": [],
+              "updated_at": "2026-05-12T03:22:12.323735Z",
+              "files": [
+                {
+                  "id": "56da33e7-a9a1-4e62-a3c4-9028a1a4a8e8",
+                  "file_id": "56da33e7-a9a1-4e62-a3c4-9028a1a4a8e8",
+                  "file_name": "updated_sample.png",
+                  "file_size": 67,
+                  "mime_type": "image/png"
+                }
+              ]
+            },
+            "error": null,
+            "meta": null
+          }
+  - name: Error - Not Found
+    request:
+      url: "{{base_url}}api/v1/docusafe/shares/{{share_id}}"
+      method: PATCH
+      body:
+        type: json
+        data: |-
+          {
+            "title": "Patched Title"
+          }
+    response:
+      status: 404
+      statusText: Not Found
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, PUT, PATCH, DELETE, HEAD, OPTIONS
+        - name: content-length
+          value: 135
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "The requested resource was not found."
+            },
+            "meta": null
+          }

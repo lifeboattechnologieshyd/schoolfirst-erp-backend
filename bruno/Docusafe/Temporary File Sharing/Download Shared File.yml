@@ -1,0 +1,163 @@
+info:
+  name: Download Shared File
+  type: http
+  seq: 7
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/docusafe/shares/access/{{share_id}}/files/{{file_id}}/download"
+  body:
+    type: json
+    data: |-
+      {
+        "password": "secure123"
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/docusafe/shares/access/{{share_id}}/files/{{file_id}}/download"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "password": "newpassword123"
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 616
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Download access granted.",
+            "data": {
+              "download_url": "https://samsr-dev.s3.amazonaws.com/docusafe/b7dce1c0-5847-4a11-bd3e-fd094eeedc49/57993c3c-e70f-4563-a6ae-d07604fc3095/56da33e7-a9a1-4e62-a3c4-9028a1a4a8e8_sample.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAYDMF43AF7JJOR6SY%2F20260512%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20260512T032214Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=c5a0a2614fe9f8be0e3ecfd1ccc4fdd4f6adfe9c9c635030b26b478ee67496fa",
+              "expires_in_seconds": 300
+            },
+            "errorCode": 0,
+            "description": "Download access granted.",
+            "total": 0,
+            "error": null
+          }
+  - name: Error - Wrong Password
+    request:
+      url: "{{base_url}}api/v1/docusafe/shares/access/{{share_id}}/files/{{file_id}}/download"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "password": "wrong"
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 260
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "There was a validation error with your request.",
+              "details": [
+                {
+                  "type": "global",
+                  "field": null,
+                  "issue": null,
+                  "message": "Invalid password. 4 attempts remaining."
+                }
+              ]
+            },
+            "meta": null
+          }
+  - name: Error - Not Found
+    request:
+      url: "{{base_url}}api/v1/docusafe/shares/access/{{share_id}}/files/{{file_id}}/download"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "password": "newpassword123"
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 237
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "There was a validation error with your request.",
+              "details": [
+                {
+                  "type": "global",
+                  "field": null,
+                  "issue": null,
+                  "message": "Share not found."
+                }
+              ]
+            },
+            "meta": null
+          }

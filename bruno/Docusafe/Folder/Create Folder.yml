@@ -1,0 +1,134 @@
+info:
+  name: Create Folder
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/docusafe/folders"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "My Documents",
+        "description": "This is where I store my documents"
+      }
+  auth: inherit
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        try {
+            let response = res.getBody();
+
+            // Check if token is expired
+            if (response && response.success === true) {
+              console.log("Updating Folder ID Variable");
+              var folder_id = response.data.id;
+              bru.setEnvVar("folder_id", folder_id);
+            }
+        } catch (e) {
+            console.error("❌ Error in folder creation post-request script:", e);
+        }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Error - Missing Name
+    request:
+      url: "{{base_url}}api/v1/docusafe/folders"
+      method: POST
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, POST, HEAD, OPTIONS
+        - name: content-length
+          value: 245
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "There was a validation error with your request.",
+              "details": [
+                {
+                  "type": "field",
+                  "field": "name",
+                  "issue": null,
+                  "message": "This field is required."
+                }
+              ]
+            },
+            "meta": null
+          }
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/docusafe/folders"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "name": "My Documents",
+            "description": "Personal documents"
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, POST, HEAD, OPTIONS
+        - name: content-length
+          value: 412
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Created successfully.",
+            "data": {
+              "id": "57993c3c-e70f-4563-a6ae-d07604fc3095",
+              "name": "Capture Test Folder 1778556124",
+              "file_count": 0,
+              "total_size": 0,
+              "is_shared": false,
+              "status": "ACTIVE",
+              "created_at": "2026-05-12T03:22:04.757408Z",
+              "description": "Created by capture script",
+              "owner_id": "b7dce1c0-5847-4a11-bd3e-fd094eeedc49",
+              "updated_at": "2026-05-12T03:22:04.757423Z"
+            },
+            "error": null,
+            "meta": null
+          }

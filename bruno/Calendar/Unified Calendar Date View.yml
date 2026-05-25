@@ -1,0 +1,82 @@
+info:
+  name: Unified Calendar Date View
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: "{{base_url}}api/v1/calendar/day?date=2026-05-20"
+  params:
+    - name: date
+      value: 2026-05-20
+      type: query
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Success Response
+    request:
+      url: "{{base_url}}api/v1/calendar/day?date=2026-10-19"
+      method: GET
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Calendar day loaded.",
+            "data": {
+              "date": "2026-10-19",
+              "events": [
+                {
+                  "id": "0f2b6c5d-8f5f-47d5-b7fd-c98e4c1b1111",
+                  "creator_id": "{{user_id}}",
+                  "title": "Weekly Standup",
+                  "description": "Occurrence moved 30 minutes later",
+                  "event_type": "team_sync",
+                  "access_type": "group",
+                  "access_family_ids": [
+                    "{{family_id}}"
+                  ],
+                  "access_close_group": false,
+                  "access_user_ids": [],
+                  "start_at": "2026-10-19T10:30:00Z",
+                  "end_at": "2026-10-19T11:00:00Z",
+                  "all_day": false,
+                  "reminder_datetime": null,
+                  "reminder_types": null,
+                  "location": null,
+                  "attachments": [],
+                  "rrule": null,
+                  "parent_event_id": "eed3f39e-4b93-462b-944b-f960ce53ee26",
+                  "occurrence_date": "2026-10-19",
+                  "recurrence_end_date": null,
+                  "is_deleted_instance": false,
+                  "comment_count": 1,
+                  "created_at": "2026-05-12T04:00:00.000000Z",
+                  "updated_at": "2026-05-12T04:05:00.000000Z",
+                  "comments": []
+                }
+              ],
+              "tasks": []
+            },
+            "error": null,
+            "meta": null
+          }
+
+docs: |-
+  Full-detail calendar day view for a single exact date via GET query params.
+  Returns events and tasks with the same rich field shape as the existing detail serializers, including comments arrays.
+  general_events: cron-populated system events (title, description, event_at).
+  Unlike the unified summary endpoint, recurring items are expanded for the selected date.
+  Validation errors use the standard details array: [{type, field, issue, message}].

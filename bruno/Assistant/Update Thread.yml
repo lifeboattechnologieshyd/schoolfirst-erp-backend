@@ -1,0 +1,75 @@
+info:
+  name: Update Thread
+  type: http
+  seq: 4
+
+http:
+  method: PATCH
+  url: "{{base_url}}api/v1/assistant/threads/{{thread_id}}"
+  body:
+    type: json
+    data: |-
+      {
+          "name": "Updated Thread Name"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: Update thread properties (e.g., name). Use PATCH for partial updates.
+
+examples:
+  - name: Success Response
+    request:
+      url: "{{base_url}}api/v1/assistant/threads/{{thread_id}}"
+      method: PATCH
+      body:
+        type: json
+        data: |-
+          {
+              "name": "Updated Thread Name"
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, PUT, PATCH, DELETE, HEAD, OPTIONS
+        - name: content-length
+          value: 368
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": {
+              "id": "4ab0fd32-717b-4560-a431-b1c9c212fb38",
+              "user_id": "b7dce1c0-5847-4a11-bd3e-fd094eeedc49",
+              "name": "New Chat",
+              "status": "ACTIVE",
+              "summary": null,
+              "model": null,
+              "settings": null,
+              "module_settings": null,
+              "is_temporary": false,
+              "created_at": "2026-05-12T02:29:57.618074Z",
+              "updated_at": "2026-05-12T02:29:57.893263Z"
+            },
+            "error": null,
+            "meta": null
+          }

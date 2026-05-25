@@ -1,0 +1,124 @@
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: samsr-minio
+    restart: always
+    env_file:
+      - ../../.env.docker
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_REGION_NAME: ${MINIO_REGION_NAME:-ap-south-1}
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_S3_PORT:-9000}:9000" # S3 API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" # MinIO Console
+    volumes:
+      - minio_data:/data
+    networks:
+      - samsr-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${MINIO_S3_PORT:-9000}/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio-init:
+    image: minio/mc
+    container_name: samsr-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set local http://minio:${MINIO_S3_PORT:-9000} ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
+      mc mb -p local/samsr || true;
+      mc anonymous set download local/samsr;
+      exit 0;
+      "
+    networks:
+      - samsr-network
+
+  postgres:
+    image: postgres:17
+    container_name: samsr-postgres
+    restart: unless-stopped
+    env_file:
+      - ../../.env.docker
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-samsr}
+      - PGSSLMODE=${PGSSLMODE:-disable}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - samsr-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: samsr-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - samsr-network
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: samsr-mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025" # SMTP
+      - "${MAILPIT_HTTP_PORT:-8025}:8025" # Web UI
+    volumes:
+      - mailpit_data:/data
+    networks:
+      - samsr-network
+
+  backend:
+    image: samsr-backend:latest
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      tags:
+        - samsr-backend:latest
+    container_name: samsr-backend
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    ports:
+      - "${HTTP_PORT:-8000}:8000"
+    networks:
+      - samsr-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pg_data:
+  minio_data:
+  qdrant_data:
+  mailpit_data:
+
+networks:
+  samsr-network:
+    external: true

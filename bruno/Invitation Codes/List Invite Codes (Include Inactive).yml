@@ -1,0 +1,709 @@
+info:
+  name: List Invite Codes (Include Inactive)
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: "{{base_url}}api/v1/auth/invitations/list?include_inactive=true"
+  params:
+    - name: include_inactive
+      value: "true"
+      type: query
+      description: Include inactive/expired codes
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: List all invitation codes including inactive ones.
+
+examples:
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/auth/invitations/list?include_inactive=true"
+      method: GET
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, HEAD, OPTIONS
+        - name: content-length
+          value: 13690
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": [
+              {
+                "id": "0fb87425-349a-400e-b8a9-a659828cdb77",
+                "code": "7MPQ5T",
+                "code_type": "targeted",
+                "target_email": "temp_family_test@example.com",
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T03:08:56.552827Z",
+                "is_active": false,
+                "created_at": "2026-05-12T03:08:56.552926Z"
+              },
+              {
+                "id": "a39c3ed4-8e7e-4e6d-b57c-03f61bb89277",
+                "code": "17A8U2",
+                "code_type": "targeted",
+                "target_email": "signup_success_test@example.com",
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T02:51:17.541923Z",
+                "is_active": false,
+                "created_at": "2026-05-12T02:51:17.542018Z"
+              },
+              {
+                "id": "24e7f755-cd7c-4c60-9d16-cd81c7547096",
+                "code": "MVKQDK",
+                "code_type": "targeted",
+                "target_email": "targeted_test@example.com",
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T02:51:16.088389Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:51:16.088527Z"
+              },
+              {
+                "id": "f251d6bd-726a-4ebd-8587-cbdfad2bddc9",
+                "code": "56VUTU",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T02:51:15.956159Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:51:15.956315Z"
+              },
+              {
+                "id": "c979f7c7-3233-4ee2-8218-602703f5c26a",
+                "code": "OWW23W",
+                "code_type": "targeted",
+                "target_email": "targeted_test@example.com",
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T02:50:51.011677Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:50:51.011827Z"
+              },
+              {
+                "id": "27554421-6c42-4198-9ee6-f76374550d3c",
+                "code": "5KO9UA",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T02:50:50.876532Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:50:50.876694Z"
+              },
+              {
+                "id": "30404c18-abfc-4835-9b88-81b263ba73fb",
+                "code": "NB2V6I",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T02:36:00.572641Z",
+                "is_active": false,
+                "created_at": "2026-05-12T02:36:00.572760Z"
+              },
+              {
+                "id": "141400be-45a8-4bc1-b16a-b1f3614441d4",
+                "code": "4W8BJU",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T02:35:07.133676Z",
+                "is_active": false,
+                "created_at": "2026-05-12T02:35:07.133768Z"
+              },
+              {
+                "id": "b06734b1-1745-4b5f-ae4a-b92f93d80c7f",
+                "code": "Y18O6P",
+                "code_type": "generic",
+                "target_email": "targeted@example.com",
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T02:29:54.907871Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:29:54.907996Z"
+              },
+              {
+                "id": "4cd0289f-8765-417b-ba8e-f9326af1b5de",
+                "code": "T3R235",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-06-11T02:29:54.888616Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:29:54.888760Z"
+              },
+              {
+                "id": "de988fbb-ddaa-4bc0-97a7-bca4c6c1ea63",
+                "code": "JW1FVZ",
+                "code_type": "generic",
+                "target_email": "targeted@example.com",
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T02:28:31.003596Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:28:31.003740Z"
+              },
+              {
+                "id": "36b6c2ec-e8b7-416e-b2bf-63d0a6980a09",
+                "code": "X4RCPY",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-06-11T02:28:30.982780Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:28:30.982927Z"
+              },
+              {
+                "id": "2f83d69b-dfe4-4ea1-97da-2419bf295427",
+                "code": "S4C58Y",
+                "code_type": "generic",
+                "target_email": "targeted@example.com",
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T02:27:06.052173Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:27:06.052297Z"
+              },
+              {
+                "id": "08516091-6096-41ba-84cf-f91b3f795b34",
+                "code": "0S9ND2",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-06-11T02:27:06.004131Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:27:06.004227Z"
+              },
+              {
+                "id": "27a4e910-f571-4d14-965e-a49dd041a036",
+                "code": "GZIKOP",
+                "code_type": "generic",
+                "target_email": "targeted@example.com",
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T02:24:58.741697Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:24:58.741797Z"
+              },
+              {
+                "id": "49659ede-854c-451c-adca-1e4c67ed8a11",
+                "code": "58Z930",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-06-11T02:24:58.725550Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:24:58.725650Z"
+              },
+              {
+                "id": "b15638d8-e2d0-46a4-bf0c-f3105e552d81",
+                "code": "33LX9K",
+                "code_type": "generic",
+                "target_email": "targeted@example.com",
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T02:24:17.489653Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:24:17.489772Z"
+              },
+              {
+                "id": "d6ef5a6c-90bb-4c8d-95a7-1d93334c9d47",
+                "code": "GUVTIT",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-06-11T02:24:17.477043Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:24:17.477125Z"
+              },
+              {
+                "id": "f5d91ac9-484e-48d6-8c37-49ecfea66cb6",
+                "code": "W0V91Y",
+                "code_type": "generic",
+                "target_email": "targeted@example.com",
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T02:22:09.813080Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:22:09.813168Z"
+              },
+              {
+                "id": "b9bed780-1e90-4267-9407-804a76a4b2c4",
+                "code": "XCH00V",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-06-11T02:22:09.798323Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:22:09.798418Z"
+              },
+              {
+                "id": "69262997-8645-43eb-a5c9-af0a57c21e40",
+                "code": "RKPH58",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-06-11T02:21:29.974065Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:21:29.974154Z"
+              },
+              {
+                "id": "cf8bcb36-4cc9-42e7-8373-1dcd3e0d5deb",
+                "code": "W1U3EU",
+                "code_type": "generic",
+                "target_email": "targeted@example.com",
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T02:20:59.158438Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:20:59.158527Z"
+              },
+              {
+                "id": "3cf1c216-824f-4c2f-982b-279d6b522498",
+                "code": "64SBNY",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-06-11T02:20:59.142101Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:20:59.142186Z"
+              },
+              {
+                "id": "1e3107f3-ef66-46b6-9c0a-09623bc70ad6",
+                "code": "2YKM4F",
+                "code_type": "generic",
+                "target_email": "targeted@example.com",
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T02:20:06.880358Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:20:06.880444Z"
+              },
+              {
+                "id": "a7a3e5c5-dba0-488a-9154-af5b17501075",
+                "code": "YA3C1B",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-06-11T02:20:06.864209Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:20:06.864297Z"
+              },
+              {
+                "id": "b8694017-6b34-4816-bee9-1620afa87d87",
+                "code": "9EFM90",
+                "code_type": "generic",
+                "target_email": "targeted@example.com",
+                "max_uses": 1,
+                "current_uses": 0,
+                "remaining_uses": 1,
+                "expires_at": "2026-06-11T02:17:41.440801Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:17:41.440945Z"
+              },
+              {
+                "id": "dc08eb35-da9b-4d51-8f7c-a29bec2b955b",
+                "code": "ZBSLD8",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-06-11T02:17:41.423196Z",
+                "is_active": true,
+                "created_at": "2026-05-12T02:17:41.423321Z"
+              },
+              {
+                "id": "e2f2edba-e362-4c90-9cb1-c1bead2246fa",
+                "code": "SXXQJJ",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-06-10T16:00:30.917944Z",
+                "is_active": true,
+                "created_at": "2026-05-11T16:00:30.918062Z"
+              },
+              {
+                "id": "cc519e4f-6bd2-4c58-8f5f-368eca3b6e6b",
+                "code": "7YP5GG",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-05-12T16:00:22.982755Z",
+                "is_active": false,
+                "created_at": "2026-05-11T16:00:22.982854Z"
+              },
+              {
+                "id": "447182f1-f944-4a7f-81e6-5251d5d3b804",
+                "code": "O1LJ7T",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 10,
+                "current_uses": 0,
+                "remaining_uses": 10,
+                "expires_at": "2026-06-10T16:00:22.900853Z",
+                "is_active": false,
+                "created_at": "2026-05-11T16:00:22.900999Z"
+              },
+              {
+                "id": "d3d79bd7-93ad-4fa0-b46c-689847c23f72",
+                "code": "AIVO72",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-06-10T03:51:16.812511Z",
+                "is_active": false,
+                "created_at": "2026-05-11T03:51:16.812638Z"
+              },
+              {
+                "id": "efa4f0ff-cb03-4467-8b88-253f64f749e2",
+                "code": "YLPH6M",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-05-12T03:51:08.529524Z",
+                "is_active": false,
+                "created_at": "2026-05-11T03:51:08.529630Z"
+              },
+              {
+                "id": "8025abf4-e135-41f7-9da3-686b640bbe4c",
+                "code": "3OP1NB",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 10,
+                "current_uses": 0,
+                "remaining_uses": 10,
+                "expires_at": "2026-06-10T03:51:08.447110Z",
+                "is_active": false,
+                "created_at": "2026-05-11T03:51:08.447224Z"
+              },
+              {
+                "id": "069fc3d1-f5b7-4f8c-a6e0-f3443a6f9b32",
+                "code": "X4ZXIW",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-05-12T03:50:17.278140Z",
+                "is_active": false,
+                "created_at": "2026-05-11T03:50:17.278251Z"
+              },
+              {
+                "id": "3ba9205a-59b9-4724-b33f-f9f99df005c5",
+                "code": "3KZTHJ",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-06-09T18:57:35.676510Z",
+                "is_active": false,
+                "created_at": "2026-05-10T18:57:35.676624Z"
+              },
+              {
+                "id": "e227a0de-4ca8-42cd-8b6f-e4f724bc3dd4",
+                "code": "TBJXW1",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-05-11T18:57:27.546045Z",
+                "is_active": false,
+                "created_at": "2026-05-10T18:57:27.546138Z"
+              },
+              {
+                "id": "e39b6b71-401c-40a5-aaed-65364628c860",
+                "code": "ORGX7M",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 10,
+                "current_uses": 0,
+                "remaining_uses": 10,
+                "expires_at": "2026-06-09T18:57:27.457927Z",
+                "is_active": false,
+                "created_at": "2026-05-10T18:57:27.458020Z"
+              },
+              {
+                "id": "8ee0688f-0c1e-42e4-ba1a-47e0e2d7bb84",
+                "code": "LN070W",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-05-11T14:02:55.125047Z",
+                "is_active": false,
+                "created_at": "2026-05-10T14:02:55.125127Z"
+              },
+              {
+                "id": "4177492b-e40b-4e1f-8cda-93e2a6a9c491",
+                "code": "CW3DEZ",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 10,
+                "current_uses": 0,
+                "remaining_uses": 10,
+                "expires_at": "2026-06-09T14:02:55.044060Z",
+                "is_active": false,
+                "created_at": "2026-05-10T14:02:55.044148Z"
+              },
+              {
+                "id": "c775a9b7-c390-4ffa-bf93-51b5d2ec1943",
+                "code": "WH0BYP",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-05-11T13:55:56.595731Z",
+                "is_active": false,
+                "created_at": "2026-05-10T13:55:56.595833Z"
+              },
+              {
+                "id": "04d3b483-a9f1-4feb-8318-7854ddb91064",
+                "code": "3ZO9HS",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 10,
+                "current_uses": 0,
+                "remaining_uses": 10,
+                "expires_at": "2026-06-09T13:55:56.491123Z",
+                "is_active": false,
+                "created_at": "2026-05-10T13:55:56.491205Z"
+              },
+              {
+                "id": "294b90b5-4952-45e2-83de-c0a573f2f16a",
+                "code": "7AVMN4",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-05-11T13:17:52.802757Z",
+                "is_active": false,
+                "created_at": "2026-05-10T13:17:52.802840Z"
+              },
+              {
+                "id": "0b343da9-a4cc-4878-9156-bc2c500b060d",
+                "code": "5YSN5F",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 10,
+                "current_uses": 0,
+                "remaining_uses": 10,
+                "expires_at": "2026-06-09T13:17:52.714087Z",
+                "is_active": false,
+                "created_at": "2026-05-10T13:17:52.714186Z"
+              },
+              {
+                "id": "6a80de7c-2e28-4499-b97a-0ac1f14e4046",
+                "code": "3T6VBJ",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-05-11T13:16:14.908350Z",
+                "is_active": false,
+                "created_at": "2026-05-10T13:16:14.908426Z"
+              },
+              {
+                "id": "5a075cd4-23ef-4543-918d-b0fd43282098",
+                "code": "AN9C6H",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 10,
+                "current_uses": 0,
+                "remaining_uses": 10,
+                "expires_at": "2026-06-09T13:16:14.808010Z",
+                "is_active": false,
+                "created_at": "2026-05-10T13:16:14.808101Z"
+              },
+              {
+                "id": "4287d149-ffed-44ab-a7f3-5de104d1c9b0",
+                "code": "9XSTOV",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-05-11T13:15:19.540979Z",
+                "is_active": false,
+                "created_at": "2026-05-10T13:15:19.541073Z"
+              },
+              {
+                "id": "bc5de219-b6ca-4130-8984-d045790f2122",
+                "code": "IUQ81W",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 10,
+                "current_uses": 0,
+                "remaining_uses": 10,
+                "expires_at": "2026-06-09T13:15:19.447143Z",
+                "is_active": false,
+                "created_at": "2026-05-10T13:15:19.447260Z"
+              },
+              {
+                "id": "f9eaabfe-a766-4bf8-865f-7c517104fb46",
+                "code": "HZPSW1",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-05-11T03:38:22.538875Z",
+                "is_active": false,
+                "created_at": "2026-05-10T03:38:22.538984Z"
+              },
+              {
+                "id": "84ed5710-3f70-4db5-940f-e89acd024ded",
+                "code": "UFW650",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 10,
+                "current_uses": 0,
+                "remaining_uses": 10,
+                "expires_at": "2026-06-09T03:38:22.450217Z",
+                "is_active": false,
+                "created_at": "2026-05-10T03:38:22.450386Z"
+              },
+              {
+                "id": "4dd4a40d-2722-4ec1-8022-4570cdb243d3",
+                "code": "Q2G55Q",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-05-11T03:35:18.755843Z",
+                "is_active": false,
+                "created_at": "2026-05-10T03:35:18.755932Z"
+              },
+              {
+                "id": "2fcf57f4-1a61-4683-8254-09107a13fb50",
+                "code": "7T3SRZ",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-06-09T03:30:39.032582Z",
+                "is_active": false,
+                "created_at": "2026-05-10T03:30:39.032665Z"
+              },
+              {
+                "id": "b28d7f06-ce57-47c7-b85e-a90689f43f6d",
+                "code": "V4BZ24",
+                "code_type": "generic",
+                "target_email": null,
+                "max_uses": 5,
+                "current_uses": 0,
+                "remaining_uses": 5,
+                "expires_at": "2026-05-11T03:30:38.837734Z",
+                "is_active": false,
+                "created_at": "2026-05-10T03:30:38.837851Z"
+              }
+            ],
+            "error": null,
+            "meta": null
+          }
+  - name: Error - Unauthorized
+    request:
+      url: "{{base_url}}api/v1/auth/invitations/list?include_inactive=true"
+      method: GET
+    response:
+      status: 401
+      statusText: Unauthorized
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, HEAD, OPTIONS
+        - name: content-length
+          value: 58
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "detail": "Authentication credentials were not provided."
+          }

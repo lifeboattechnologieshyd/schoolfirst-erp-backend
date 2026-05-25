@@ -1,0 +1,107 @@
+info:
+  name: Exit Family
+  type: http
+  seq: 9
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/family/{{family_id}}/exit"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Error - Owner Cannot Exit
+    request:
+      url: "{{base_url}}api/v1/family/{{family_id}}/exit"
+      method: POST
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: "48"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "family": [
+              "The owner cannot exit the family."
+            ]
+          }
+  - name: Error - Not Found
+    request:
+      url: "{{base_url}}api/v1/family/{{family_id}}/exit"
+      method: POST
+    response:
+      status: 404
+      statusText: Not Found
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: "47"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "detail": "No Family matches the given query."
+          }
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/family/{{family_id}}/exit"
+      method: POST
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: "93"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "You have exited the family.",
+            "data": null,
+            "error": null,
+            "meta": null
+          }

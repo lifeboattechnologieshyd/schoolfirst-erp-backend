@@ -1,0 +1,160 @@
+info:
+  name: Update My Profile
+  type: http
+  seq: 2
+
+http:
+  method: PATCH
+  url: "{{base_url}}api/v1/user/profile"
+  body:
+    type: json
+    data: |-
+      {
+        "email": "admin@samsr.us",
+        "first_name": "John",
+        "last_name": "Doe",
+        "gender": "male",
+        "dob": "1990-01-15",
+        "profile_image": "temp/7ba4f4e8-7b1c-4ce2-8569-7b832d07dd8f/IMG_6457_91ed166f.jpeg"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/user/profile"
+      method: PATCH
+      body:
+        type: json
+        data: |-
+          {
+            "first_name": "John",
+            "last_name": "Doe",
+            "gender": "male",
+            "dob": "1990-01-15"
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, PATCH, HEAD, OPTIONS
+        - name: content-length
+          value: "623"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": {
+              "id": "b7dce1c0-5847-4a11-bd3e-fd094eeedc49",
+              "email": "admin@samsr.us",
+              "first_name": "John",
+              "last_name": "Doe",
+              "gender": "male",
+              "dob": "1990-01-15",
+              "profile_image": "https://samsr-dev.s3.amazonaws.com/profiles/b7dce1c0-5847-4a11-bd3e-fd094eeedc49/IMG_0122_5c37e814.jpeg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAYDMF43AF7JJOR6SY%2F20260512%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20260512T031756Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=9855416ab71d2eafa5e110956b5a1b76a92ff9150addd0f8f54f8b744e063395",
+              "is_profile_updated": true
+            },
+            "error": null,
+            "meta": null
+          }
+  - name: Error - Unauthorized
+    request:
+      url: "{{base_url}}api/v1/user/profile"
+      method: PATCH
+      body:
+        type: json
+        data: |-
+          {
+            "first_name": "Hacker"
+          }
+    response:
+      status: 401
+      statusText: Unauthorized
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, PATCH, HEAD, OPTIONS
+        - name: content-length
+          value: "58"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "detail": "Authentication credentials were not provided."
+          }
+  - name: Error - Invalid Profile Image
+    request:
+      url: "{{base_url}}api/v1/user/profile"
+      method: PATCH
+      body:
+        type: json
+        data: |-
+          {
+            "profile_image": "http://evil.com/image.jpg"
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, PATCH, HEAD, OPTIONS
+        - name: content-length
+          value: "153"
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "Please upload a valid image file.",
+              "details": null
+            },
+            "meta": null
+          }
+
+docs: |-
+  Update the authenticated user's profile. All fields are optional.
+  profile_image should be the temp path returned by POST /api/v1/upload/.
+  Returns the updated profile. Any successful profile update sets
+  is_profile_updated to true.

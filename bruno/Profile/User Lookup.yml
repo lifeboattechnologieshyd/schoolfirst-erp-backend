@@ -1,0 +1,145 @@
+info:
+  name: User Lookup
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{base_url}}api/v1/users/lookup"
+  body:
+    type: json
+    data: |-
+      {
+        "email": "test@example.com"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: Look up a user by email address. Returns user profile info, including gender, if found.
+
+examples:
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/users/lookup"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "email": "admin@samsr.us"
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 259
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": null,
+            "data": {
+              "id": "b7dce1c0-5847-4a11-bd3e-fd094eeedc49",
+              "email": "admin@samsr.us",
+              "first_name": "John",
+              "last_name": "Doe",
+              "gender": "male",
+              "profile_image": "profiles/b7dce1c0-5847-4a11-bd3e-fd094eeedc49/IMG_0122_5c37e814.jpeg"
+            },
+            "error": null,
+            "meta": null
+          }
+  - name: Error - User Not Found
+    request:
+      url: "{{base_url}}api/v1/users/lookup"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "email": "nobody@example.com"
+          }
+    response:
+      status: 404
+      statusText: Not Found
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 113
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "User not found."
+            },
+            "meta": null
+          }
+  - name: Error - Unauthorized
+    request:
+      url: "{{base_url}}api/v1/users/lookup"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "email": "admin@samsr.us"
+          }
+    response:
+      status: 401
+      statusText: Unauthorized
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: POST, OPTIONS
+        - name: content-length
+          value: 58
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "detail": "Authentication credentials were not provided."
+          }

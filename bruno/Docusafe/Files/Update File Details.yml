@@ -1,0 +1,133 @@
+info:
+  name: Update File Details
+  type: http
+  seq: 1
+
+http:
+  method: PUT
+  url: "{{base_url}}api/v1/docusafe/folders/{{folder_id}}/files/{{file_id}}"
+  body:
+    type: json
+    data: |-
+      {
+        "id": "{{file_id}}",
+        "folder_id": "02254441-bd9e-41ba-81b7-da3f752e87f6",
+        "file_name": "CHANGELOG.md",
+        "description": "hello",
+        "remarks": null,
+        "file_path": "docusafe/2eb91e69-ba97-414a-8bc5-6acb82298dee/02254441-bd9e-41ba-81b7-da3f752e87f6/7b90d85c-71af-44f6-80ba-35d2f8b50464_changelog.md",
+        "mime_type": "text/markdown",
+        "file_size": 1129,
+        "file_extension": ".md",
+        "checksum": "859c7902bed93cf83f1a0f33dcff1804f87e55f6b79503f883908fb9d233b76e",
+        "is_shared": false,
+        "metadata": {},
+        "created_at": "2026-03-22T15:50:05.613441Z",
+        "updated_at": "2026-03-22T15:50:05.613455Z"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Success
+    request:
+      url: "{{base_url}}api/v1/docusafe/folders/{{folder_id}}/files/{{file_id}}"
+      method: PUT
+      body:
+        type: json
+        data: |-
+          {
+            "file_name": "updated_sample.png",
+            "description": "Updated description"
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, PUT, PATCH, DELETE, HEAD, OPTIONS
+        - name: content-length
+          value: 1018
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Updated successfully.",
+            "data": {
+              "id": "56da33e7-a9a1-4e62-a3c4-9028a1a4a8e8",
+              "file_name": "updated_sample.png",
+              "file_size": 67,
+              "mime_type": "image/png",
+              "is_shared": false,
+              "status": "ACTIVE",
+              "llm_status": "PENDING",
+              "created_at": "2026-05-12T03:22:05.692665Z",
+              "description": "Updated description",
+              "summary": null,
+              "embedding_model": null,
+              "folder_id": "57993c3c-e70f-4563-a6ae-d07604fc3095",
+              "file_extension": ".png",
+              "checksum": "08d2521273459ce20781173ac9cbf8f162880a70420b236ab5641a795bb02b54",
+              "file_url": "https://samsr-dev.s3.amazonaws.com/docusafe/b7dce1c0-5847-4a11-bd3e-fd094eeedc49/57993c3c-e70f-4563-a6ae-d07604fc3095/56da33e7-a9a1-4e62-a3c4-9028a1a4a8e8_sample.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAYDMF43AF7JJOR6SY%2F20260512%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20260512T032208Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host&X-Amz-Signature=f06e5b32e67c84ff3b9a34283b9b8eeb2db0506cd0bfd22c5f21a2fe021c28ee",
+              "updated_at": "2026-05-12T03:22:07.976212Z"
+            },
+            "error": null,
+            "meta": null
+          }
+  - name: Error - Not Found
+    request:
+      url: "{{base_url}}api/v1/docusafe/folders/{{folder_id}}/files/{{file_id}}"
+      method: PUT
+      body:
+        type: json
+        data: |-
+          {
+            "file_name": "x.png"
+          }
+    response:
+      status: 404
+      statusText: Not Found
+      headers:
+        - name: content-type
+          value: application/json
+        - name: allow
+          value: GET, PUT, PATCH, DELETE, HEAD, OPTIONS
+        - name: content-length
+          value: 135
+        - name: x-content-type-options
+          value: nosniff
+        - name: referrer-policy
+          value: same-origin
+        - name: cross-origin-opener-policy
+          value: same-origin
+        - name: vary
+          value: origin
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "The requested resource was not found."
+            },
+            "meta": null
+          }

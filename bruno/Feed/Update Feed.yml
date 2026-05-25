@@ -1,0 +1,98 @@
+info:
+  name: Update Feed
+  type: http
+  seq: 4
+
+http:
+  method: PUT
+  url: "{{base_url}}api/v1/feed/{{feed_id}}"
+  body:
+    type: json
+    data: |-
+      {
+        "body_text": "Updated via PUT",
+        "media_urls": [],
+        "youtube_url": null,
+        "external_urls": ["https://example.com"],
+        "access_type": "only_me",
+        "access_family_ids": [],
+        "access_close_group_ids": [],
+        "access_user_ids": []
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: Success - PUT
+    request:
+      url: "{{base_url}}api/v1/feed/{{feed_id}}"
+      method: PUT
+    response:
+      status: 200
+      statusText: OK
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Feed updated successfully",
+            "data": {
+              "id": "f14409bc-3f55-49d7-b5aa-55350816112d",
+              "body_text": "Updated via PUT",
+              "media_urls": [],
+              "youtube_url": null,
+              "external_urls": ["https://example.com"],
+              "created_by": "7ba4f4e8-7b1c-4ce2-8569-7b832d07dd8f",
+              "creator_info": {
+                "id": "7ba4f4e8-7b1c-4ce2-8569-7b832d07dd8f",
+                "first_name": "John",
+                "last_name": "Doe",
+                "profile_image": "https://samsr-dev.s3.amazonaws.com/profiles/7ba4f4e8-7b1c-4ce2-8569-7b832d07dd8f/IMG_6457_91ed166f.jpeg"
+              },
+              "access_type": "only_me",
+              "access_family_ids": [],
+              "access_close_group_ids": [],
+              "access_user_ids": [],
+              "reaction_count": 0,
+              "comment_count": 0,
+              "share_count": 0,
+              "my_reaction": null,
+              "reactions": {},
+              "created_at": "2026-05-24T17:25:04.783866Z"
+            },
+            "error": null,
+            "meta": null
+          }
+  - name: Error - Forbidden (non-creator)
+    request:
+      url: "{{base_url}}api/v1/feed/{{feed_id}}"
+      method: PUT
+    response:
+      status: 403
+      statusText: Forbidden
+      body:
+        type: json
+        data: |-
+          {
+            "success": false,
+            "message": null,
+            "data": null,
+            "error": {
+              "code": "FORBIDDEN",
+              "message": "You do not have permission to perform this action.",
+              "details": [
+                {
+                  "type": "detail",
+                  "message": "Only the creator can edit this post"
+                }
+              ]
+            },
+            "meta": null
+          }
+
+docs: Full update (PUT) or use PATCH on the same URL for partial updates.
