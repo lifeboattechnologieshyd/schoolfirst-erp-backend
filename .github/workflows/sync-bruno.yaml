@@ -33,7 +33,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          git remote add bruno-target git@github.com:vetostudiospvtltd/schoolfirst-api-collection.git
+#          git remote add bruno-target git@github.com:vetostudiospvtltd/schoolfirst-api-collection.git
           split_sha="$(git subtree split --prefix=bruno)"
 
           if ! git push bruno-target "$split_sha":development; then
