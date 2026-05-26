@@ -48,21 +48,3 @@ opentelemetry-instrumentation-django==0.62b1
 opentelemetry-instrumentation-requests==0.62b1
 opentelemetry-instrumentation-psycopg==0.62b1
 opentelemetry-instrumentation-logging==0.62b1
-
-# AI
-google-genai==2.0.*
-langchain==1.2.*
-langchain-aws==1.4.*
-langgraph==1.1.*
-langchain-community==0.4.*
-tavily-python==0.7.*
-# User agent parsing (for Docusafe ShareViewLog device info)
-user-agents==2.2.*
-# Vector Store
-qdrant-client==1.17.*
-# Text extraction (Textract response parser)
-amazon-textract-textractor[pdf]==1.9.*
-# Structured document parsing (Docusafe embedding pipeline)
-python-docx==1.2.*
-python-pptx==1.0.*
-PyYAML==6.0.*

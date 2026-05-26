@@ -18,7 +18,7 @@ services:
     networks:
       - schoolfirst-erp-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${MINIO_S3_PORT:-9000}/minio/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -32,9 +32,9 @@ services:
     entrypoint: >
       /bin/sh -c "
       sleep 5;
-      mc alias set local http://minio:${MINIO_S3_PORT:-9000} ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
-      mc mb -p local/schoolfirst || true;
-      mc anonymous set download local/schoolfirst;
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
+      mc mb -p local/schoolfirst-erp || true;
+      mc anonymous set download local/schoolfirst-erp;
       exit 0;
       "
     networks:
@@ -49,7 +49,7 @@ services:
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_DB=${POSTGRES_DB:-schoolfirst}
+      - POSTGRES_DB=${POSTGRES_DB:-schoolfirst-erp}
       - PGSSLMODE=${PGSSLMODE:-disable}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
@@ -86,6 +86,13 @@ services:
     restart: unless-stopped
     env_file:
       - ../../.env.docker
+    environment:
+      POSTGRES_DB_HOST: postgres
+      POSTGRES_DB_PORT: 5432
+      POSTGRES_DB_NAME: ${POSTGRES_DB:-schoolfirst-erp}
+      POSTGRES_DB_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB_SSL_ENABLED: "False"
     depends_on:
       postgres:
         condition: service_healthy
