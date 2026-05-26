@@ -85,7 +85,7 @@ services:
     container_name: schoolfirst-erp-backend
     restart: unless-stopped
     env_file:
-      - ../../.env.docker
+      - ../../.env
     environment:
       POSTGRES_DB_HOST: postgres
       POSTGRES_DB_PORT: 5432
