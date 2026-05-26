@@ -7,11 +7,11 @@ APP_TO_DB_MAPPING = {}
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": get_from_env("POSTGRES_DB_NAME", "schoolfirst"),
-        "USER": get_from_env("POSTGRES_DB_USER", "postgres"),
-        "PASSWORD": get_from_env("POSTGRES_DB_PASSWORD", "postgres"),
-        "HOST": get_from_env("POSTGRES_DB_HOST", "localhost"),
-        "PORT": get_from_env("POSTGRES_DB_PORT", "5432", type_cast=int),
+        "NAME": get_from_env("POSTGRES_DB_NAME"),
+        "USER": get_from_env("POSTGRES_DB_USER"),
+        "PASSWORD": get_from_env("POSTGRES_DB_PASSWORD"),
+        "HOST": get_from_env("POSTGRES_DB_HOST"),
+        "PORT": get_from_env("POSTGRES_DB_PORT", type_cast=int),
         "OPTIONS": (
             {}
             if get_from_env("POSTGRES_DB_SSL_ENABLED", False)
@@ -20,3 +20,14 @@ DATABASES = {
         "CONN_MAX_AGE": 4 * 60 * 60,
     },
 }
+
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.postgresql",
+#         "NAME": "schoolfirst",
+#         "USER": "postgres",
+#         "PASSWORD": "postgres",
+#         "HOST": "postgres",
+#         "PORT": "5432",
+#     }
+# }
