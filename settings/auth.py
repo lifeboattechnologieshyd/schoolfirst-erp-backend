@@ -85,13 +85,3 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
-
-
-# Google OAuth Settings
-GOOGLE_TOKEN_URL = get_from_env("GOOGLE_TOKEN_URL", "https://oauth2.googleapis.com/token")
-GOOGLE_USERINFO_URL = get_from_env("GOOGLE_USERINFO_URL", "https://www.googleapis.com/oauth2/v2/userinfo")
-GOOGLE_CLIENT_ID = get_from_env("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = get_from_env("GOOGLE_CLIENT_SECRET", "")
-GOOGLE_REDIRECT_URI = get_from_env("GOOGLE_REDIRECT_URI", "postmessage")
-
-

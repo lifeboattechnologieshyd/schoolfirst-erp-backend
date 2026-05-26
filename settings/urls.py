@@ -1,3 +1,5 @@
+import typing
+
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import HttpResponse
@@ -7,12 +9,24 @@ from drf_spectacular.views import (
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
+from health_check.base import HealthCheck
+from health_check.views import HealthCheckView
 
-from apps.core.views.health import CustomHealthCheckView
+
+class CustomHealthCheckView(HealthCheckView):
+    """
+    Custom health check view that excludes DNS and Mail checks.
+    """
+
+    checks: typing.Iterable[type[HealthCheck] | str | tuple[type[HealthCheck] | str, dict[str, typing.Any]]] = (
+        "health_check.checks.Cache",
+        "health_check.checks.Database",
+        "health_check.checks.Storage",
+    )
 
 
 def simple_health_check(request):
-    return HttpResponse("OK")
+    return HttpResponse(b"OK", content_type="text/plain")
 
 
 urlpatterns = []
@@ -26,7 +40,6 @@ if settings.ENABLE_HEALTHCHECKS:
         path("health", CustomHealthCheckView.as_view()),
         path("health/simple", simple_health_check),
     ]
-
 
 ####################################
 #       API DOCUMENTATION          #
@@ -60,18 +73,6 @@ if settings.ENABLE_SILK:
 
 if "apps.core" in settings.INSTALLED_APPS:
     urlpatterns.append(path("api/", include("apps.core.urls")))
-
-if "apps.assistant" in settings.INSTALLED_APPS:
-    urlpatterns.append(path("api/", include("apps.assistant.urls")))
-
-if "apps.docusafe" in settings.INSTALLED_APPS:
-    urlpatterns.append(path("api/", include("apps.docusafe.urls")))
-
-if "apps.feed" in settings.INSTALLED_APPS:
-    urlpatterns.append(path("api/", include("apps.feed.urls")))
-
-if "apps.calendar" in settings.INSTALLED_APPS:
-    urlpatterns.append(path("api/", include("apps.calendar.urls")))
 
 
 ####################################

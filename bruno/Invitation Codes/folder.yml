@@ -1,7 +1,0 @@
-info:
-  name: Invitation Codes
-  type: folder
-  seq: 4
-
-request:
-  auth: inherit

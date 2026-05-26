@@ -20,14 +20,3 @@ DATABASES = {
         "CONN_MAX_AGE": 4 * 60 * 60,
     },
 }
-
-# DATABASES = {
-#     "default": {
-#         "ENGINE": "django.db.backends.postgresql",
-#         "NAME": "schoolfirst",
-#         "USER": "postgres",
-#         "PASSWORD": "postgres",
-#         "HOST": "postgres",
-#         "PORT": "5432",
-#     }
-# }

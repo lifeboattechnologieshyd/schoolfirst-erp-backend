@@ -1,8 +1,8 @@
 [project]
-name = "schoolfirst-backend"
+name = "schoolfirst-erp-backend"
 version = "1.0.0"
-description = "A backend service for Samsr application"
-requires-python = ">=3.14"
+description = "A backend service for SchoolFirst ERP application"
+requires-python = ">=3.13"
 
 
 # Ruff general configuration

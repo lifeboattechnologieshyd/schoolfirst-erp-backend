@@ -60,8 +60,6 @@ python manage.py collectstatic --noinput
 echo "Cleaning stale cron locks..."
 python manage.py remove_cronjob_locks || true
 
-echo "Initializing Qdrant collection..."
-python manage.py init_qdrant_collection
 
 ############################################
 # Cron handling

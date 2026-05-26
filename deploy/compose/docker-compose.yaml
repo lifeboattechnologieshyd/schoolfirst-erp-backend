@@ -1,7 +1,7 @@
 services:
   minio:
     image: minio/minio:latest
-    container_name: schoolfirst-minio
+    container_name: schoolfirst-erp-minio
     restart: always
     env_file:
       - ../../.env.docker
@@ -16,7 +16,7 @@ services:
     volumes:
       - minio_data:/data
     networks:
-      - schoolfirst-network
+      - schoolfirst-erp-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${MINIO_S3_PORT:-9000}/minio/health/live"]
       interval: 5s
@@ -25,7 +25,7 @@ services:
 
   minio-init:
     image: minio/mc
-    container_name: schoolfirst-minio-init
+    container_name: schoolfirst-erp-minio-init
     depends_on:
       minio:
         condition: service_healthy
@@ -38,11 +38,11 @@ services:
       exit 0;
       "
     networks:
-      - schoolfirst-network
+      - schoolfirst-erp-network
 
   postgres:
     image: postgres:17
-    container_name: schoolfirst-postgres
+    container_name: schoolfirst-erp-postgres
     restart: unless-stopped
     env_file:
       - ../../.env.docker
@@ -56,33 +56,16 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
     networks:
-      - schoolfirst-network
+      - schoolfirst-erp-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: schoolfirst-qdrant
-    restart: unless-stopped
-    ports:
-      - "${QDRANT_PORT:-6333}:6333"
-      - "${QDRANT_GRPC_PORT:-6334}:6334"
-    volumes:
-      - qdrant_data:/qdrant/storage
-    networks:
-      - schoolfirst-network
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   mailpit:
     image: axllent/mailpit:latest
-    container_name: schoolfirst-mailpit
+    container_name: schoolfirst-erp-mailpit
     restart: unless-stopped
     ports:
       - "${MAILPIT_SMTP_PORT:-1025}:1025" # SMTP
@@ -90,30 +73,28 @@ services:
     volumes:
       - mailpit_data:/data
     networks:
-      - schoolfirst-network
+      - schoolfirst-erp-network
 
   backend:
-    image: schoolfirst-backend:latest
+    image: schoolfirst-erp-backend:latest
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
       tags:
-        - schoolfirst-backend:latest
-    container_name: schoolfirst-backend
+        - schoolfirst-erp-backend:latest
+    container_name: schoolfirst-erp-backend
     restart: unless-stopped
     env_file:
       - ../../.env.docker
     depends_on:
       postgres:
         condition: service_healthy
-      qdrant:
-        condition: service_healthy
       minio:
         condition: service_healthy
     ports:
       - "${HTTP_PORT:-8000}:8000"
     networks:
-      - schoolfirst-network
+      - schoolfirst-erp-network
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/').read()"]
       interval: 10s
@@ -123,9 +104,8 @@ services:
 volumes:
   pg_data:
   minio_data:
-  qdrant_data:
   mailpit_data:
 
 networks:
-  schoolfirst-network:
+  schoolfirst-erp-network:
     external: true

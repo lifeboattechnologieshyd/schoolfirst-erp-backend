@@ -20,7 +20,7 @@ APPEND_SLASH = False
 
 # --- Project Metadata ---
 NAMESPACE = os.environ.get("NAMESPACE", "local")
-SERVICE_NAME = os.environ.get("SERVICE_NAME", "SAMSR-BACKEND")
+SERVICE_NAME = os.environ.get("SERVICE_NAME", "SCHOOLFIRST-ERP-BACKEND")
 SERVICE_VERSION = os.environ.get("SERVICE_VERSION", "1.0.0")
 
 
@@ -43,10 +43,6 @@ INSTALLED_APPS = [
     "django.contrib.postgres",
     # Internal Apps
     "apps.core",
-    "apps.feed",
-    "apps.assistant",
-    "apps.docusafe",
-    "apps.calendar",
     # Third Party
     "rest_framework",
     "rest_framework.authtoken",
@@ -123,10 +119,6 @@ try:
     from settings.auth import *  # noqa
     from settings.integrations import *  # noqa
     from settings.crons import *  # noqa
-    from settings.queue import *  # noqa
-    from settings.llm import *  # noqa
-    from settings.vector_store import *  # noqa
-    # from settings.websockets import *  # noqa
 except ImportError:
     raise ImportError(  # noqa: B904
         "Failed to import settings modules. Please ensure all dependencies are installed."

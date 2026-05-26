@@ -39,7 +39,7 @@ def add_extra_context_to_logs(
     if context.trace_id != 0:
         event_dict["trace_id"] = format_trace_id(context.trace_id)
         event_dict["span_id"] = format_span_id(context.span_id)
-        event_dict["service_name"] = os.environ.get("SERVICE_NAME", "SAMSR-BACKEND")
+        event_dict["service_name"] = os.environ.get("SERVICE_NAME", "SCHOOLFIRST-ERP-BACKEND")
         event_dict["service_version"] = os.environ.get("SERVICE_VERSION", "1.0.0")
     else:
         event_dict["trace_id"] = None
