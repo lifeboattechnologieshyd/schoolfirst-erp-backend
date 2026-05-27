@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "django.contrib.postgres",
     # Internal Apps
     "apps.core",
+    "apps.school",
     # Third Party
     "rest_framework",
     "rest_framework.authtoken",
