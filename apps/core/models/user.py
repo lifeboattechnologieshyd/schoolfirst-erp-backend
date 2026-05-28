@@ -9,6 +9,7 @@ from django.contrib.auth.models import (
 )
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
+from shared.mixins.base_model import AuditModel
 
 
 class UserManager(BaseUserManager):
@@ -77,3 +78,160 @@ class UserMaster(AbstractBaseUser):
     # Type declarations for static analysis
     objects: UserManager = UserManager()
     DoesNotExist: type[ObjectDoesNotExist]
+
+
+
+class Modules(AuditModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    module_name = models.CharField(max_length=255, unique=True)
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        related_name="sub_modules",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "modules"
+
+    def __str__(self):
+        return self.module_name
+
+
+class Permissions(AuditModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    permission_name = models.CharField(max_length=255)
+    module = models.ForeignKey(
+        Modules,
+        on_delete=models.CASCADE,
+        related_name="permissions",
+    )
+
+    class Meta:
+        db_table = "permissions"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["module", "permission_name"],
+                name="unique_permission_per_module",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["module", "permission_name"]),
+        ]
+
+    def __str__(self):
+        return f"{self.module.module_name} - {self.permission_name}"
+
+
+class Roles(AuditModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    role_name = models.CharField(max_length=255, unique=True)
+    description = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = "roles"
+
+    def __str__(self):
+        return self.role_name
+
+
+class RolePermissions(AuditModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    role = models.ForeignKey(
+        Roles,
+        on_delete=models.CASCADE,
+        related_name="role_permissions_for_role",
+    )
+    permission = models.ForeignKey(
+        Permissions,
+        on_delete=models.CASCADE,
+        related_name="role_permissions_for_permission",
+    )
+
+    class Meta:
+        db_table = "role_permissions"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["role", "permission"],
+                name="unique_role_permission",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["role", "permission"]),
+        ]
+
+    def __str__(self):
+        return f"{self.role.role_name} -> {self.permission.permission_name}"
+
+
+
+
+class UserRoles(AuditModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        UserMaster,
+        on_delete=models.CASCADE,
+        related_name="user_roles",
+    )
+    school = models.ForeignKey(
+        "school.School",
+        on_delete=models.CASCADE,
+        related_name="user_roles",
+    )
+    role = models.ForeignKey(
+        Roles,
+        on_delete=models.CASCADE,
+        related_name="role_users",
+    )
+
+    class Meta:
+        db_table = "user_roles"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "school", "role"],
+                name="unique_user_school_role",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["user", "school"]),
+            models.Index(fields=["school", "role"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.school.code} - {self.role.role_name}"
+
+
+class UserPermissions(AuditModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        UserMaster,
+        on_delete=models.CASCADE,
+        related_name="user_direct_permissions",
+    )
+    school = models.ForeignKey(
+        "school.School",
+        on_delete=models.CASCADE,
+        related_name="user_direct_permissions",
+    )
+    permission = models.ForeignKey(
+        Permissions,
+        on_delete=models.CASCADE,
+        related_name="user_permissions",
+    )
+
+    class Meta:
+        db_table = "user_permissions"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "school", "permission"],
+                name="unique_user_school_permission",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["user", "school"]),
+            models.Index(fields=["school", "permission"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.school.code} - {self.permission.permission_name}"
