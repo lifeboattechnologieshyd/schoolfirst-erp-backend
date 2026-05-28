@@ -7,15 +7,15 @@ class SchoolLead(models.Model):
 
     school_name = models.CharField(max_length=255)
 
-    contact_person = models.CharField(max_length=255)
+    contact_person = models.CharField(max_length=100)
 
-    number_of_students = models.PositiveIntegerField()
+    number_of_students = models.PositiveIntegerField(default=0)
 
     location = models.CharField(max_length=255)
 
     phone_number = models.CharField(max_length=20)
 
-    email = models.EmailField()
+    email = models.CharField(max_length=20)
 
     created_at = models.DateTimeField(auto_now_add=True)
 
