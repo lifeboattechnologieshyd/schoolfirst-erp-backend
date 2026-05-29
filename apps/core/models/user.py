@@ -8,6 +8,7 @@ from django.contrib.auth.models import (
     BaseUserManager,
 )
 from django.core.exceptions import ObjectDoesNotExist
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 from shared.mixins.base_model import AuditModel
 
@@ -79,7 +80,23 @@ class UserMaster(AbstractBaseUser):
     objects: UserManager = UserManager()
     DoesNotExist: type[ObjectDoesNotExist]
 
+class UserOTP(AuditModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField(null=True)
+    mobile = models.BigIntegerField(
+        null=True, validators=[MinValueValidator(1000000000), MaxValueValidator(9999999999)]
+    )
+    email = models.EmailField(max_length=100, null=True)
+    otp = models.CharField(max_length=6)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
 
+    class Meta:
+        db_table = "user_otp"
+        indexes = [
+            models.Index(fields=["mobile", "expires_at", "otp"]),
+            models.Index(fields=["email", "expires_at", "otp"]),
+        ]
 
 class Modules(AuditModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
