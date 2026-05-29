@@ -5,6 +5,7 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db import transaction
+from rest_framework.permissions import AllowAny
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -21,6 +22,8 @@ def is_super_admin(user):
 
 
 class SchoolLeadListCreateAPIView(APIView):
+    permission_classes = [AllowAny, ]
+
     """
     GET  -> super admin only
     POST -> create lead
@@ -51,6 +54,7 @@ class SchoolLeadListCreateAPIView(APIView):
         return Response({"data": data}, status=status.HTTP_200_OK)
 
     def post(self, request):
+
         required_fields = ["school_name", "contact_person", "number_of_students", "location", "phone_number", "email"]
         missing = [field for field in required_fields if not request.data.get(field)]
         if missing:
