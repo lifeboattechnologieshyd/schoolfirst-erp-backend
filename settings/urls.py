@@ -39,6 +39,7 @@ if settings.ENABLE_HEALTHCHECKS:
     urlpatterns += [
         path("health", CustomHealthCheckView.as_view()),
         path("health/simple", simple_health_check),
+
     ]
 
 ####################################
@@ -72,7 +73,11 @@ if settings.ENABLE_SILK:
 ####################################
 
 if "apps.core" in settings.INSTALLED_APPS:
-    urlpatterns.append(path("api/", include("apps.core.urls")))
+    urlpatterns.append(path("core/", include("apps.core.urls")))
+if "apps.school" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("school/", include("apps.school.urls")))
+if "apps.backoffice" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("backoffice/", include("apps.backoffice.urls")))
 
 
 ####################################
