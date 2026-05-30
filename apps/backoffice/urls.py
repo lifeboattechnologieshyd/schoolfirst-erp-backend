@@ -1,7 +1,7 @@
 from django.urls import path
 
-from apps.backoffice.views.leads import  \
-     SchoolLeadRequestOTPAPIView, SchoolLeadVerifyOTPAndConvertAPIView, SchoolLeadListAPIView
+from apps.backoffice.views.leads import \
+    SchoolLeadRequestOTPAPIView, SchoolLeadListAPIView, SchoolLeadVerifyOTPAPIView
 from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCreateAPIView, RoleListCreateAPIView, \
     RoleDetailAPIView, AssignPermissionsToRoleAPIView, AssignRoleToUserAPIView, AssignPermissionToUserAPIView
 
@@ -11,7 +11,7 @@ urlpatterns = [
 
     path("leads/request-otp", SchoolLeadRequestOTPAPIView.as_view(), name="school-lead-request-otp"),
 
-    path("leads/verify-otp", SchoolLeadVerifyOTPAndConvertAPIView.as_view(), name="school-lead-verify-otp"),
+    path("leads/verify-otp", SchoolLeadVerifyOTPAPIView.as_view(), name="school-lead-verify-otp"),
 
     path("leads", SchoolLeadListAPIView.as_view(), name="school-lead-list"),
 
