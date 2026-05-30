@@ -114,14 +114,14 @@ class SchoolLeadRequestOTPAPIView(APIView):
                 "contact_person": contact_person,
                 "number_of_students": number_of_students,
                 "location": location,
-                "verification_status": SchoolLead.VerificationStatus.OTP_SENT,
+                # "verification_status": SchoolLead.VerificationStatus.OTP_SENT,
             },
         )
         otp =1234
 
         # otp = generate_otp()
 
-        expires_at = timezone.now() + timedelta(minutes=5)
+        expires_at = timezone.now() + timedelta(minutes=15)
 
         UserOTP.objects.create(
             user_id=None,
