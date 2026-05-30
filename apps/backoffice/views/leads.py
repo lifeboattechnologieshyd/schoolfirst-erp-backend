@@ -185,7 +185,7 @@ class SchoolLeadVerifyOTPAndConvertAPIView(APIView):
             return Response({"message": "Invalid channel"}, status=status.HTTP_400_BAD_REQUEST)
 
         lead.is_verified = bool(lead.is_mobile_verified or lead.is_email_verified)
-        lead.verification_status = SchoolLead.VerificationStatus.VERIFIED
+        # lead.verification_status = SchoolLead.VerificationStatus.VERIFIED
         lead.save()
 
         school, user, role = create_system_admin_from_lead(lead)
