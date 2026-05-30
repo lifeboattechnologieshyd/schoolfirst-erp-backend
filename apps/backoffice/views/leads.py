@@ -29,8 +29,8 @@ def create_system_admin_from_lead(lead: SchoolLead):
     Convert verified lead into school + admin user.
     Adjust fields if your UserMaster/School models differ.
     """
-    if lead.is_converted:
-        return None, None, None
+    # if lead.is_converted:
+        # return None, None, None
 
     school, _ = School.objects.get_or_create(
         name=lead.school_name or "Unnamed School",
@@ -63,9 +63,9 @@ def create_system_admin_from_lead(lead: SchoolLead):
         role=role,
     )
 
-    lead.is_converted = True
+    # lead.is_converted = True
     # lead.verification_status = SchoolLead.VerificationStatus.CONVERTED
-    lead.save(update_fields=["is_converted", "updated_at"])
+    lead.save(update_fields=[ "updated_at"])
 
     return school, user, role
 
