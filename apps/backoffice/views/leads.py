@@ -64,8 +64,8 @@ def create_system_admin_from_lead(lead: SchoolLead):
     )
 
     lead.is_converted = True
-    lead.verification_status = SchoolLead.VerificationStatus.CONVERTED
-    lead.save(update_fields=["is_converted", "verification_status", "updated_at"])
+    # lead.verification_status = SchoolLead.VerificationStatus.CONVERTED
+    lead.save(update_fields=["is_converted", "updated_at"])
 
     return school, user, role
 
