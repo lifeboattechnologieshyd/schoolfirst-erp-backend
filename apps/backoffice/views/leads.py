@@ -198,7 +198,7 @@ class SchoolLeadVerifyOTPAndConvertAPIView(APIView):
                 "user_id": str(user.id) if user else None,
                 "role": role.role_name if role else None,
                 "is_verified": lead.is_verified,
-                "is_converted": lead.is_converted,
+                # "is_converted": lead.is_converted,
             },
             status=status.HTTP_200_OK,
         )
