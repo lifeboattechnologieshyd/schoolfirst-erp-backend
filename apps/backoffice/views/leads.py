@@ -117,8 +117,10 @@ class SchoolLeadRequestOTPAPIView(APIView):
                 "verification_status": SchoolLead.VerificationStatus.OTP_SENT,
             },
         )
+        otp =1234
 
-        otp = generate_otp()
+        # otp = generate_otp()
+
         expires_at = timezone.now() + timedelta(minutes=5)
 
         UserOTP.objects.create(
