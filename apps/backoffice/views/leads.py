@@ -48,7 +48,7 @@ def create_system_admin_from_lead(lead: SchoolLead):
     }
 
     user, _ = UserMaster.objects.get_or_create(
-        username=identifier,
+        # username=identifier,
         defaults=user_defaults,
     )
 
