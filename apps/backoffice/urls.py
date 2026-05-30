@@ -1,19 +1,20 @@
 from django.urls import path
 
-from apps.backoffice.views.leads import SchoolLeadListCreateAPIView, SchoolLeadDetailAPIView, SchoolLeadSendOTPAPIView, \
-    SchoolLeadVerifyOTPAPIView
+from apps.backoffice.views.leads import  \
+     SchoolLeadRequestOTPAPIView, SchoolLeadVerifyOTPAndConvertAPIView, SchoolLeadListAPIView
 from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCreateAPIView, RoleListCreateAPIView, \
     RoleDetailAPIView, AssignPermissionsToRoleAPIView, AssignRoleToUserAPIView, AssignPermissionToUserAPIView
 
 urlpatterns = [
 
-    path("leads", SchoolLeadListCreateAPIView.as_view(), name="school-lead-list-create"),
 
-    path("leads/<uuid:lead_id>", SchoolLeadDetailAPIView.as_view(), name="school-lead-detail"),
 
-    path("leads/<uuid:lead_id>/send-otp", SchoolLeadSendOTPAPIView.as_view(), name="school-lead-send-otp"),
+    path("leads/request-otp", SchoolLeadRequestOTPAPIView.as_view(), name="school-lead-request-otp"),
 
-    path("leads/<uuid:lead_id>/verify-otp", SchoolLeadVerifyOTPAPIView.as_view(), name="school-lead-verify-otp"),
+    path("leads/verify-otp", SchoolLeadVerifyOTPAndConvertAPIView.as_view(), name="school-lead-verify-otp"),
+
+    path("leads", SchoolLeadListAPIView.as_view(), name="school-lead-list"),
+
 
     path("modules", ModuleListCreateAPIView.as_view(), name="module-list-create"),
 
