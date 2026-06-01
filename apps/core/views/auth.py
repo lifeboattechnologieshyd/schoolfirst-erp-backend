@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from rest_framework.response import Response
 
@@ -12,7 +12,8 @@ from rest_framework import status
 
 from rest_framework.views import APIView
 
-from apps.core.models import UserOTP
+from apps.core.models import UserOTP, UserMaster
+from django.db import transaction
 
 
 def normalize_email(value):
@@ -129,23 +130,27 @@ class SendOTPAPIView(APIView):
 
         )
 
+
+
 class VerifyOTPAPIView(APIView):
 
     permission_classes = [AllowAny]
 
+    @transaction.atomic
+
     def post(self, request):
 
-        email = normalize_email(request.data.get("email"))
+        email = request.data.get("email")
 
-        mobile = normalize_mobile(request.data.get("mobile"))
+        mobile = request.data.get("mobile")
 
-        otp = str(request.data.get("otp", "")).strip()
+        otp = request.data.get("otp")
 
         if not otp:
 
             return Response(
 
-                {"message": "otp is required"},
+                {"message": "OTP is required"},
 
                 status=status.HTTP_400_BAD_REQUEST,
 
@@ -155,13 +160,13 @@ class VerifyOTPAPIView(APIView):
 
             return Response(
 
-                {"message": "email or mobile is required"},
+                {"message": "Email or Mobile is required"},
 
                 status=status.HTTP_400_BAD_REQUEST,
 
             )
 
-        otp_qs = UserOTP.objects.filter(
+        otp_queryset = UserOTP.objects.filter(
 
             otp=otp,
 
@@ -173,11 +178,11 @@ class VerifyOTPAPIView(APIView):
 
         if email:
 
-            otp_obj = otp_qs.filter(email=email).order_by("-created_at").first()
+            otp_obj = otp_queryset.filter(email=email).order_by("-created_at").first()
 
         else:
 
-            otp_obj = otp_qs.filter(mobile=int(mobile)).order_by("-created_at").first()
+            otp_obj = otp_queryset.filter(mobile=mobile).order_by("-created_at").first()
 
         if not otp_obj:
 
@@ -193,10 +198,109 @@ class VerifyOTPAPIView(APIView):
 
         otp_obj.save(update_fields=["is_used"])
 
+        # Find existing user
+
+        user = None
+
+        if email:
+
+            user = UserMaster.objects.filter(email=email).first()
+
+        if not user and mobile:
+
+            user = UserMaster.objects.filter(mobile=mobile).first()
+
+        is_new_user = False
+
+        # Create user if not exists
+
+        if not user:
+
+            username = mobile if mobile else email.split("@")[0]
+
+            counter = 1
+
+            base_username = username
+
+            while UserMaster.objects.filter(username=username).exists():
+
+                username = f"{base_username}{counter}"
+
+                counter += 1
+
+            user = UserMaster.objects.create(
+
+                username=username,
+
+                email=email,
+
+                mobile=mobile,
+
+                is_active=True,
+
+                status=UserMaster.Status.ACTIVE,
+
+            )
+
+            is_new_user = True
+
         return Response(
 
-            {"message": "OTP verified successfully"},
+            {
+
+                "message": "OTP verified successfully",
+
+                "is_new_user": is_new_user,
+
+                "user": {
+
+                    "id": str(user.id),
+
+                    "username": user.username,
+
+                    "email": user.email,
+
+                    "mobile": user.mobile,
+
+                    "first_name": user.first_name,
+
+                    "last_name": user.last_name,
+
+                    "status": user.status,
+
+                    "is_active": user.is_active,
+
+                    "is_staff": user.is_staff,
+
+                },
+
+            },
 
             status=status.HTTP_200_OK,
+
+        )
+
+
+class LogoutAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        user = request.user
+
+        user.status = UserMaster.Status.INACTIVE
+
+        user.save(update_fields=["status"])
+
+        return Response(
+
+            {
+
+                "message": "Logged out successfully"
+
+            },
+
+            status=status.HTTP_200_OK
 
         )

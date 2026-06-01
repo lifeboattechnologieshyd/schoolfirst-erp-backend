@@ -50,12 +50,13 @@ class UserMaster(AbstractBaseUser):
         PENDING = "pending", "Pending"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    email = models.EmailField(max_length=255, unique=True)
+    username = models.CharField(max_length=30, unique=True)
+
+    email = models.EmailField(max_length=255, null=True)
     mobile = models.CharField(max_length=20, null=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False, null=False)
     status = models.CharField(max_length=50, choices=Status.choices, default=Status.ACTIVE)
-    # signup_invite_code = models.CharField(max_length=50, null=True)  # Track which invite code was used
     first_name = models.CharField(max_length=100, null=True)
     last_name = models.CharField(max_length=100, null=True)
     date_of_birth = models.DateField(null=True)
@@ -65,20 +66,11 @@ class UserMaster(AbstractBaseUser):
     is_password_updated = models.BooleanField(default=False, null=False)
     created_at = models.DateTimeField(auto_now_add=True, null=False)
 
-    USERNAME_FIELD = "email"
+    USERNAME_FIELD = "username"
     REQUIRED_FIELDS = []
 
     def __str__(self) -> str:
         return str(self.email or self.mobile or self.id)
-
-    class Meta:
-        db_table = "user_master"
-        verbose_name = "UserMaster"
-        verbose_name_plural = "UserMasters"
-
-    # Type declarations for static analysis
-    objects: UserManager = UserManager()
-    DoesNotExist: type[ObjectDoesNotExist]
 
 class UserOTP(AuditModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
