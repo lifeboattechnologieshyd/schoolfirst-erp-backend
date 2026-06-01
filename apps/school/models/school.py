@@ -1,8 +1,12 @@
+import random
+import string
 import uuid
 
 from django.db import models
 
 from shared.mixins.base_model import AuditModel
+
+
 
 
 class School(AuditModel):

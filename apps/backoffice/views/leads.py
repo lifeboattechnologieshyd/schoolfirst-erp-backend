@@ -1,6 +1,8 @@
 import secrets
 from datetime import timedelta
+import random
 
+import string
 from django.conf import settings
 from django.db import transaction
 from django.shortcuts import get_object_or_404
@@ -13,6 +15,7 @@ from rest_framework.views import APIView
 
 from apps.school.models import SchoolLead, School
 from apps.core.models import UserMaster, UserOTP, Roles, UserRoles
+from shared.utils.otp import generate_school_code
 
 
 def generate_otp():
@@ -89,82 +92,144 @@ class SchoolLeadRequestOTPAPIView(APIView):
             status=status.HTTP_200_OK,
         )
 
+# def generate_school_code():
+#
+#     while True:
+#
+#         code = "SCH" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+#
+#         if not School.objects.filter(code=code).exists():
+#
+#             return code
+
 class SchoolLeadVerifyOTPAPIView(APIView):
+
     permission_classes = [AllowAny]
 
     @transaction.atomic
+
     def post(self, request):
 
         lead_id = request.data.get("lead_id")
+
         otp = request.data.get("otp")
 
         if not lead_id or not otp:
+
             return Response(
-                {
-                    "message": "lead_id and otp are required"
-                },
+
+                {"message": "lead_id and otp are required"},
+
                 status=status.HTTP_400_BAD_REQUEST,
+
             )
 
-        lead = get_object_or_404(
-            SchoolLead,
-            id=lead_id,
-        )
+        lead = get_object_or_404(SchoolLead, id=lead_id)
 
         otp_obj = UserOTP.objects.filter(
+
             otp=otp,
+
             is_used=False,
+
             expires_at__gt=timezone.now(),
+
         ).order_by("-created_at").first()
 
         if not otp_obj:
+
             return Response(
-                {
-                    "message": "Invalid or expired OTP"
-                },
+
+                {"message": "Invalid or expired OTP"},
+
                 status=status.HTTP_400_BAD_REQUEST,
+
             )
 
         otp_obj.is_used = True
+
         otp_obj.save(update_fields=["is_used"])
 
         lead.is_verified = True
+
         lead.is_mobile_verified = True
+
         lead.save()
 
-        school, _ = School.objects.get_or_create(
+        school, created = School.objects.get_or_create(
+
             name=lead.school_name,
+
+            defaults={
+
+                "code": generate_school_code(),
+
+            },
+
         )
 
+        if not school.code:
+
+            school.code = generate_school_code()
+
+            school.save(update_fields=["code"])
+
         user, _ = UserMaster.objects.get_or_create(
+
             email=lead.email,
+
             defaults={
+
                 "mobile": lead.phone_number,
+
                 "is_active": True,
+
+                "is_staff": True,
+
             },
+
         )
 
         role, _ = Roles.objects.get_or_create(
+
             role_name="SYSTEM_ADMIN",
+
             defaults={
+
                 "description": "School System Admin"
+
             },
+
         )
 
         UserRoles.objects.get_or_create(
+
             user=user,
+
             school=school,
+
             role=role,
+
         )
 
         return Response(
+
             {
+
                 "message": "OTP verified successfully",
+
                 "school_id": str(school.id),
+
+                "school_code": school.code,
+
                 "user_id": str(user.id),
+
                 "role": role.role_name,
+
             },
+
             status=status.HTTP_200_OK,
+
         )
 
 
