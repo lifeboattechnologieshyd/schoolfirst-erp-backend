@@ -73,7 +73,7 @@ if settings.ENABLE_SILK:
 ####################################
 
 if "apps.core" in settings.INSTALLED_APPS:
-    urlpatterns.append(path("core/", include("apps.core.urls")))
+    urlpatterns.append(path("user/", include("apps.core.urls")))
 if "apps.school" in settings.INSTALLED_APPS:
     urlpatterns.append(path("school/", include("apps.school.urls")))
 if "apps.backoffice" in settings.INSTALLED_APPS:
