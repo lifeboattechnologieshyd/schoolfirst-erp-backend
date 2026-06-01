@@ -27,7 +27,8 @@ class School(AuditModel):
 
     code = models.CharField(
         max_length=50,
-        unique=True,
+        blank=True,
+        null=True,
     )
 
     board = models.CharField(
