@@ -5,6 +5,7 @@ import random
 import string
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
@@ -12,95 +13,180 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.school.models import SchoolLead, School
 from apps.core.models import UserMaster, UserOTP, Roles, UserRoles
 from shared.utils.otp import generate_school_code
 
+def normalize_email(value):
 
+    if value is None:
+
+        return None
+
+    value = str(value).strip().lower()
+
+    return value or None
+
+def normalize_mobile(value):
+
+    if value is None:
+
+        return None
+
+    value = str(value).strip()
+
+    return value or None
 def generate_otp():
     return f"{secrets.randbelow(1000000):06d}"
 
 
+
+
 class SchoolLeadRequestOTPAPIView(APIView):
+
     permission_classes = [AllowAny]
 
     def post(self, request):
 
         required_fields = [
+
             "school_name",
+
             "contact_person",
+
             "number_of_students",
+
             "location",
-            "channel",
+
+            "email",
+
+            "phone_number",
+
         ]
 
-        missing = [
-            field
-            for field in required_fields
-            if not request.data.get(field)
-        ]
+        missing = [field for field in required_fields if not request.data.get(field)]
 
         if missing:
+
             return Response(
+
                 {
+
                     "message": "Missing required fields",
+
                     "fields": missing,
+
                 },
+
                 status=status.HTTP_400_BAD_REQUEST,
+
             )
 
-        phone_number = request.data.get("phone_number")
-        email = request.data.get("email")
-        channel = request.data.get("channel")
+        school_name = request.data.get("school_name")
 
-        if not phone_number and not email:
+        contact_person = request.data.get("contact_person")
+
+        number_of_students = request.data.get("number_of_students")
+
+        location = request.data.get("location")
+
+        email = normalize_email(request.data.get("email"))
+
+        phone_number = normalize_mobile(request.data.get("phone_number"))
+
+        if not email or not phone_number:
+
             return Response(
-                {
-                    "message": "phone_number or email is required"
-                },
+
+                {"message": "Both email and phone_number are required"},
+
                 status=status.HTTP_400_BAD_REQUEST,
+
             )
 
         lead = SchoolLead.objects.create(
-            school_name=request.data["school_name"],
-            contact_person=request.data["contact_person"],
-            number_of_students=request.data["number_of_students"],
-            location=request.data["location"],
-            phone_number=phone_number,
-            email=email,
-        )
-        otp = 1234
 
-        otp = generate_otp()
+            school_name=school_name,
+
+            contact_person=contact_person,
+
+            number_of_students=number_of_students,
+
+            location=location,
+
+            phone_number=phone_number,
+
+            email=email,
+
+            is_verified=False,
+
+            is_mobile_verified=False,
+
+            is_email_verified=False,
+
+        )
+
+        email_otp = generate_otp()
+
+        mobile_otp = generate_otp()
+
+        expires_at = timezone.now() + timedelta(minutes=15)
 
         UserOTP.objects.create(
-            mobile=phone_number if channel == "mobile" else None,
-            email=email if channel == "email" else None,
-            otp=otp,
-            expires_at=timezone.now() + timedelta(minutes=15),
+
+            user_id=None,
+
+            email=email,
+
+            mobile=None,
+
+            otp=email_otp,
+
+            expires_at=expires_at,
+
+            is_used=False,
+
         )
 
-        # send sms/email here
+        UserOTP.objects.create(
+
+            user_id=None,
+
+            email=None,
+
+            mobile=int(phone_number),
+
+            otp=mobile_otp,
+
+            expires_at=expires_at,
+
+            is_used=False,
+
+        )
+
+        # send email OTP here
+
+        # send sms OTP here
 
         return Response(
-            {
-                "message": "OTP sent successfully",
-                "lead_id": str(lead.id),
-                "otp": otp if settings.DEBUG else None,
-            },
-            status=status.HTTP_200_OK,
-        )
 
-# def generate_school_code():
-#
-#     while True:
-#
-#         code = "SCH" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
-#
-#         if not School.objects.filter(code=code).exists():
-#
-#             return code
+            {
+
+                "message": "OTP sent successfully",
+
+                "lead_id": str(lead.id),
+
+                "email_otp": email_otp if settings.DEBUG else None,
+
+                "mobile_otp": mobile_otp if settings.DEBUG else None,
+
+            },
+
+            status=status.HTTP_200_OK,
+
+        )
 
 class SchoolLeadVerifyOTPAPIView(APIView):
 
@@ -112,13 +198,15 @@ class SchoolLeadVerifyOTPAPIView(APIView):
 
         lead_id = request.data.get("lead_id")
 
-        otp = request.data.get("otp")
+        email_otp = str(request.data.get("email_otp", "")).strip()
 
-        if not lead_id or not otp:
+        mobile_otp = str(request.data.get("mobile_otp", "")).strip()
+
+        if not lead_id or not email_otp or not mobile_otp:
 
             return Response(
 
-                {"message": "lead_id and otp are required"},
+                {"message": "lead_id, email_otp and mobile_otp are required"},
 
                 status=status.HTTP_400_BAD_REQUEST,
 
@@ -126,9 +214,11 @@ class SchoolLeadVerifyOTPAPIView(APIView):
 
         lead = get_object_or_404(SchoolLead, id=lead_id)
 
-        otp_obj = UserOTP.objects.filter(
+        email_otp_obj = UserOTP.objects.filter(
 
-            otp=otp,
+            otp=email_otp,
+
+            email=lead.email,
 
             is_used=False,
 
@@ -136,59 +226,137 @@ class SchoolLeadVerifyOTPAPIView(APIView):
 
         ).order_by("-created_at").first()
 
-        if not otp_obj:
+        mobile_otp_obj = UserOTP.objects.filter(
+
+            otp=mobile_otp,
+
+            mobile=int(lead.phone_number),
+
+            is_used=False,
+
+            expires_at__gt=timezone.now(),
+
+        ).order_by("-created_at").first()
+
+        if not email_otp_obj:
 
             return Response(
 
-                {"message": "Invalid or expired OTP"},
+                {"message": "Invalid or expired email OTP"},
 
                 status=status.HTTP_400_BAD_REQUEST,
 
             )
 
-        otp_obj.is_used = True
+        if not mobile_otp_obj:
 
-        otp_obj.save(update_fields=["is_used"])
+            return Response(
+
+                {"message": "Invalid or expired mobile OTP"},
+
+                status=status.HTTP_400_BAD_REQUEST,
+
+            )
+
+        email_otp_obj.is_used = True
+
+        email_otp_obj.save(update_fields=["is_used"])
+
+        mobile_otp_obj.is_used = True
+
+        mobile_otp_obj.save(update_fields=["is_used"])
 
         lead.is_verified = True
 
+        lead.is_email_verified = True
+
         lead.is_mobile_verified = True
 
-        lead.save()
+        lead.save(update_fields=["is_verified", "is_email_verified", "is_mobile_verified"])
 
-        school, created = School.objects.get_or_create(
+        school = School.objects.filter(
 
-            name=lead.school_name,
+            Q(email=lead.email) | Q(phone_number=lead.phone_number)
 
-            defaults={
+        ).first()
 
-                "code": generate_school_code(),
+        if not school:
 
-            },
+            school = School.objects.create(
 
-        )
+                name=lead.school_name,
 
-        if not school.code:
+                code=generate_school_code(),
 
-            school.code = generate_school_code()
+                email=lead.email,
 
-            school.save(update_fields=["code"])
+                phone_number=lead.phone_number,
 
-        user, _ = UserMaster.objects.get_or_create(
+                principal_name=lead.contact_person,
 
-            email=lead.email,
+                total_students=lead.number_of_students,
 
-            defaults={
+                address=lead.location,
 
-                "mobile": lead.phone_number,
+                city="Unknown",
 
-                "is_active": True,
+                state="Unknown",
 
-                "is_staff": True,
+                country="India",
 
-            },
+                status=School.Status.ACTIVE,
 
-        )
+                is_email_verified=True,
+
+                is_phone_verified=True,
+
+            )
+
+        user = UserMaster.objects.filter(
+
+            Q(email=lead.email) | Q(mobile=lead.phone_number)
+
+        ).first()
+
+        is_new_user = False
+
+        if not user:
+
+            username = lead.phone_number
+
+            counter = 1
+
+            base_username = username
+
+            while UserMaster.objects.filter(username=username).exists():
+
+                username = f"{base_username}{counter}"
+
+                counter += 1
+
+            user = UserMaster.objects.create(
+
+                username=username,
+
+                email=lead.email,
+
+                mobile=lead.phone_number,
+
+                first_name=lead.contact_person,
+
+                is_active=True,
+
+                is_staff=True,
+
+                status=UserMaster.Status.ACTIVE,
+
+            )
+
+            user.set_unusable_password()
+
+            user.save(update_fields=["password"])
+
+            is_new_user = True
 
         role, _ = Roles.objects.get_or_create(
 
@@ -196,7 +364,7 @@ class SchoolLeadVerifyOTPAPIView(APIView):
 
             defaults={
 
-                "description": "School System Admin"
+                "description": "School System Admin",
 
             },
 
@@ -212,27 +380,63 @@ class SchoolLeadVerifyOTPAPIView(APIView):
 
         )
 
+        refresh = RefreshToken.for_user(user)
+
         return Response(
 
             {
 
                 "message": "OTP verified successfully",
 
-                "school_id": str(school.id),
+                "is_new_user": is_new_user,
 
-                "school_code": school.code,
+                "school": {
 
-                "user_id": str(user.id),
+                    "id": str(school.id),
+
+                    "name": school.name,
+
+                    "code": school.code,
+
+                },
+
+                "user": {
+
+                    "id": str(user.id),
+
+                    "username": user.username,
+
+                    "email": user.email,
+
+                    "mobile": user.mobile,
+
+                    "first_name": user.first_name,
+
+                    "last_name": user.last_name,
+
+                    "status": user.status,
+
+                    "is_active": user.is_active,
+
+                    "is_staff": user.is_staff,
+
+                },
 
                 "role": role.role_name,
+
+                "tokens": {
+
+                    "access": str(refresh.access_token),
+
+                    "refresh": str(refresh),
+
+                },
 
             },
 
             status=status.HTTP_200_OK,
 
         )
-
-
 class SchoolLeadListAPIView(APIView):
 
     def get(self, request):
