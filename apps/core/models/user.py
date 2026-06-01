@@ -55,7 +55,7 @@ class UserMaster(AbstractBaseUser):
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False, null=False)
     status = models.CharField(max_length=50, choices=Status.choices, default=Status.ACTIVE)
-    signup_invite_code = models.CharField(max_length=50, null=True)  # Track which invite code was used
+    # signup_invite_code = models.CharField(max_length=50, null=True)  # Track which invite code was used
     first_name = models.CharField(max_length=100, null=True)
     last_name = models.CharField(max_length=100, null=True)
     date_of_birth = models.DateField(null=True)
