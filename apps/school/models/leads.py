@@ -15,7 +15,7 @@ class SchoolLead(AuditModel):
     number_of_students = models.PositiveIntegerField(default=0)
     location = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=20)
-    email = models.CharField(max_length=20)
+    email = models.CharField(max_length=50)
     is_mobile_verified = models.BooleanField(default=False)
     is_email_verified = models.BooleanField(default=False)
     is_verified = models.BooleanField(default=False)

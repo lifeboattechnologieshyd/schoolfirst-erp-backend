@@ -41,8 +41,8 @@ class School(AuditModel):
         default=BoardType.OTHER,
     )
 
-    email = models.EmailField(
-        unique=True,
+    email = models.CharField(max_length=50,
+        unique=True
     )
 
     phone_number = models.CharField(
