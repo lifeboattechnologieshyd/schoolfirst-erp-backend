@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.core.models import UserOTP, UserMaster
 from django.db import transaction
@@ -241,8 +242,12 @@ class VerifyOTPAPIView(APIView):
                 status=UserMaster.Status.ACTIVE,
 
             )
+        refresh = RefreshToken.for_user(user)
 
-            is_new_user = True
+        access_token = str(refresh.access_token)
+        refresh_token = str(refresh)
+
+        is_new_user = True
 
         return Response(
 
@@ -251,6 +256,14 @@ class VerifyOTPAPIView(APIView):
                 "message": "OTP verified successfully",
 
                 "is_new_user": is_new_user,
+
+                "tokens": {
+
+                    "access": access_token,
+
+                    "refresh": refresh_token,
+
+                },
 
                 "user": {
 
