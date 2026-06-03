@@ -128,27 +128,12 @@ class SchoolLeadRequestOTPAPIView(APIView):
 
         )
 
-        email_otp = generate_otp()
 
         mobile_otp = generate_otp()
 
         expires_at = timezone.now() + timedelta(minutes=15)
 
-        UserOTP.objects.create(
 
-            user_id=None,
-
-            email=email,
-
-            mobile=None,
-
-            otp=email_otp,
-
-            expires_at=expires_at,
-
-            is_used=False,
-
-        )
 
         UserOTP.objects.create(
 
@@ -178,7 +163,6 @@ class SchoolLeadRequestOTPAPIView(APIView):
 
                 "lead_id": str(lead.id),
 
-                "email_otp": email_otp if settings.DEBUG else None,
 
                 "mobile_otp": mobile_otp if settings.DEBUG else None,
 
@@ -198,15 +182,14 @@ class SchoolLeadVerifyOTPAPIView(APIView):
 
         lead_id = request.data.get("lead_id")
 
-        email_otp = str(request.data.get("email_otp", "")).strip()
 
         mobile_otp = str(request.data.get("mobile_otp", "")).strip()
 
-        if not lead_id or not email_otp or not mobile_otp:
+        if not lead_id  or not mobile_otp:
 
             return Response(
 
-                {"message": "lead_id, email_otp and mobile_otp are required"},
+                {"message": "lead_id and mobile_otp are required"},
 
                 status=status.HTTP_400_BAD_REQUEST,
 
@@ -214,17 +197,7 @@ class SchoolLeadVerifyOTPAPIView(APIView):
 
         lead = get_object_or_404(SchoolLead, id=lead_id)
 
-        email_otp_obj = UserOTP.objects.filter(
 
-            otp=email_otp,
-
-            email=lead.email,
-
-            is_used=False,
-
-            expires_at__gt=timezone.now(),
-
-        ).order_by("-created_at").first()
 
         mobile_otp_obj = UserOTP.objects.filter(
 
@@ -238,15 +211,7 @@ class SchoolLeadVerifyOTPAPIView(APIView):
 
         ).order_by("-created_at").first()
 
-        if not email_otp_obj:
 
-            return Response(
-
-                {"message": "Invalid or expired email OTP"},
-
-                status=status.HTTP_400_BAD_REQUEST,
-
-            )
 
         if not mobile_otp_obj:
 
@@ -258,9 +223,7 @@ class SchoolLeadVerifyOTPAPIView(APIView):
 
             )
 
-        email_otp_obj.is_used = True
 
-        email_otp_obj.save(update_fields=["is_used"])
 
         mobile_otp_obj.is_used = True
 
