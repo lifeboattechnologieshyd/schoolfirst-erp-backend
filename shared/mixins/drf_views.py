@@ -103,7 +103,7 @@ class CustomResponse:
     ) -> dict[str, Any]:
         return CustomResponse._response_payload(
             success=success,
-            message=description,
+            # message=description,
             data=data,
             error=error,
             meta=None,
@@ -123,7 +123,7 @@ class CustomResponse:
     ) -> dict[str, Any]:
         return {
             "code": str(error_code) if error_code else "ERROR",
-            "message": description,
+            # "message": description,
             "details": details,
         }
 
@@ -160,7 +160,7 @@ class CustomResponse:
     ) -> Response:
         return CustomResponse.build_response(
             success=True,
-            message=description,
+            # message=description,
             data=data,
             error=None,
             meta=None,
@@ -192,7 +192,7 @@ class CustomResponse:
 
         return CustomResponse.build_response(
             success=False,
-            message=description,
+            # message=description,
             data=data,
             error=error_obj,
             meta=None,
