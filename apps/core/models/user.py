@@ -210,7 +210,8 @@ class UserRoles(AuditModel):
         ]
 
     def __str__(self):
-        return f"{self.user.username} - {self.school.code} - {self.role.role_name}"
+        school_code = self.school.code if self.school else "GLOBAL"
+        return f"{self.user.username} - {school_code} - {self.role.role_name}"
 
 
 class UserPermissions(AuditModel):
@@ -247,4 +248,5 @@ class UserPermissions(AuditModel):
         ]
 
     def __str__(self):
-        return f"{self.user.username} - {self.school.code} - {self.permission.permission_name}"
+        school_code = self.school.code if self.school else "GLOBAL"
+        return f"{self.user.username} - {school_code} - {self.permission.permission_name}"
