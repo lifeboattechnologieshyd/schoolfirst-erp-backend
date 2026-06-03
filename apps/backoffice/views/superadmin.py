@@ -1,7 +1,51 @@
 from rest_framework.views import APIView
 
+from apps.core.models import UserRoles, Roles
 from apps.school.models import SchoolLead
 from shared.mixins import CustomResponse
+
+from django.contrib.auth.models import Group, Permission
+from django.db import transaction
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+from rest_framework import status
+
+
+
+class CreateSuperAdminAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        superadmin_role_exists = Roles.objects.filter(
+            role_name="SUPERADMIN"
+        ).exists()
+
+        if superadmin_role_exists:
+            return CustomResponse.errorResponse(
+                description="SUPERADMIN role already exists.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        role = Roles.objects.create(
+            role_name="SUPERADMIN",
+            description="System Super Admin"
+        )
+
+        UserRoles.objects.create(
+            user=request.user,
+            role=role,
+            school=None
+        )
+
+        return CustomResponse.successResponse(
+            data={
+                "role_id": str(role.id),
+                "role_name": role.role_name,
+            },
+            description="SUPERADMIN role created successfully.",
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class SchoolLeadListAPIView(APIView):
