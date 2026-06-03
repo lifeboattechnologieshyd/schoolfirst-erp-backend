@@ -196,7 +196,6 @@ class SuperAdminVerifyOTPAPIView(APIView):
 
         otp_obj = (
             UserOTP.objects.filter(
-                user=user,
                 mobile=int(phone_number),
                 otp=otp,
                 is_used=False,
