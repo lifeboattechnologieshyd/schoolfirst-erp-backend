@@ -81,7 +81,6 @@ class CustomResponse:
     ) -> dict[str, Any]:
         payload = {
             "success": success,
-            "message": message,
             "data": data,
             "error": error,
             "meta": meta,
@@ -103,7 +102,6 @@ class CustomResponse:
     ) -> dict[str, Any]:
         return CustomResponse._response_payload(
             success=success,
-            # message=description,
             data=data,
             error=error,
             meta=None,
@@ -118,19 +116,16 @@ class CustomResponse:
     @staticmethod
     def _default_error_object(
         error_code: Any = 0,
-        description: str = "Request Failed",
         details: Any = None,
     ) -> dict[str, Any]:
         return {
             "code": str(error_code) if error_code else "ERROR",
-            # "message": description,
             "details": details,
         }
 
     @staticmethod
     def build_response(
         success: bool,
-        message: Any = None,
         data: Any = None,
         error: Any = None,
         meta: Any = None,
@@ -140,7 +135,6 @@ class CustomResponse:
         return Response(
             CustomResponse._response_payload(
                 success=success,
-                message=message,
                 data=data,
                 error=error,
                 meta=meta,
