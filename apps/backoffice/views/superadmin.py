@@ -18,10 +18,17 @@ from rest_framework import status
 
 
 class CreateSuperAdminAPIView(APIView):
+
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
     def post(self, request):
+
+        print("=" * 50)
+        print("CreateSuperAdminAPIView Started")
+        print("Request User ID:", request.user.id)
+        print("Request Username:", request.user.username)
+        print("Request Mobile:", request.user.mobile)
 
         role, created = Roles.objects.get_or_create(
             role_name="SUPERADMIN",
@@ -30,16 +37,59 @@ class CreateSuperAdminAPIView(APIView):
             },
         )
 
-        if not created:
-            return CustomResponse.errorResponse(
-                description="SUPERADMIN role already exists.",
-                status=status.HTTP_400_BAD_REQUEST,
+        print("Role ID:", role.id)
+        print("Role Name:", role.role_name)
+        print("Role Created:", created)
+
+        all_permissions = Permissions.objects.all()
+
+        print("Total Permissions Found:", all_permissions.count())
+
+        assigned_permissions = 0
+
+        for permission in all_permissions:
+            _, permission_created = RolePermissions.objects.get_or_create(
+                role=role,
+                permission=permission,
             )
+
+            if permission_created:
+                assigned_permissions += 1
+
+            print(
+                f"Permission: {permission.permission_name} | Created: {permission_created}"
+            )
+
+        print("Total Permissions Assigned:", assigned_permissions)
+
+        user_role, user_role_created = UserRoles.objects.get_or_create(
+            user=request.user,
+            role=role,
+            school=None,
+        )
+
+        print("UserRole Created:", user_role_created)
+        print("UserRole ID:", user_role.id)
+        print("UserRole User:", user_role.user.username)
+        print("UserRole Role:", user_role.role.role_name)
+        print("UserRole School:", user_role.school)
+
+        print(
+            "Verify SUPERADMIN Exists:",
+            UserRoles.objects.filter(
+                user=request.user,
+                role__role_name="SUPERADMIN",
+            ).exists()
+        )
+
+        print("=" * 50)
 
         return CustomResponse.successResponse(
             data={
                 "role_id": str(role.id),
                 "role_name": role.role_name,
+                "permissions_count": all_permissions.count(),
+                "user_role_created": user_role_created,
             },
             description="SUPERADMIN role created successfully.",
             status=status.HTTP_201_CREATED,
