@@ -5,7 +5,7 @@ from apps.backoffice.views.leads import \
 from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCreateAPIView, RoleListCreateAPIView, \
     RoleDetailAPIView, AssignPermissionsToRoleAPIView, AssignRoleToUserAPIView, AssignPermissionToUserAPIView
 from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdminRequestOTPAPIView, \
-    SuperAdminVerifyOTPAPIView
+    SuperAdminVerifyOTPAPIView, SchoolLeadUpdateAPIView
 
 urlpatterns = [
 
@@ -22,6 +22,8 @@ urlpatterns = [
     path("super-admin/verify-otp",SuperAdminVerifyOTPAPIView.as_view(),),
 
     path("leads", SchoolLeadListAPIView.as_view(), name="school-lead-list"),
+
+    path("leads/<uuid:lead_id>/", SchoolLeadUpdateAPIView.as_view(), name="lead-update"),
 
 
     path("modules", ModuleListCreateAPIView.as_view(), name="module-list-create"),

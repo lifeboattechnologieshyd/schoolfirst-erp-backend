@@ -281,3 +281,96 @@ class SchoolLeadListAPIView(APIView):
                 ]
             }
         )
+
+
+class SchoolLeadUpdateAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request, lead_id):
+
+        user = request.user
+
+        is_superadmin = UserRoles.objects.filter(
+
+            user=user,
+
+            role__role_name="SUPERADMIN",
+
+        ).exists()
+
+        if not is_superadmin:
+
+            return CustomResponse.errorResponse(
+
+                description="Only SUPERADMIN can update leads.",
+
+                status=status.HTTP_403_FORBIDDEN,
+
+            )
+
+        lead = get_object_or_404(SchoolLead, id=lead_id)
+
+        school_name = request.data.get("school_name", lead.school_name)
+
+        contact_person = request.data.get("contact_person", lead.contact_person)
+
+        number_of_students = request.data.get("number_of_students", lead.number_of_students)
+
+        location = request.data.get("location", lead.location)
+
+        email = request.data.get("email", lead.email)
+
+        phone_number = request.data.get("phone_number", lead.phone_number)
+
+        if email is not None:
+
+            email = normalize_email(email)
+
+        if phone_number is not None:
+
+            phone_number = normalize_mobile(phone_number)
+
+        lead.school_name = school_name
+
+        lead.contact_person = contact_person
+
+        lead.number_of_students = number_of_students
+
+        lead.location = location
+
+        lead.email = email
+
+        lead.phone_number = phone_number
+
+        lead.save()
+
+        return CustomResponse.successResponse(
+
+            data={
+
+                "id": str(lead.id),
+
+                "school_name": lead.school_name,
+
+                "contact_person": lead.contact_person,
+
+                "number_of_students": lead.number_of_students,
+
+                "location": lead.location,
+
+                "phone_number": lead.phone_number,
+
+                "email": lead.email,
+
+                "is_verified": lead.is_verified,
+
+                "status": lead.status,
+
+            },
+
+            description="Lead updated successfully.",
+
+            status=status.HTTP_200_OK,
+
+        )
