@@ -246,11 +246,21 @@ class SuperAdminVerifyOTPAPIView(APIView):
         )
 
 class SchoolLeadListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
 
     def get(self, request):
+        user = request.user
+        is_superadmin = UserRoles.objects.filter(
+            user=user,
+            role__role_name="SUPERADMIN",
+        ).exists()
 
-        if not request.user.is_authenticated:
-            return CustomResponse.successResponse(data={},description="You are not logged in")
+        if not is_superadmin:
+            return CustomResponse.errorResponse(
+                description="Only SUPERADMIN can login here.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
 
         leads = SchoolLead.objects.all()
