@@ -147,7 +147,6 @@ class SuperAdminRequestOTPAPIView(APIView):
         # otp = generate_otp()
 
         UserOTP.objects.create(
-            user=user,
             mobile=int(phone_number),
             otp=otp,
             expires_at=timezone.now() + timedelta(minutes=15),
