@@ -66,6 +66,16 @@ class SuperAdminRequestOTPAPIView(APIView):
             is_active=True,
         ).first()
 
+        print("USER ID:", user.id)
+        print("MOBILE:", user.mobile)
+
+        print(
+            UserRoles.objects.filter(user=user).values(
+                "role__role_name",
+                "school_id"
+            )
+        )
+
         if not user:
             return CustomResponse.errorResponse(
                 description="User not found.",
