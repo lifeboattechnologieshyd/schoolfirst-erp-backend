@@ -68,12 +68,16 @@ def _flatten_validation_errors(detail: Any, parent_field: str | None = None) -> 
 ########################
 
 
+from typing import Any
+from rest_framework import status
+from rest_framework.response import Response
+
+
 class CustomResponse:
     @staticmethod
     def _response_payload(
         *,
         success: bool,
-        message: Any = None,
         data: Any = None,
         error: Any = None,
         meta: Any = None,
@@ -81,10 +85,8 @@ class CustomResponse:
     ) -> dict[str, Any]:
         payload = {
             "success": success,
-            "data": data,
-            "error": error,
-            "meta": meta,
         }
+
         if data is not None:
             payload["data"] = data
 
@@ -101,8 +103,8 @@ class CustomResponse:
 
     @staticmethod
     def _default_error_object(
-            error_code: Any = 0,
-            details: Any = None,
+        error_code: Any = 0,
+        details: Any = None,
     ) -> dict[str, Any]:
         return {
             "code": str(error_code) if error_code else "ERROR",
@@ -111,12 +113,12 @@ class CustomResponse:
 
     @staticmethod
     def build_response(
-            success: bool,
-            data: Any = None,
-            error: Any = None,
-            meta: Any = None,
-            status: Any = status.HTTP_200_OK,
-            **kwargs: Any,
+        success: bool,
+        data: Any = None,
+        error: Any = None,
+        meta: Any = None,
+        status: Any = status.HTTP_200_OK,
+        **kwargs: Any,
     ) -> Response:
         return Response(
             CustomResponse._response_payload(
@@ -131,13 +133,12 @@ class CustomResponse:
 
     @staticmethod
     def successResponse(  # noqa: N802
-            data: Any = None,
-            description: str = "Request Successful",
-            total: int = 0,
-            status: Any = status.HTTP_200_OK,
-            **kwargs: Any,
+        data: Any = None,
+        description: str = "Request Successful",
+        total: int = 0,
+        status: Any = status.HTTP_200_OK,
+        **kwargs: Any,
     ) -> Response:
-
         extra_payload = {
             "description": description,
             **kwargs,
@@ -155,14 +156,13 @@ class CustomResponse:
 
     @staticmethod
     def errorResponse(  # noqa: N802
-            data: Any = None,
-            errorCode: Any = 0,  # noqa: N803
-            description: str = "Request Failed",
-            total: int = 0,
-            status: Any = status.HTTP_200_OK,
-            **kwargs: Any,
+        data: Any = None,
+        errorCode: Any = 0,  # noqa: N803
+        description: str = "Request Failed",
+        total: int = 0,
+        status: Any = status.HTTP_200_OK,
+        **kwargs: Any,
     ) -> Response:
-
         if data is None:
             data = {}
 
@@ -194,14 +194,7 @@ class CustomResponse:
 
     @staticmethod
     def _format_validation_errors(detail: Any) -> list[dict[str, Any]]:
-        """Format DRF ValidationError details into the standard error list shape.
-
-        Handles nested serializer error dicts by flattening them with dot-joined
-        field paths (e.g. ``{"rrule": {"until": [...]}}`` → ``"rrule.until"``).
-        """
         return _flatten_validation_errors(detail)
-
-
 ########################################
 #   GENERICS OVERRIDES FOR DRF VIEWS   #
 ########################################
