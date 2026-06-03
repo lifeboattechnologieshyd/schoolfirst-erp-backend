@@ -18,65 +18,32 @@ from rest_framework import status
 
 
 class CreateSuperAdminAPIView(APIView):
-
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
-
     def post(self, request):
 
         role, created = Roles.objects.get_or_create(
-
             role_name="SUPERADMIN",
-
             defaults={
-
                 "description": "Platform Super Admin",
-
             },
-
         )
 
         if not created:
-
             return CustomResponse.errorResponse(
-
                 description="SUPERADMIN role already exists.",
-
                 status=status.HTTP_400_BAD_REQUEST,
-
-            )
-
-        all_permissions = Permissions.objects.all()
-
-        for permission in all_permissions:
-
-            RolePermissions.objects.get_or_create(
-
-                role=role,
-
-                permission=permission,
-
             )
 
         return CustomResponse.successResponse(
-
             data={
-
                 "role_id": str(role.id),
-
                 "role_name": role.role_name,
-
-                "permissions_count": all_permissions.count(),
-
             },
-
             description="SUPERADMIN role created successfully.",
-
             status=status.HTTP_201_CREATED,
-
         )
-
 
 
 
