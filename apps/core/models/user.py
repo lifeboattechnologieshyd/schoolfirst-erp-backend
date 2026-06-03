@@ -187,6 +187,8 @@ class UserRoles(AuditModel):
         "school.School",
         on_delete=models.CASCADE,
         related_name="user_roles",
+        null=True,
+        blank=True,
     )
     role = models.ForeignKey(
         Roles,
@@ -222,6 +224,8 @@ class UserPermissions(AuditModel):
         "school.School",
         on_delete=models.CASCADE,
         related_name="user_direct_permissions",
+        null=True,
+        blank=True,
     )
     permission = models.ForeignKey(
         Permissions,
