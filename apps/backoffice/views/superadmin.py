@@ -72,7 +72,7 @@ class SuperAdminRequestOTPAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        is_superadmin = UserRoles.objects.filter(
+        is_superadmin = Roles.objects.filter(
             user=user,
             role__role_name="SUPERADMIN",
         ).exists()
