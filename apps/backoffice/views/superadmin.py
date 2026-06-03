@@ -17,15 +17,15 @@ class CreateSuperAdminAPIView(APIView):
 
     def post(self, request):
 
-        superadmin_role_exists = Roles.objects.filter(
-            role_name="SUPERADMIN"
-        ).exists()
+        # superadmin_role_exists = Roles.objects.filter(
+        #     role_name="SUPERADMIN"
+        # ).exists()
 
-        if superadmin_role_exists:
-            return CustomResponse.errorResponse(
-                description="SUPERADMIN role already exists.",
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # if superadmin_role_exists:
+        #     return CustomResponse.errorResponse(
+        #         description="SUPERADMIN role already exists.",
+        #         status=status.HTTP_400_BAD_REQUEST,
+        #     )
 
         role = Roles.objects.create(
             role_name="SUPERADMIN",
