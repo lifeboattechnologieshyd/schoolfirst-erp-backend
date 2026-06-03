@@ -85,38 +85,24 @@ class CustomResponse:
             "error": error,
             "meta": meta,
         }
+        if data is not None:
+            payload["data"] = data
+
+        if error is not None:
+            payload["error"] = error
+
+        if meta is not None:
+            payload["meta"] = meta
+
         if extra:
             payload.update(extra)
+
         return payload
 
     @staticmethod
-    def _legacy_response_payload(
-        *,
-        success: bool,
-        data: Any,
-        description: str,
-        error_code: Any = 0,
-        total: int = 0,
-        error: Any = None,
-        extra: Any = None,
-    ) -> dict[str, Any]:
-        return CustomResponse._response_payload(
-            success=success,
-            data=data,
-            error=error,
-            meta=None,
-            extra={
-                "errorCode": error_code,
-                "description": description,
-                "total": total,
-                **(extra or {}),
-            },
-        )
-
-    @staticmethod
     def _default_error_object(
-        error_code: Any = 0,
-        details: Any = None,
+            error_code: Any = 0,
+            details: Any = None,
     ) -> dict[str, Any]:
         return {
             "code": str(error_code) if error_code else "ERROR",
@@ -125,19 +111,19 @@ class CustomResponse:
 
     @staticmethod
     def build_response(
-        success: bool,
-        data: Any = None,
-        error: Any = None,
-        meta: Any = None,
-        status: Any = status.HTTP_200_OK,
-        **kwargs: Any,
+            success: bool,
+            data: Any = None,
+            error: Any = None,
+            meta: Any = None,
+            status: Any = status.HTTP_200_OK,
+            **kwargs: Any,
     ) -> Response:
         return Response(
             CustomResponse._response_payload(
                 success=success,
                 data=data,
-                # error=error,
-                # meta=meta,
+                error=error,
+                meta=meta,
                 extra=kwargs,
             ),
             status=status,
@@ -145,56 +131,65 @@ class CustomResponse:
 
     @staticmethod
     def successResponse(  # noqa: N802
-        data: Any,
-        # errorCode: Any = 0,  # noqa: N803
-        description: str = "Request Successful",
-        total: int = 0,
-        status: Any = status.HTTP_200_OK,
-        **kwargs: Any,
+            data: Any = None,
+            description: str = "Request Successful",
+            total: int = 0,
+            status: Any = status.HTTP_200_OK,
+            **kwargs: Any,
     ) -> Response:
+
+        extra_payload = {
+            "description": description,
+            **kwargs,
+        }
+
+        if total:
+            extra_payload["total"] = total
+
         return CustomResponse.build_response(
             success=True,
-            # message=description,
             data=data,
-            error=None,
-            meta=None,
             status=status,
-            # errorCode=errorCode,
-            description=description,
-            total=total,
-            **kwargs,
+            **extra_payload,
         )
 
     @staticmethod
     def errorResponse(  # noqa: N802
-        data: Any = None,
-        errorCode: Any = 0,  # noqa: N803
-        description: str = "Request Failed",
-        total: int = 0,
-        status: Any = status.HTTP_200_OK,
-        **kwargs: Any,
+            data: Any = None,
+            errorCode: Any = 0,  # noqa: N803
+            description: str = "Request Failed",
+            total: int = 0,
+            status: Any = status.HTTP_200_OK,
+            **kwargs: Any,
     ) -> Response:
+
         if data is None:
             data = {}
 
         extra = dict(kwargs)
-        error_obj = extra.pop("error", None) or CustomResponse._default_error_object(
-            # error_code=errorCode,
-            description=description,
-            details=data,
+
+        error_obj = extra.pop(
+            "error",
+            CustomResponse._default_error_object(
+                error_code=errorCode,
+                details=data,
+            ),
         )
+
+        extra_payload = {
+            "description": description,
+            **extra,
+        }
+
+        if total:
+            extra_payload["total"] = total
 
         return CustomResponse.build_response(
             success=False,
-            # message=description,
-            # data=data,
-            # error=error_obj,
-            # meta=None,
+            data=data,
+            error=error_obj,
             status=status,
-            # errorCode=errorCode,
-            description=description,
-            total=total,
-            **extra,
+            **extra_payload,
         )
 
     @staticmethod
