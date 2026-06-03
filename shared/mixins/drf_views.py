@@ -136,8 +136,8 @@ class CustomResponse:
             CustomResponse._response_payload(
                 success=success,
                 data=data,
-                error=error,
-                meta=meta,
+                # error=error,
+                # meta=meta,
                 extra=kwargs,
             ),
             status=status,
@@ -146,7 +146,7 @@ class CustomResponse:
     @staticmethod
     def successResponse(  # noqa: N802
         data: Any,
-        errorCode: Any = 0,  # noqa: N803
+        # errorCode: Any = 0,  # noqa: N803
         description: str = "Request Successful",
         total: int = 0,
         status: Any = status.HTTP_200_OK,
@@ -159,7 +159,7 @@ class CustomResponse:
             error=None,
             meta=None,
             status=status,
-            errorCode=errorCode,
+            # errorCode=errorCode,
             description=description,
             total=total,
             **kwargs,
@@ -179,7 +179,7 @@ class CustomResponse:
 
         extra = dict(kwargs)
         error_obj = extra.pop("error", None) or CustomResponse._default_error_object(
-            error_code=errorCode,
+            # error_code=errorCode,
             description=description,
             details=data,
         )
@@ -187,11 +187,11 @@ class CustomResponse:
         return CustomResponse.build_response(
             success=False,
             # message=description,
-            data=data,
-            error=error_obj,
-            meta=None,
+            # data=data,
+            # error=error_obj,
+            # meta=None,
             status=status,
-            errorCode=errorCode,
+            # errorCode=errorCode,
             description=description,
             total=total,
             **extra,
