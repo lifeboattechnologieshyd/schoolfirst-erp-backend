@@ -17,6 +17,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.school.models import SchoolLead, School
 from apps.core.models import UserMaster, UserOTP, Roles, UserRoles
+from shared.mixins import CustomResponse
 from shared.utils.otp import generate_school_code
 
 def normalize_email(value):
@@ -69,19 +70,10 @@ class SchoolLeadRequestOTPAPIView(APIView):
         missing = [field for field in required_fields if not request.data.get(field)]
 
         if missing:
-
-            return Response(
-
-                {
-
-                    "message": "Missing required fields",
-
-                    "fields": missing,
-
-                },
-
+            return CustomResponse.errorResponse(
+                data={"fields": missing},
+                description="Missing required fields.",
                 status=status.HTTP_400_BAD_REQUEST,
-
             )
 
         school_name = request.data.get("school_name")
@@ -97,13 +89,9 @@ class SchoolLeadRequestOTPAPIView(APIView):
         phone_number = normalize_mobile(request.data.get("phone_number"))
 
         if not email or not phone_number:
-
-            return Response(
-
-                {"message": "Both email and phone_number are required"},
-
+            return CustomResponse.errorResponse(
+                description="Both email and phone_number are required.",
                 status=status.HTTP_400_BAD_REQUEST,
-
             )
 
         lead = SchoolLead.objects.create(
@@ -155,21 +143,13 @@ class SchoolLeadRequestOTPAPIView(APIView):
 
         # send sms OTP here
 
-        return Response(
-
-            {
-
-                "message": "OTP sent successfully",
-
+        return CustomResponse.successResponse(
+            data={
                 "lead_id": str(lead.id),
-
-
                 "mobile_otp": mobile_otp if settings.DEBUG else None,
-
             },
-
+            description="OTP sent successfully.",
             status=status.HTTP_200_OK,
-
         )
 
 class SchoolLeadVerifyOTPAPIView(APIView):
@@ -185,14 +165,10 @@ class SchoolLeadVerifyOTPAPIView(APIView):
 
         mobile_otp = str(request.data.get("mobile_otp", "")).strip()
 
-        if not lead_id  or not mobile_otp:
-
-            return Response(
-
-                {"message": "lead_id and mobile_otp are required"},
-
+        if not lead_id or not mobile_otp:
+            return CustomResponse.errorResponse(
+                description="lead_id and mobile_otp are required.",
                 status=status.HTTP_400_BAD_REQUEST,
-
             )
 
         lead = get_object_or_404(SchoolLead, id=lead_id)
@@ -211,16 +187,10 @@ class SchoolLeadVerifyOTPAPIView(APIView):
 
         ).order_by("-created_at").first()
 
-
-
         if not mobile_otp_obj:
-
-            return Response(
-
-                {"message": "Invalid or expired mobile OTP"},
-
+            return CustomResponse.errorResponse(
+                description="Invalid or expired mobile OTP.",
                 status=status.HTTP_400_BAD_REQUEST,
-
             )
 
 
@@ -345,61 +315,37 @@ class SchoolLeadVerifyOTPAPIView(APIView):
 
         refresh = RefreshToken.for_user(user)
 
-        return Response(
-
-            {
-
-                "message": "OTP verified successfully",
-
+        return CustomResponse.successResponse(
+            data={
                 "is_new_user": is_new_user,
-
                 "school": {
-
                     "id": str(school.id),
-
                     "name": school.name,
-
                     "code": school.code,
-
                 },
-
                 "user": {
-
                     "id": str(user.id),
-
                     "username": user.username,
-
                     "email": user.email,
-
                     "mobile": user.mobile,
-
                     "first_name": user.first_name,
-
                     "last_name": user.last_name,
-
                     "status": user.status,
-
                     "is_active": user.is_active,
-
                     "is_staff": user.is_staff,
-
                 },
-
                 "role": role.role_name,
-
                 "tokens": {
-
                     "access": str(refresh.access_token),
-
                     "refresh": str(refresh),
-
                 },
-
             },
-
+            description="OTP verified successfully.",
             status=status.HTTP_200_OK,
-
         )
+
+
+
 class SchoolLeadListAPIView(APIView):
 
     def get(self, request):
