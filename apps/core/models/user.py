@@ -63,7 +63,6 @@ class UserMaster(AbstractBaseUser):
     gender = models.CharField(max_length=255, null=True)
     profile_image = models.CharField(max_length=500, null=True)
     is_profile_updated = models.BooleanField(default=False, null=False)
-    is_password_updated = models.BooleanField(default=False, null=False)
     created_at = models.DateTimeField(auto_now_add=True, null=False)
 
     USERNAME_FIELD = "username"

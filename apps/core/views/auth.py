@@ -13,8 +13,10 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.core.models import UserOTP, UserMaster
+from apps.core.models import UserOTP, UserMaster, UserRoles
 from django.db import transaction
+
+from shared.mixins import CustomResponse
 
 
 def normalize_email(value):
@@ -47,87 +49,65 @@ class SendOTPAPIView(APIView):
 
     def post(self, request):
 
-        email = normalize_email(request.data.get("email"))
+        mobile = normalize_mobile(
 
-        mobile = normalize_mobile(request.data.get("mobile"))
+            request.data.get("mobile")
 
-        channel = request.data.get("channel", "both")
+        )
 
-        if not email and not mobile:
+        if not mobile:
 
-            return Response(
+            return CustomResponse.errorResponse(
 
-                {"message": "email or mobile is required"},
+                description="mobile is required.",
 
                 status=status.HTTP_400_BAD_REQUEST,
 
             )
 
-        if channel not in ["email", "mobile", "both"]:
+        user = UserMaster.objects.filter(
 
-            return Response(
+            mobile=mobile,
 
-                {"message": "channel must be email, mobile, or both"},
+            is_active=True,
 
-                status=status.HTTP_400_BAD_REQUEST,
+        ).first()
+
+        if not user:
+
+            return CustomResponse.errorResponse(
+
+                description="User not found.",
+
+                status=status.HTTP_404_NOT_FOUND,
 
             )
 
         otp = generate_otp()
 
-        expires_at = timezone.now() + timedelta(minutes=5)
+        UserOTP.objects.create(
 
-        if channel in ["email", "both"] and email:
+            user_id=user.id,
 
-            UserOTP.objects.create(
+            mobile=int(mobile),
 
-                user_id=None,
+            otp=otp,
 
-                email=email,
+            expires_at=timezone.now() + timedelta(minutes=10),
 
-                mobile=None,
+            is_used=False,
 
-                otp=otp,
+        )
 
-                expires_at=expires_at,
+        return CustomResponse.successResponse(
 
-                is_used=False,
+            data={
 
-            )
-
-            # send email here
-
-        if channel in ["mobile", "both"] and mobile:
-
-            UserOTP.objects.create(
-
-                user_id=None,
-
-                email=None,
-
-                mobile=int(mobile),
-
-                otp=otp,
-
-                expires_at=expires_at,
-
-                is_used=False,
-
-            )
-
-            # send sms here
-
-        return Response(
-
-            {
-
-                "message": "OTP sent successfully",
-
-                "otp": otp if getattr(__import__("django.conf").conf.settings, "DEBUG", False) else None,
+                "mobile_otp": otp ,
 
             },
 
-            status=status.HTTP_200_OK,
+            description="OTP sent successfully.",
 
         )
 
@@ -138,36 +118,49 @@ class VerifyOTPAPIView(APIView):
     permission_classes = [AllowAny]
 
     @transaction.atomic
-
     def post(self, request):
 
-        email = request.data.get("email")
+        mobile = normalize_mobile(
 
-        mobile = request.data.get("mobile")
+            request.data.get("mobile")
 
-        otp = request.data.get("otp")
+        )
 
-        if not otp:
+        otp = str(
 
-            return Response(
+            request.data.get("otp", "")
 
-                {"message": "OTP is required"},
+        ).strip()
 
-                status=status.HTTP_400_BAD_REQUEST,
+        if not mobile or not otp:
+            return CustomResponse.errorResponse(
 
-            )
-
-        if not email and not mobile:
-
-            return Response(
-
-                {"message": "Email or Mobile is required"},
+                description="mobile and otp are required.",
 
                 status=status.HTTP_400_BAD_REQUEST,
 
             )
 
-        otp_queryset = UserOTP.objects.filter(
+        user = UserMaster.objects.filter(
+
+            mobile=mobile,
+
+            is_active=True,
+
+        ).first()
+
+        if not user:
+            return CustomResponse.errorResponse(
+
+                description="User not found.",
+
+                status=status.HTTP_404_NOT_FOUND,
+
+            )
+
+        otp_obj = UserOTP.objects.filter(
+
+            mobile=int(mobile),
 
             otp=otp,
 
@@ -175,21 +168,16 @@ class VerifyOTPAPIView(APIView):
 
             expires_at__gt=timezone.now(),
 
-        )
+        ).order_by(
 
-        if email:
+            "-created_at"
 
-            otp_obj = otp_queryset.filter(email=email).order_by("-created_at").first()
-
-        else:
-
-            otp_obj = otp_queryset.filter(mobile=mobile).order_by("-created_at").first()
+        ).first()
 
         if not otp_obj:
+            return CustomResponse.errorResponse(
 
-            return Response(
-
-                {"message": "Invalid or expired OTP"},
+                description="Invalid or expired OTP.",
 
                 status=status.HTTP_400_BAD_REQUEST,
 
@@ -197,73 +185,57 @@ class VerifyOTPAPIView(APIView):
 
         otp_obj.is_used = True
 
-        otp_obj.save(update_fields=["is_used"])
+        otp_obj.save(
 
-        # Find existing user
+            update_fields=["is_used"]
 
-        user = None
+        )
 
-        if email:
+        refresh = RefreshToken.for_user(
 
-            user = UserMaster.objects.filter(email=email).first()
+            user
 
-        if not user and mobile:
+        )
 
-            user = UserMaster.objects.filter(mobile=mobile).first()
+        roles = list(
 
-        is_new_user = False
+            UserRoles.objects.filter(
 
-        # Create user if not exists
+                user=user
 
-        if not user:
+            ).values_list(
 
-            username = mobile if mobile else email.split("@")[0]
+                "role__role_name",
 
-            counter = 1
+                flat=True,
 
-            base_username = username
+            ).distinct()
 
-            while UserMaster.objects.filter(username=username).exists():
+        )
 
-                username = f"{base_username}{counter}"
+        permissions = list(
 
-                counter += 1
+            set(
 
-            user = UserMaster.objects.create(
+                UserRoles.objects.filter(
 
-                username=username,
+                    user=user
 
-                email=email,
+                ).values_list(
 
-                mobile=mobile,
+                    "role__role_permissions_for_role__permission__permission_name",
 
-                is_active=True,
+                    flat=True,
 
-                status=UserMaster.Status.ACTIVE,
+                )
 
             )
-        refresh = RefreshToken.for_user(user)
 
-        access_token = str(refresh.access_token)
-        refresh_token = str(refresh)
+        )
 
-        is_new_user = True
+        return CustomResponse.successResponse(
 
-        return Response(
-
-            {
-
-                "message": "OTP verified successfully",
-
-                "is_new_user": is_new_user,
-
-                "tokens": {
-
-                    "access": access_token,
-
-                    "refresh": refresh_token,
-
-                },
+            data={
 
                 "user": {
 
@@ -271,25 +243,39 @@ class VerifyOTPAPIView(APIView):
 
                     "username": user.username,
 
-                    "email": user.email,
-
                     "mobile": user.mobile,
+
+                    "email": user.email,
 
                     "first_name": user.first_name,
 
                     "last_name": user.last_name,
 
-                    "status": user.status,
+                },
 
-                    "is_active": user.is_active,
+                "roles": roles,
 
-                    "is_staff": user.is_staff,
+                "permissions": permissions,
+
+                "tokens": {
+
+                    "access": str(
+
+                        refresh.access_token
+
+                    ),
+
+                    "refresh": str(
+
+                        refresh
+
+                    ),
 
                 },
 
             },
 
-            status=status.HTTP_200_OK,
+            description="Login successful.",
 
         )
 
