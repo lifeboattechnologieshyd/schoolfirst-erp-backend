@@ -3,7 +3,7 @@ from django.urls import path
 from apps.backoffice.views.leads import \
     SchoolLeadRequestOTPAPIView, SchoolLeadListAPIView, SchoolLeadVerifyOTPAPIView
 from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCreateAPIView, RoleListCreateAPIView, \
-    RoleDetailAPIView, AssignPermissionsToRoleAPIView, AssignRoleToUserAPIView, AssignPermissionToUserAPIView
+     AssignPermissionsToRoleAPIView, AssignRoleToUserAPIView
 from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdminRequestOTPAPIView, \
     SuperAdminVerifyOTPAPIView, SchoolLeadUpdateAPIView
 
@@ -32,13 +32,11 @@ urlpatterns = [
 
     path("roles", RoleListCreateAPIView.as_view(), name="role-list-create"),
 
-    path("roles/<uuid:role_id>", RoleDetailAPIView.as_view(), name="role-detail"),
 
     path("roles/<uuid:role_id>/assign-permissions", AssignPermissionsToRoleAPIView.as_view(), name="role-assign-permissions"),
 
     path("user-roles/assign", AssignRoleToUserAPIView.as_view(), name="assign-role-to-user"),
 
-    path("user-permissions/assign", AssignPermissionToUserAPIView.as_view(), name="assign-permission-to-user"),
 
 
 
