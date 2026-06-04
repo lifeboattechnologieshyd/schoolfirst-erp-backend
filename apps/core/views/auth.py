@@ -82,8 +82,9 @@ class SendOTPAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
 
             )
+        otp = 1234
 
-        otp = generate_otp()
+        # otp = generate_otp()
 
         UserOTP.objects.create(
 
