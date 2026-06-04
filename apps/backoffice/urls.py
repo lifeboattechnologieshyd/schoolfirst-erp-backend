@@ -23,7 +23,7 @@ urlpatterns = [
 
     path("leads", SchoolLeadListAPIView.as_view(), name="school-lead-list"),
 
-    path("/<uuid:lead_id>/leads", SchoolLeadUpdateAPIView.as_view(), name="lead-update"),
+    path("leads/<uuid:lead_id>/", SchoolLeadUpdateAPIView.as_view(), name="lead-update"),
 
 
     path("modules", ModuleListCreateAPIView.as_view(), name="module-list-create"),
