@@ -3,7 +3,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
-from apps.core.models import Modules, Permissions, Roles, RolePermissions, UserMaster, UserRoles
+from apps.core.models import Modules, Permissions, Roles, RolePermissions, UserMaster, UserRoles, UserPermissions
 from shared.mixins import CustomResponse
 from shared.permissions import HasRole
 from shared.enums.roles import RolesEnum
@@ -357,5 +357,296 @@ class AssignRoleToUserAPIView(APIView):
         )
 
 
+class RBACDashboardAPIView(APIView):
 
+    permission_classes = [
+        IsAuthenticated,
+        HasRole,
+    ]
+
+    required_roles = ["SUPERADMIN"]
+
+    def get(self, request):
+
+        return CustomResponse.successResponse(
+            data={
+                "users_count": UserMaster.objects.count(),
+                "roles_count": Roles.objects.count(),
+                "permissions_count": Permissions.objects.count(),
+                "user_roles_count": UserRoles.objects.count(),
+                "role_permissions_count": RolePermissions.objects.count(),
+            },
+            description="RBAC dashboard fetched successfully.",
+        )
+
+class UserAccessAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasRole,
+    ]
+
+    required_roles = [
+        RolesEnum.SUPERADMIN,
+    ]
+
+    def get(self, request, user_id):
+
+        user = UserMaster.objects.filter(
+            id=user_id
+        ).first()
+
+        if not user:
+            return CustomResponse.errorResponse(
+                description="User not found.",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        user_roles = UserRoles.objects.select_related(
+            "role",
+            "school",
+        ).filter(
+            user=user,
+        )
+
+        role_data = []
+
+        permissions = set()
+
+        for user_role in user_roles:
+
+            role_data.append({
+                "role_id": str(user_role.role.id),
+                "role_name": user_role.role.role_name,
+                "school_id": (
+                    str(user_role.school.id)
+                    if user_role.school
+                    else None
+                ),
+                "school_name": (
+                    user_role.school.name
+                    if user_role.school
+                    else None
+                ),
+            })
+
+            role_permissions = RolePermissions.objects.filter(
+                role=user_role.role
+            ).values_list(
+                "permission__permission_name",
+                flat=True,
+            )
+
+            permissions.update(role_permissions)
+
+        direct_permissions = UserPermissions.objects.filter(
+            user=user
+        ).values_list(
+            "permission__permission_name",
+            flat=True,
+        )
+
+        permissions.update(direct_permissions)
+
+        return CustomResponse.successResponse(
+            data={
+                "user": {
+                    "id": str(user.id),
+                    "username": user.username,
+                    "email": user.email,
+                    "mobile": user.mobile,
+                },
+                "roles": role_data,
+                "permissions": sorted(
+                    list(permissions)
+                ),
+            },
+            description="User access fetched successfully.",
+        )
+
+
+class RolesAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasRole,
+    ]
+
+    required_roles = [
+        RolesEnum.SUPERADMIN,
+    ]
+
+    def get(self, request):
+
+        role_id = request.query_params.get(
+            "role_id"
+        )
+
+        role_name = request.query_params.get(
+            "role_name"
+        )
+
+        queryset = Roles.objects.all()
+
+        if role_id:
+            queryset = queryset.filter(
+                id=role_id
+            )
+
+        if role_name:
+            queryset = queryset.filter(
+                role_name__icontains=role_name
+            )
+
+        return CustomResponse.successResponse(
+            data=[
+                {
+                    "id": str(role.id),
+                    "role_name": role.role_name,
+                    "description": role.description,
+                }
+                for role in queryset
+            ],
+            description="Roles fetched successfully.",
+        )
+
+
+class RoleAccessAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasRole,
+    ]
+
+    required_roles = [
+        RolesEnum.SUPERADMIN,
+    ]
+
+    def get(self, request, role_id):
+
+        role = Roles.objects.filter(
+            id=role_id
+        ).first()
+
+        if not role:
+            return CustomResponse.errorResponse(
+                description="Role not found.",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        permissions = RolePermissions.objects.select_related(
+            "permission",
+            "permission__module",
+        ).filter(
+            role=role
+        )
+
+        return CustomResponse.successResponse(
+            data={
+                "role": {
+                    "id": str(role.id),
+                    "role_name": role.role_name,
+                },
+                "permissions": [
+                    {
+                        "permission_id": str(
+                            item.permission.id
+                        ),
+                        "permission_name": item.permission.permission_name,
+                        "module": item.permission.module.module_name,
+                    }
+                    for item in permissions
+                ],
+            },
+            description="Role access fetched successfully.",
+        )
+
+class ModulesAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasRole,
+    ]
+
+    required_roles = [
+        RolesEnum.SUPERADMIN,
+    ]
+
+    def get(self, request):
+
+        module_id = request.query_params.get(
+            "module_id"
+        )
+
+        module_name = request.query_params.get(
+            "module_name"
+        )
+
+        queryset = Modules.objects.all()
+
+        if module_id:
+            queryset = queryset.filter(
+                id=module_id
+            )
+
+        if module_name:
+            queryset = queryset.filter(
+                module_name__icontains=module_name
+            )
+
+        return CustomResponse.successResponse(
+            data=[
+                {
+                    "id": str(module.id),
+                    "module_name": module.module_name,
+                }
+                for module in queryset
+            ],
+            description="Modules fetched successfully.",
+        )
+
+
+class ModulePermissionsAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasRole,
+    ]
+
+    required_roles = [
+        RolesEnum.SUPERADMIN,
+    ]
+
+    def get(self, request, module_id):
+
+        module = Modules.objects.filter(
+            id=module_id
+        ).first()
+
+        if not module:
+            return CustomResponse.errorResponse(
+                description="Module not found.",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        permissions = Permissions.objects.filter(
+            module=module
+        )
+
+        return CustomResponse.successResponse(
+            data={
+                "module": {
+                    "id": str(module.id),
+                    "module_name": module.module_name,
+                },
+                "permissions": [
+                    {
+                        "id": str(permission.id),
+                        "permission_name": permission.permission_name,
+                    }
+                    for permission in permissions
+                ],
+            },
+            description="Module permissions fetched successfully.",
+        )
 

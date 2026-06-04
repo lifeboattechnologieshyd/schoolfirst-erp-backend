@@ -3,7 +3,8 @@ from django.urls import path
 from apps.backoffice.views.leads import \
     SchoolLeadRequestOTPAPIView, SchoolLeadListAPIView, SchoolLeadVerifyOTPAPIView
 from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCreateAPIView, RoleListCreateAPIView, \
-     AssignPermissionsToRoleAPIView, AssignRoleToUserAPIView
+    AssignPermissionsToRoleAPIView, AssignRoleToUserAPIView, RBACDashboardAPIView, UserAccessAPIView, ModulesAPIView, \
+    ModulePermissionsAPIView, RolesAPIView, RoleAccessAPIView
 from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdminRequestOTPAPIView, \
     SuperAdminVerifyOTPAPIView, SchoolLeadUpdateAPIView
 
@@ -36,6 +37,19 @@ urlpatterns = [
     path("roles/<uuid:role_id>/assign-permissions", AssignPermissionsToRoleAPIView.as_view(), name="role-assign-permissions"),
 
     path("user-roles/assign", AssignRoleToUserAPIView.as_view(), name="assign-role-to-user"),
+
+    path("rbac/dashboard", RBACDashboardAPIView.as_view(), name="rbac-dashboard"),
+
+    path("users/<uuid:user_id>/access",UserAccessAPIView.as_view(),),
+
+    path("rbac/roles",RolesAPIView.as_view(),name="roles",),
+
+
+   path("rbac/modules/filter",ModulesAPIView.as_view(),name="module-filter",),
+
+   path("rbac/roles/<uuid:role_id>/access",RoleAccessAPIView.as_view(),name="role-access") ,
+
+   path( "rbac/modules/<uuid:module_id>/permissions",ModulePermissionsAPIView.as_view(),name="module-permissions"),
 
 
 
