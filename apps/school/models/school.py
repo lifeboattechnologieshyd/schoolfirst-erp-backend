@@ -217,13 +217,11 @@ class School(AuditModel):
     )
 
     organization = models.ForeignKey(
-
         Organization,
-
         on_delete=models.CASCADE,
-
         related_name="schools",
-
+        null=True,
+        blank=True,
     )
 
     name = models.CharField(
