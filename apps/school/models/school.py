@@ -272,7 +272,7 @@ class School(AuditModel):
 
     )
 
-    principal_email = models.EmailField(
+    principal_email = models.CharField(
 
         blank=True,
 
