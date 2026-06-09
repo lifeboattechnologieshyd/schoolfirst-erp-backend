@@ -113,7 +113,7 @@ class SuperAdminRequestOTPAPIView(APIView):
 
         if not phone_number:
             return CustomResponse.errorResponse(
-                description="phone_number is required.",
+                description="mobile is required.",
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -185,7 +185,7 @@ class SuperAdminVerifyOTPAPIView(APIView):
 
         if not phone_number or not otp:
             return CustomResponse.errorResponse(
-                description="phone_number and otp are required.",
+                description="mobile and otp are required.",
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
