@@ -18,53 +18,17 @@ class Organization(AuditModel):
     name = models.CharField(max_length=255,unique=True,)
     code = models.CharField(max_length=50,unique=True,)
 
-    email = models.EmailField(
+    email = models.EmailField(unique=True,)
 
-        unique=True,
+    phone_number = models.CharField(max_length=20,unique=True,)
 
-    )
+    address = models.TextField(blank=True,null=True,)
 
-    phone_number = models.CharField(
+    website = models.CharField(max_length=20,null=True,)
 
-        max_length=20,
+    logo = models.CharField(max_length=300,null=True,)
 
-        unique=True,
-
-    )
-
-    address = models.TextField(
-
-        blank=True,
-
-        null=True,
-
-    )
-
-    website = models.URLField(
-
-        blank=True,
-
-        null=True,
-
-    )
-
-    logo = models.URLField(
-
-        blank=True,
-
-        null=True,
-
-    )
-
-    status = models.CharField(
-
-        max_length=20,
-
-        choices=Status.choices,
-
-        default=Status.ACTIVE,
-
-    )
+    status = models.CharField(max_length=20,choices=Status.choices, default=Status.ACTIVE,)
 
     class Meta:
 
@@ -206,167 +170,47 @@ class School(AuditModel):
 
         INACTIVE = "INACTIVE", "Inactive"
 
-    id = models.UUIDField(
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False,)
 
-        primary_key=True,
+    organization = models.ForeignKey(Organization,on_delete=models.CASCADE,related_name="schools",null=True,blank=True,)
 
-        default=uuid.uuid4,
+    name = models.CharField(max_length=255,)
 
-        editable=False,
+    code = models.CharField(max_length=50,unique=True,)
 
-    )
+    board = models.CharField(max_length=30,choices=BoardType.choices,default=BoardType.OTHER,)
 
-    organization = models.ForeignKey(
-        Organization,
-        on_delete=models.CASCADE,
-        related_name="schools",
-        null=True,
-        blank=True,
-    )
+    email = models.EmailField(unique=True,)
 
-    name = models.CharField(
+    phone_number = models.CharField(max_length=20,unique=True,)
 
-        max_length=255,
+    principal_name = models.CharField(max_length=255,blank=True,null=True,)
 
-    )
+    principal_email = models.CharField(blank=True,null=True,)
 
-    code = models.CharField(
+    principal_mobile = models.CharField(max_length=20,blank=True,null=True,)
 
-        max_length=50,
-
-        unique=True,
-
-    )
-
-    board = models.CharField(
-
-        max_length=30,
-
-        choices=BoardType.choices,
-
-        default=BoardType.OTHER,
-
-    )
-
-    email = models.EmailField(
-
-        unique=True,
-
-    )
-
-    phone_number = models.CharField(
-
-        max_length=20,
-
-        unique=True,
-
-    )
-
-    principal_name = models.CharField(
-
-        max_length=255,
-
-        blank=True,
-
-        null=True,
-
-    )
-
-    principal_email = models.CharField(
-
-        blank=True,
-
-        null=True,
-
-    )
-
-    principal_mobile = models.CharField(
-
-        max_length=20,
-
-        blank=True,
-
-        null=True,
-
-    )
-
-    established_year = models.PositiveIntegerField(
-
-        blank=True,
-
-        null=True,
-
-    )
+    established_year = models.PositiveIntegerField(blank=True,null=True,)
 
     address = models.TextField()
 
-    city = models.CharField(
+    city = models.CharField(max_length=100,)
 
-        max_length=100,
+    state = models.CharField(max_length=100,)
 
-    )
+    country = models.CharField(max_length=100,default="India")
 
-    state = models.CharField(
+    pincode = models.CharField(max_length=20,blank=True,null=True,)
 
-        max_length=100,
+    website = models.CharField(max_length=20,null=True,)
 
-    )
+    logo = models.CharField(max_length=300,blank=True,null=True)
 
-    country = models.CharField(
+    is_email_verified = models.BooleanField(default=False,)
 
-        max_length=100,
+    is_phone_verified = models.BooleanField(default=False,)
 
-        default="India",
-
-    )
-
-    pincode = models.CharField(
-
-        max_length=20,
-
-        blank=True,
-
-        null=True,
-
-    )
-
-    website = models.URLField(
-
-        blank=True,
-
-        null=True,
-
-    )
-
-    logo = models.URLField(
-
-        blank=True,
-
-        null=True,
-
-    )
-
-    is_email_verified = models.BooleanField(
-
-        default=False,
-
-    )
-
-    is_phone_verified = models.BooleanField(
-
-        default=False,
-
-    )
-
-    status = models.CharField(
-
-        max_length=20,
-
-        choices=Status.choices,
-
-        default=Status.ACTIVE,
-
-    )
+    status = models.CharField(max_length=20,choices=Status.choices,default=Status.ACTIVE,)
 
     class Meta:
 
@@ -396,109 +240,31 @@ class Branch(AuditModel):
 
         INACTIVE = "INACTIVE", "Inactive"
 
-    id = models.UUIDField(
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False,)
 
-        primary_key=True,
+    school = models.ForeignKey(School,on_delete=models.CASCADE,related_name="branches",)
 
-        default=uuid.uuid4,
+    name = models.CharField( max_length=255,)
 
-        editable=False,
+    code = models.CharField(max_length=50, unique=True,)
 
-    )
+    email = models.EmailField(blank=True,null=True,)
 
-    school = models.ForeignKey(
-
-        School,
-
-        on_delete=models.CASCADE,
-
-        related_name="branches",
-
-    )
-
-    name = models.CharField(
-
-        max_length=255,
-
-    )
-
-    code = models.CharField(
-
-        max_length=50,
-
-        unique=True,
-
-    )
-
-    email = models.EmailField(
-
-        blank=True,
-
-        null=True,
-
-    )
-
-    phone_number = models.CharField(
-
-        max_length=20,
-
-        blank=True,
-
-        null=True,
-
-    )
+    phone_number = models.CharField(max_length=20,blank=True,null=True,)
 
     address = models.TextField()
 
-    city = models.CharField(
+    city = models.CharField(max_length=100,)
 
-        max_length=100,
+    state = models.CharField(max_length=100,)
 
-    )
+    country = models.CharField( max_length=100,default="India",)
 
-    state = models.CharField(
+    pincode = models.CharField(max_length=20,blank=True,null=True,)
 
-        max_length=100,
+    branch_head_name = models.CharField( max_length=255,blank=True,null=True,)
 
-    )
-
-    country = models.CharField(
-
-        max_length=100,
-
-        default="India",
-
-    )
-
-    pincode = models.CharField(
-
-        max_length=20,
-
-        blank=True,
-
-        null=True,
-
-    )
-
-    branch_head_name = models.CharField(
-
-        max_length=255,
-
-        blank=True,
-
-        null=True,
-
-    )
-
-    status = models.CharField(
-
-        max_length=20,
-
-        choices=Status.choices,
-
-        default=Status.ACTIVE,
-
-    )
+    status = models.CharField(max_length=20,choices=Status.choices,default=Status.ACTIVE,)
 
     class Meta:
 
@@ -511,6 +277,55 @@ class Branch(AuditModel):
             models.Index(fields=["school"]),
 
             models.Index(fields=["code"]),
+
+        ]
+
+    def __str__(self):
+
+        return f"{self.school.name} - {self.name}"
+
+
+class AcademicYear(AuditModel):
+
+    class Status(models.TextChoices):
+
+        ACTIVE = "ACTIVE", "Active"
+
+        INACTIVE = "INACTIVE", "Inactive"
+
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False,)
+
+    school = models.ForeignKey("school.School",on_delete=models.CASCADE,related_name="academic_years", )
+
+    name = models.CharField(max_length=100,)
+
+    start_date = models.DateField()
+
+    end_date = models.DateField()
+
+    status = models.CharField(max_length=20,choices=Status.choices,default=Status.ACTIVE,)
+
+    class Meta:
+
+        db_table = "academic_years"
+
+        constraints = [
+
+            models.UniqueConstraint(
+
+                fields=["school", "name"],
+
+                name="unique_school_academic_year",
+
+            )
+
+        ]
+
+        indexes = [
+
+            models.Index(fields=["school"]),
+
+            models.Index(fields=["status"]),
 
         ]
 
