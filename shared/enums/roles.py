@@ -4,8 +4,12 @@ class RolesEnum:
 
     SCHOOL_ADMIN = "SCHOOL_ADMIN"
 
+    PRINCIPAL = "PRINCIPAL"
+
+    ADMIN = "ADMIN"
+
     TEACHER = "TEACHER"
 
-    STUDENT = "STUDENT"
+    DRIVER = "DRIVER"
 
     PARENT = "PARENT"

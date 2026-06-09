@@ -6,7 +6,9 @@ from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCr
     AssignPermissionsToRoleAPIView, AssignRoleToUserAPIView, RBACDashboardAPIView, UserAccessAPIView, ModulesAPIView, \
     ModulePermissionsAPIView, RolesAPIView, RoleAccessAPIView
 from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdminRequestOTPAPIView, \
-    SuperAdminVerifyOTPAPIView, SchoolLeadUpdateAPIView
+    SuperAdminVerifyOTPAPIView, SchoolLeadUpdateAPIView, OrganizationListAPIView, CreateOrganizationAPIView, \
+    UpdateOrganizationAPIView, SchoolListAPIView, CreateSchoolAPIView, UpdateSchoolAPIView, CreateBranchAPIView, \
+    UpdateBranchAPIView, BranchListAPIView
 
 urlpatterns = [
 
@@ -50,6 +52,36 @@ urlpatterns = [
    path("rbac/roles/<uuid:role_id>/access",RoleAccessAPIView.as_view(),name="role-access") ,
 
    path( "rbac/modules/<uuid:module_id>/permissions",ModulePermissionsAPIView.as_view(),name="module-permissions"),
+
+    # ====================================
+    # Organization APIs
+    # ====================================
+
+    path("organizations",OrganizationListAPIView.as_view(),name="organization-list",),
+
+    path("organizations/create",CreateOrganizationAPIView.as_view(),name="organization-create",),
+
+    path("organizations/<uuid:organization_id>",UpdateOrganizationAPIView.as_view(),name="organization-update",),
+
+    # ====================================
+    # School APIs
+    # ====================================
+
+    path("schools",SchoolListAPIView.as_view(),name="school-list",),
+
+    path("schools/create",CreateSchoolAPIView.as_view(),name="school-create",),
+
+    path("schools/<uuid:school_id>", UpdateSchoolAPIView.as_view(),name="school-update",),
+
+    # ====================================
+    # Branch APIs
+    # ====================================
+
+    path( "branches",BranchListAPIView.as_view(),name="branch-list",),
+
+    path("branches/create",CreateBranchAPIView.as_view(),name="branch-create",),
+
+    path("branches/<uuid:branch_id>",UpdateBranchAPIView.as_view(),name="branch-update",),
 
 
 

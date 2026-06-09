@@ -1,14 +1,26 @@
 from django.core.cache import cache
+from django.db.models import Q
+from rest_framework.exceptions import PermissionDenied
 
 from apps.core.models import (
-    UserRoles,
     UserPermissions,
+    UserRoles,
 )
+from shared.enums.roles import RolesEnum
 
 CACHE_TIMEOUT = 300
 
 
 def get_user_roles(user, school_id=None):
+    """
+    Returns all roles assigned to the user.
+
+    school_id=None:
+        Returns GLOBAL roles only.
+
+    school_id=<id>:
+        Returns GLOBAL roles + School specific roles.
+    """
 
     cache_key = f"user_roles:{user.id}:{school_id}"
 
@@ -22,14 +34,19 @@ def get_user_roles(user, school_id=None):
 
         if school_id:
             queryset = queryset.filter(
-                school_id=school_id
+                Q(school_id=school_id)
+                | Q(school__isnull=True)
+            )
+        else:
+            queryset = queryset.filter(
+                school__isnull=True
             )
 
         roles = list(
             queryset.values_list(
                 "role__role_name",
                 flat=True,
-            )
+            ).distinct()
         )
 
         cache.set(
@@ -41,7 +58,11 @@ def get_user_roles(user, school_id=None):
     return roles
 
 
-def has_role(user, role_name, school_id=None):
+def has_role(
+    user,
+    role_name,
+    school_id=None,
+):
 
     return role_name in get_user_roles(
         user=user,
@@ -49,9 +70,27 @@ def has_role(user, role_name, school_id=None):
     )
 
 
-def get_user_permissions(user, school_id=None):
+def get_user_permissions(
+    user,
+    school_id=None,
+):
+    """
+    Returns all permissions assigned to the user.
 
-    cache_key = f"user_permissions:{user.id}:{school_id}"
+    Includes:
+    - Role permissions
+    - Direct permissions
+
+    school_id=None:
+        GLOBAL permissions only.
+
+    school_id=<id>:
+        GLOBAL permissions + School permissions.
+    """
+
+    cache_key = (
+        f"user_permissions:{user.id}:{school_id}"
+    )
 
     permissions = cache.get(cache_key)
 
@@ -66,22 +105,39 @@ def get_user_permissions(user, school_id=None):
         )
 
         if school_id:
+
             role_queryset = role_queryset.filter(
-                school_id=school_id,
+                Q(school_id=school_id)
+                | Q(school__isnull=True)
             )
 
             direct_queryset = direct_queryset.filter(
-                school_id=school_id,
+                Q(school_id=school_id)
+                | Q(school__isnull=True)
             )
 
-        role_permissions = role_queryset.values_list(
-            "role__role_permissions_for_role__permission__permission_name",
-            flat=True,
+        else:
+
+            role_queryset = role_queryset.filter(
+                school__isnull=True
+            )
+
+            direct_queryset = direct_queryset.filter(
+                school__isnull=True
+            )
+
+        role_permissions = (
+            role_queryset.values_list(
+                "role__role_permissions_for_role__permission__permission_name",
+                flat=True,
+            )
         )
 
-        direct_permissions = direct_queryset.values_list(
-            "permission__permission_name",
-            flat=True,
+        direct_permissions = (
+            direct_queryset.values_list(
+                "permission__permission_name",
+                flat=True,
+            )
         )
 
         permissions = list(
@@ -100,15 +156,64 @@ def get_user_permissions(user, school_id=None):
     return permissions
 
 
-def has_permission(user, permission_name, school_id=None):
+def has_permission(
+    user,
+    permission_name,
+    school_id=None,
+):
+    """
+    Returns True if user has permission.
 
-    return permission_name in get_user_permissions(
+    SUPERADMIN bypasses all permission checks.
+    """
+
+    if has_role(
+        user=user,
+        role_name=RolesEnum.SUPERADMIN,
+        school_id=None,
+    ):
+        return True
+
+    permissions = get_user_permissions(
         user=user,
         school_id=school_id,
     )
 
+    return permission_name in permissions
 
-def clear_user_access_cache(user, school_id=None):
+
+def check_permission(
+    request,
+    permission_name,
+    school_id=None,
+):
+    """
+    Raise PermissionDenied if permission is missing.
+    """
+
+    if not has_permission(
+        request.user,
+        permission_name,
+        school_id,
+    ):
+        raise PermissionDenied(
+            detail="You don't have permission to perform this action."
+        )
+
+
+def clear_user_access_cache(
+    user,
+    school_id=None,
+):
+    """
+    Clear RBAC cache.
+
+    Call after:
+    - Role assignment
+    - Role removal
+    - Permission assignment
+    - Permission removal
+    """
 
     cache.delete(
         f"user_roles:{user.id}:{school_id}"

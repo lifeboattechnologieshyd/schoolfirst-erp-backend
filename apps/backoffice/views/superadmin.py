@@ -7,6 +7,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.backoffice.views.leads import normalize_email, normalize_mobile
 from apps.core.models import UserRoles, Roles, Permissions, RolePermissions, UserOTP, UserMaster
 from apps.school.models import SchoolLead
+from apps.school.models.school import Organization, School, Branch
+from shared.enums.roles import RolesEnum
+from shared.helpers.rbac import check_permission
 from shared.mixins import CustomResponse
 
 from django.contrib.auth.models import Group, Permission
@@ -16,6 +19,9 @@ from rest_framework.views import APIView
 from rest_framework import status
 
 from django.shortcuts import get_object_or_404
+
+from shared.permissions import HasPermission
+
 
 class CreateSuperAdminAPIView(APIView):
 
@@ -373,4 +379,505 @@ class SchoolLeadUpdateAPIView(APIView):
 
             status=status.HTTP_200_OK,
 
+        )
+
+
+
+# ===========================
+# CREATE ORGANIZATION
+# ===========================
+
+class CreateOrganizationAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "organization.create"
+
+    def post(self, request):
+
+        check_permission(
+            request=request,
+            permission_name="organization.create",
+            school_id=None,
+        )
+
+        organization = Organization.objects.create(
+            name=request.data.get("name"),
+            code=request.data.get("code"),
+            email=request.data.get("email"),
+            phone_number=request.data.get("phone_number"),
+            address=request.data.get("address"),
+            website=request.data.get("website"),
+            logo=request.data.get("logo"),
+            status=request.data.get(
+                "status",
+                Organization.Status.ACTIVE,
+            ),
+        )
+
+        return CustomResponse.successResponse(
+            description="Organization created successfully",
+            data={
+                "id": organization.id,
+            },
+        )
+
+
+# ===========================
+# ORGANIZATION LIST
+# ===========================
+
+class OrganizationListAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "organization.view"
+
+    def get(self, request):
+
+        check_permission(
+            request,
+            "organization.view",
+            None,
+        )
+
+        queryset = Organization.objects.all()
+
+        search = request.GET.get("search")
+
+        if search:
+            queryset = queryset.filter(
+                name__icontains=search
+            )
+
+        data = []
+
+        for obj in queryset:
+
+            data.append({
+                "id": obj.id,
+                "name": obj.name,
+                "code": obj.code,
+                "email": obj.email,
+                "status": obj.status,
+            })
+
+        return CustomResponse.successResponse(
+            data=data
+        )
+
+
+# ===========================
+# UPDATE ORGANIZATION
+# ===========================
+
+class UpdateOrganizationAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "organization.update"
+
+    def put(
+        self,
+        request,
+        organization_id,
+    ):
+
+        check_permission(
+            request,
+            "organization.update",
+            None,
+        )
+
+        organization = Organization.objects.filter(
+            id=organization_id
+        ).first()
+
+        if not organization:
+            return CustomResponse.errorResponse(
+                description="Organization not found"
+            )
+
+        organization.name = request.data.get(
+            "name",
+            organization.name,
+        )
+
+        organization.address = request.data.get(
+            "address",
+            organization.address,
+        )
+
+        organization.website = request.data.get(
+            "website",
+            organization.website,
+        )
+
+        organization.logo = request.data.get(
+            "logo",
+            organization.logo,
+        )
+
+        organization.status = request.data.get(
+            "status",
+            organization.status,
+        )
+
+        organization.save()
+
+        return CustomResponse.successResponse(
+            description="Organization updated successfully"
+        )
+
+
+# ===========================
+# CREATE SCHOOL
+# ===========================
+
+class CreateSchoolAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "school.create"
+
+    def post(self, request):
+
+        organization = Organization.objects.filter(
+            id=request.data.get(
+                "organization_id"
+            )
+        ).first()
+
+        if not organization:
+            return CustomResponse.errorResponse(
+                description="Organization not found"
+            )
+
+        school = School.objects.create(
+            organization=organization,
+            name=request.data.get("name"),
+            code=request.data.get("code"),
+            board=request.data.get("board"),
+            email=request.data.get("email"),
+            phone_number=request.data.get("phone_number"),
+            address=request.data.get("address"),
+            city=request.data.get("city"),
+            state=request.data.get("state"),
+            country=request.data.get(
+                "country",
+                "India",
+            ),
+        )
+
+        check_permission(
+            request,
+            "school.create",
+            school.id,
+        )
+
+        return CustomResponse.successResponse(
+            description="School created successfully",
+            data={
+                "id": school.id,
+            },
+        )
+
+
+# ===========================
+# SCHOOL LIST
+# ===========================
+
+class SchoolListAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "school.view"
+
+    def get(self, request):
+
+        school_id = request.GET.get(
+            "school_id"
+        )
+
+        check_permission(
+            request,
+            "school.view",
+            school_id,
+        )
+
+        queryset = School.objects.all()
+
+        data = []
+
+        for obj in queryset:
+
+            data.append({
+                "id": obj.id,
+                "name": obj.name,
+                "code": obj.code,
+            })
+
+        return CustomResponse.successResponse(
+            data=data
+        )
+
+
+# ===========================
+# UPDATE SCHOOL
+# ===========================
+
+class UpdateSchoolAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "school.update"
+
+    def put(
+        self,
+        request,
+        school_id,
+    ):
+
+        school = School.objects.filter(
+            id=school_id
+        ).first()
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School not found"
+            )
+
+        check_permission(
+            request,
+            "school.update",
+            school.id,
+        )
+
+        school.name = request.data.get(
+            "name",
+            school.name,
+        )
+
+        school.address = request.data.get(
+            "address",
+            school.address,
+        )
+
+        school.city = request.data.get(
+            "city",
+            school.city,
+        )
+
+        school.state = request.data.get(
+            "state",
+            school.state,
+        )
+
+        school.status = request.data.get(
+            "status",
+            school.status,
+        )
+
+        school.save()
+
+        return CustomResponse.successResponse(
+            description="School updated successfully"
+        )
+
+
+# ===========================
+# CREATE BRANCH
+# ===========================
+
+class CreateBranchAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "branch.create"
+
+    def post(self, request):
+
+        school = School.objects.filter(
+            id=request.data.get(
+                "school_id"
+            )
+        ).first()
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School not found"
+            )
+
+        check_permission(
+            request,
+            "branch.create",
+            school.id,
+        )
+
+        branch = Branch.objects.create(
+            school=school,
+            name=request.data.get("name"),
+            code=request.data.get("code"),
+            email=request.data.get("email"),
+            phone_number=request.data.get(
+                "phone_number"
+            ),
+            address=request.data.get(
+                "address"
+            ),
+            city=request.data.get("city"),
+            state=request.data.get("state"),
+        )
+
+        return CustomResponse.successResponse(
+            description="Branch created successfully",
+            data={
+                "id": branch.id,
+            },
+        )
+# ===========================
+#  BRANCH LIST
+# ===========================
+
+
+class BranchListAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "branch.view"
+
+    def get(self, request):
+
+        school_id = request.GET.get("school_id")
+
+        check_permission(
+            request=request,
+            permission_name="branch.view",
+            school_id=school_id,
+        )
+
+        queryset = Branch.objects.all()
+
+        if school_id:
+            queryset = queryset.filter(
+                school_id=school_id,
+            )
+
+        search = request.GET.get("search")
+
+        if search:
+            queryset = queryset.filter(
+                name__icontains=search,
+            )
+
+        data = []
+
+        for branch in queryset:
+
+            data.append({
+                "id": branch.id,
+                "school_id": branch.school_id,
+                "school_name": branch.school.name,
+                "name": branch.name,
+                "code": branch.code,
+                "email": branch.email,
+                "phone_number": branch.phone_number,
+                "city": branch.city,
+                "state": branch.state,
+                "status": branch.status,
+            })
+
+        return CustomResponse.successResponse(
+            description="Branch list fetched successfully",
+            data=data,
+        )
+
+
+# ===========================
+# UPDATE BRANCH
+# ===========================
+
+class UpdateBranchAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "branch.update"
+
+    def put(
+        self,
+        request,
+        branch_id,
+    ):
+
+        branch = Branch.objects.filter(
+            id=branch_id
+        ).first()
+
+        if not branch:
+            return CustomResponse.errorResponse(
+                description="Branch not found"
+            )
+
+        check_permission(
+            request,
+            "branch.update",
+            branch.school_id,
+        )
+
+        branch.name = request.data.get(
+            "name",
+            branch.name,
+        )
+
+        branch.address = request.data.get(
+            "address",
+            branch.address,
+        )
+
+        branch.city = request.data.get(
+            "city",
+            branch.city,
+        )
+
+        branch.state = request.data.get(
+            "state",
+            branch.state,
+        )
+
+        branch.status = request.data.get(
+            "status",
+            branch.status,
+        )
+
+        branch.save()
+
+        return CustomResponse.successResponse(
+            description="Branch updated successfully"
         )
