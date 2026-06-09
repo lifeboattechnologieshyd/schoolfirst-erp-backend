@@ -24,7 +24,7 @@ class Organization(AuditModel):
 
     address = models.TextField(blank=True,null=True,)
 
-    website = models.CharField(max_length=20,null=True,)
+    website = models.CharField(max_length=30,null=True,)
 
     logo = models.CharField(max_length=300,null=True,)
 
@@ -202,7 +202,7 @@ class School(AuditModel):
 
     pincode = models.CharField(max_length=20,blank=True,null=True,)
 
-    website = models.CharField(max_length=20,null=True,)
+    website = models.CharField(max_length=30,null=True,)
 
     logo = models.CharField(max_length=300,blank=True,null=True)
 
