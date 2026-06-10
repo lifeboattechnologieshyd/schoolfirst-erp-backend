@@ -704,6 +704,26 @@ class UpdateSchoolAPIView(APIView):
 
 
 # ===========================
+# DELETE SCHOOL
+# ===========================
+class DeleteSchoolAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self,request,school_id,):
+
+        check_permission(request=request,permission_name="school.delete",)
+
+        school = School.objects.filter(id=school_id).first()
+        if not school:
+            return CustomResponse.errorResponse(description="School not found.",)
+
+        school.soft_delete(request.user)
+
+        return CustomResponse.successResponse(description="School deleted successfully.",)
+
+
+# ===========================
 # CREATE BRANCH
 # ===========================
 

@@ -2,7 +2,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.school.models import School
-from apps.school.models.school import AcademicYear
+from apps.school.models.school import AcademicYear, Grade, Section
 from shared.helpers.rbac import check_permission
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
@@ -163,4 +163,251 @@ class UpdateAcademicYearAPIView(APIView):
 
         return CustomResponse.successResponse(
             description="Academic year updated successfully",
+        )
+
+
+class CreateGradeAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        check_permission(
+            request=request,
+            permission_name="grade.create",
+        )
+
+        academic_year = AcademicYear.objects.filter(
+            id=request.data.get("academic_year_id"),
+        ).first()
+
+        if academic_year is None:
+            return CustomResponse.errorResponse(
+                description="Academic Year not found.",
+            )
+
+        if Grade.objects.filter(
+            academic_year=academic_year,
+            name=request.data.get("name"),
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="Grade already exists.",
+            )
+
+        grade = Grade.objects.create(
+            academic_year=academic_year,
+            name=request.data.get("name"),
+            code=request.data.get("code"),
+            status=request.data.get(
+                "status",
+                Grade.Status.ACTIVE,
+            ),
+        )
+
+        return CustomResponse.successResponse(
+            description="Grade created successfully.",
+            data={
+                "id": str(grade.id),
+            },
+        )
+
+class GradeListAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        check_permission(
+            request=request,
+            permission_name="grade.view",
+        )
+
+        grades = Grade.objects.select_related(
+            "academic_year",
+        ).all()
+
+        data = []
+
+        for grade in grades:
+            data.append(
+                {
+                    "id": grade.id,
+                    "name": grade.name,
+                    "code": grade.code,
+                    "academic_year": grade.academic_year.name,
+                    "status": grade.status,
+                }
+            )
+
+        return CustomResponse.successResponse(
+            data=data,
+        )
+
+
+class UpdateGradeAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def put(
+        self,
+        request,
+        grade_id,
+    ):
+
+        check_permission(
+            request=request,
+            permission_name="grade.update",
+        )
+
+        grade = Grade.objects.filter(
+            id=grade_id,
+        ).first()
+
+        if grade is None:
+            return CustomResponse.errorResponse(
+                description="Grade not found.",
+            )
+
+        grade.name = request.data.get(
+            "name",
+            grade.name,
+        )
+
+        grade.code = request.data.get(
+            "code",
+            grade.code,
+        )
+
+        grade.status = request.data.get(
+            "status",
+            grade.status,
+        )
+
+        grade.save()
+
+        return CustomResponse.successResponse(
+            description="Grade updated successfully.",
+        )
+
+class CreateSectionAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        check_permission(
+            request=request,
+            permission_name="section.create",
+        )
+
+        grade = Grade.objects.filter(
+            id=request.data.get("grade_id"),
+        ).first()
+
+        if grade is None:
+            return CustomResponse.errorResponse(
+                description="Grade not found.",
+            )
+
+        if Section.objects.filter(
+            grade=grade,
+            name=request.data.get("name"),
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="Section already exists.",
+            )
+
+        section = Section.objects.create(
+            grade=grade,
+            name=request.data.get("name"),
+            capacity=request.data.get("capacity"),
+            status=request.data.get(
+                "status",
+                Section.Status.ACTIVE,
+            ),
+        )
+
+        return CustomResponse.successResponse(
+            description="Section created successfully.",
+            data={
+                "id": str(section.id),
+            },
+        )
+
+class SectionListAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        check_permission(
+            request=request,
+            permission_name="section.view",
+        )
+
+        sections = Section.objects.select_related(
+            "grade",
+        ).all()
+
+        data = []
+
+        for section in sections:
+
+            data.append(
+                {
+                    "id": section.id,
+                    "name": section.name,
+                    "grade": section.grade.name,
+                    "capacity": section.capacity,
+                    "status": section.status,
+                }
+            )
+
+        return CustomResponse.successResponse(
+            data=data,
+        )
+
+class UpdateSectionAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def put(
+        self,
+        request,
+        section_id,
+    ):
+
+        check_permission(
+            request=request,
+            permission_name="section.update",
+        )
+
+        section = Section.objects.filter(
+            id=section_id,
+        ).first()
+
+        if section is None:
+            return CustomResponse.errorResponse(
+                description="Section not found.",
+            )
+
+        section.name = request.data.get(
+            "name",
+            section.name,
+        )
+
+        section.capacity = request.data.get(
+            "capacity",
+            section.capacity,
+        )
+
+        section.status = request.data.get(
+            "status",
+            section.status,
+        )
+
+        section.save()
+
+        return CustomResponse.successResponse(
+            description="Section updated successfully.",
         )

@@ -5,7 +5,9 @@ from apps.backoffice.views.leads import \
 from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCreateAPIView, RoleListCreateAPIView, \
     AssignPermissionsToRoleAPIView, AssignRoleToUserAPIView, RBACDashboardAPIView, UserAccessAPIView, ModulesAPIView, \
     ModulePermissionsAPIView, RolesAPIView, RoleAccessAPIView
-from apps.backoffice.views.school import AcademicYearListAPIView, CreateAcademicYearAPIView, UpdateAcademicYearAPIView
+from apps.backoffice.views.school import AcademicYearListAPIView, CreateAcademicYearAPIView, UpdateAcademicYearAPIView, \
+    CreateGradeAPIView, GradeListAPIView, UpdateGradeAPIView, CreateSectionAPIView, SectionListAPIView, \
+    UpdateSectionAPIView
 from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdminRequestOTPAPIView, \
     SuperAdminVerifyOTPAPIView, SchoolLeadUpdateAPIView, OrganizationListAPIView, CreateOrganizationAPIView, \
     UpdateOrganizationAPIView, SchoolListAPIView, CreateSchoolAPIView, UpdateSchoolAPIView, CreateBranchAPIView, \
@@ -93,6 +95,26 @@ urlpatterns = [
     path("academic-years/create",CreateAcademicYearAPIView.as_view(),name="academic-year-create",),
 
     path("academic-years/<uuid:academic_year_id>",UpdateAcademicYearAPIView.as_view(),name="academic-year-update",),
+
+    # ====================================
+    # Grade  APIs
+    # ====================================
+
+    path("grades",CreateGradeAPIView.as_view()),
+
+    path("grades/list",GradeListAPIView.as_view(),),
+
+    path("grades/<uuid:grade_id>",UpdateGradeAPIView.as_view(),),
+
+    # ====================================
+    #  Section APIs
+    # ====================================
+
+    path("sections",CreateSectionAPIView.as_view(),),
+
+    path("sections/list",SectionListAPIView.as_view()),
+
+    path("sections/<uuid:section_id>",UpdateSectionAPIView.as_view(),),
 
 
 
