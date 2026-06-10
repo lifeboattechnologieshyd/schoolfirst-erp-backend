@@ -2,7 +2,7 @@ from typing import Any, cast
 
 from crum import get_current_request
 from django.db import models
-
+from django.utils import timezone
 
 class TimeAuditModel(models.Model):
     created_at = models.DateTimeField(
@@ -26,8 +26,22 @@ class UserAuditModel(models.Model):
     class Meta:
         abstract = True
 
+class DeleteAuditModel(models.Model):
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.CharField(max_length=255, null=True, blank=True)
+    class Meta:
+        abstract = True
 
-class AuditModel(TimeAuditModel, UserAuditModel):
+    def soft_delete(self, user):
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.deleted_by = str(user.id)
+        self.save(
+            update_fields=["is_deleted","deleted_at","deleted_by",]
+        )
+
+class AuditModel(TimeAuditModel, UserAuditModel, DeleteAuditModel):
     class Meta:
         abstract = True
 
