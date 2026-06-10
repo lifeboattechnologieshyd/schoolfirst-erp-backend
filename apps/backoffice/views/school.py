@@ -242,7 +242,6 @@ class GradeListAPIView(APIView):
                     "school": grade.school.name,
                     "academic_year": grade.academic_year.name,
                     "name": grade.name,
-                    "code": grade.code,
                     "display_order": grade.display_order,
                     "status": grade.status,
                 }
@@ -278,6 +277,10 @@ class UpdateGradeAPIView(APIView):
         grade.name = request.data.get(
             "name",
             grade.name,
+        )
+        grade.display_order = request.data.get(
+            "display_order",
+            grade.display_order,
         )
 
 
