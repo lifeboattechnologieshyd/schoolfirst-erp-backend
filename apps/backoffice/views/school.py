@@ -228,17 +228,22 @@ class GradeListAPIView(APIView):
         )
 
         grades = Grade.objects.select_related(
+            "school",
             "academic_year",
         ).all()
 
         data = []
 
         for grade in grades:
+
             data.append(
                 {
                     "id": grade.id,
-                    "name": grade.name,
+                    "school": grade.school.name,
                     "academic_year": grade.academic_year.name,
+                    "name": grade.name,
+                    "code": grade.code,
+                    "display_order": grade.display_order,
                     "status": grade.status,
                 }
             )
@@ -246,8 +251,6 @@ class GradeListAPIView(APIView):
         return CustomResponse.successResponse(
             data=data,
         )
-
-
 class UpdateGradeAPIView(APIView):
 
     permission_classes = [IsAuthenticated]
