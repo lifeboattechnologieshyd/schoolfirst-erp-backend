@@ -100,9 +100,9 @@ urlpatterns = [
     # Grade  APIs
     # ====================================
 
-    path("grades",CreateGradeAPIView.as_view()),
+    path("grades/create",CreateGradeAPIView.as_view()),
 
-    path("grades/list",GradeListAPIView.as_view(),),
+    path("grades",GradeListAPIView.as_view(),),
 
     path("grades/<uuid:grade_id>",UpdateGradeAPIView.as_view(),),
 
@@ -110,9 +110,9 @@ urlpatterns = [
     #  Section APIs
     # ====================================
 
-    path("sections",CreateSectionAPIView.as_view(),),
+    path("sections/create",CreateSectionAPIView.as_view(),),
 
-    path("sections/list",SectionListAPIView.as_view()),
+    path("sections",SectionListAPIView.as_view()),
 
     path("sections/<uuid:section_id>",UpdateSectionAPIView.as_view(),),
 
