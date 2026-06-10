@@ -203,6 +203,7 @@ class CreateGradeAPIView(APIView):
             school=school,
             academic_year=academic_year,
             name=request.data.get("name"),
+            display_order = request.data.get("display_order"),
             status=request.data.get(
                 "status",
                 Grade.Status.ACTIVE,
