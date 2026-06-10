@@ -197,7 +197,6 @@ class CreateGradeAPIView(APIView):
         grade = Grade.objects.create(
             academic_year=academic_year,
             name=request.data.get("name"),
-            code=request.data.get("code"),
             status=request.data.get(
                 "status",
                 Grade.Status.ACTIVE,
@@ -233,7 +232,6 @@ class GradeListAPIView(APIView):
                 {
                     "id": grade.id,
                     "name": grade.name,
-                    "code": grade.code,
                     "academic_year": grade.academic_year.name,
                     "status": grade.status,
                 }
@@ -273,10 +271,7 @@ class UpdateGradeAPIView(APIView):
             grade.name,
         )
 
-        grade.code = request.data.get(
-            "code",
-            grade.code,
-        )
+
 
         grade.status = request.data.get(
             "status",
