@@ -332,3 +332,85 @@ class AcademicYear(AuditModel):
     def __str__(self):
 
         return f"{self.school.name} - {self.name}"
+
+
+
+class Grade(AuditModel):
+
+    class Status(models.TextChoices):
+
+        ACTIVE = "ACTIVE", "Active"
+
+        INACTIVE = "INACTIVE", "Inactive"
+
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False,)
+
+    school = models.ForeignKey("school.School",on_delete=models.CASCADE,related_name="grades",)
+
+    academic_year = models.ForeignKey("school.AcademicYear",on_delete=models.CASCADE,related_name="grades",)
+
+    name = models.CharField(max_length=50,)
+
+    display_order = models.PositiveIntegerField(default=1,)
+
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE,)
+
+    class Meta:
+
+        db_table = "grades"
+
+        constraints = [
+
+            models.UniqueConstraint(
+
+                fields=["school","academic_year","name", ],
+
+                name="unique_grade_per_school",
+
+            )
+
+        ]
+
+    def __str__(self):
+
+        return self.name
+
+class Section(AuditModel):
+
+    class Status(models.TextChoices):
+
+        ACTIVE = "ACTIVE", "Active"
+
+        INACTIVE = "INACTIVE", "Inactive"
+
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False,)
+
+    grade = models.ForeignKey(Grade,on_delete=models.CASCADE,related_name="sections",)
+
+    name = models.CharField(max_length=30,)
+
+    # class_teacher = models.ForeignKey("staff.Staff", on_delete=models.SET_NULL,null=True,blank=True,related_name="class_teacher_sections",)
+
+    capacity = models.PositiveIntegerField(default=40,)
+
+    status = models.CharField(max_length=20,choices=Status.choices,default=Status.ACTIVE,)
+
+    class Meta:
+
+        db_table = "sections"
+
+        constraints = [
+
+            models.UniqueConstraint(
+
+                fields=["grade","name",],
+
+                name="unique_section_per_grade",
+
+            )
+
+        ]
+
+    def __str__(self):
+
+        return f"{self.grade.name}-{self.name}"
