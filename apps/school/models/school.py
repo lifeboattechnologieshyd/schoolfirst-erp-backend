@@ -4,9 +4,13 @@ import uuid
 
 from django.db import models
 
+from shared.managers import SoftDeleteManager
 from shared.mixins.base_model import AuditModel
 
 class Organization(AuditModel):
+    objects = SoftDeleteManager()
+
+    all_objects = models.Manager()
 
     class Status(models.TextChoices):
 
@@ -151,6 +155,9 @@ class Organization(AuditModel):
 #         return f"{self.name} ({self.code})"
 
 class School(AuditModel):
+    objects = SoftDeleteManager()
+
+    all_objects = models.Manager()
 
     class BoardType(models.TextChoices):
 
@@ -233,6 +240,9 @@ class School(AuditModel):
 
 
 class Branch(AuditModel):
+    objects = SoftDeleteManager()
+
+    all_objects = models.Manager()
 
     class Status(models.TextChoices):
 
@@ -286,6 +296,9 @@ class Branch(AuditModel):
 
 
 class AcademicYear(AuditModel):
+    objects = SoftDeleteManager()
+
+    all_objects = models.Manager()
 
     class Status(models.TextChoices):
 
@@ -336,6 +349,9 @@ class AcademicYear(AuditModel):
 
 
 class Grade(AuditModel):
+    objects = SoftDeleteManager()
+
+    all_objects = models.Manager()
 
     class Status(models.TextChoices):
 
@@ -376,6 +392,9 @@ class Grade(AuditModel):
         return self.name
 
 class Section(AuditModel):
+    objects = SoftDeleteManager()
+
+    all_objects = models.Manager()
 
     class Status(models.TextChoices):
 
