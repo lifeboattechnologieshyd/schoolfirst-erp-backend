@@ -167,15 +167,13 @@ class UpdateAcademicYearAPIView(APIView):
 
 
 class CreateGradeAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
 
-    permission_classes = [IsAuthenticated]
+    required_permission = "grade.create",
 
     def post(self, request):
 
-        check_permission(
-            request=request,
-            permission_name="grade.create",
-        )
+
         school = School.objects.filter(
 
             id=request.data.get("school_id"),
@@ -218,15 +216,13 @@ class CreateGradeAPIView(APIView):
         )
 
 class GradeListAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
 
-    permission_classes = [IsAuthenticated]
+    required_permission = "grade.view",
 
     def get(self, request):
 
-        check_permission(
-            request=request,
-            permission_name="grade.view",
-        )
+
 
         grades = Grade.objects.select_related(
             "school",
@@ -253,7 +249,8 @@ class GradeListAPIView(APIView):
         )
 class UpdateGradeAPIView(APIView):
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "grade.update",
 
     def put(
         self,
@@ -261,10 +258,7 @@ class UpdateGradeAPIView(APIView):
         grade_id,
     ):
 
-        check_permission(
-            request=request,
-            permission_name="grade.update",
-        )
+
 
         grade = Grade.objects.filter(
             id=grade_id,
@@ -299,14 +293,12 @@ class UpdateGradeAPIView(APIView):
 
 class CreateSectionAPIView(APIView):
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "section.create",
 
     def post(self, request):
 
-        check_permission(
-            request=request,
-            permission_name="section.create",
-        )
+
 
         grade = Grade.objects.filter(
             id=request.data.get("grade_id"),
@@ -344,14 +336,12 @@ class CreateSectionAPIView(APIView):
 
 class SectionListAPIView(APIView):
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "section.list",
 
     def get(self, request):
 
-        check_permission(
-            request=request,
-            permission_name="section.view",
-        )
+
 
         sections = Section.objects.select_related(
             "grade",
@@ -377,7 +367,8 @@ class SectionListAPIView(APIView):
 
 class UpdateSectionAPIView(APIView):
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,HasPermission]
+    required_permission = "section.update",
 
     def put(
         self,
@@ -385,10 +376,7 @@ class UpdateSectionAPIView(APIView):
         section_id,
     ):
 
-        check_permission(
-            request=request,
-            permission_name="section.update",
-        )
+
 
         section = Section.objects.filter(
             id=section_id,
