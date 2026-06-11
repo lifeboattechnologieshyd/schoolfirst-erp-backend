@@ -432,82 +432,69 @@ class CreateStudentAPIView(APIView):
     required_permission = "student.create"
 
     def post(self, request):
+        print("=" * 80)
+
+        print("Create Student API Called")
+
+        print(request.data)
 
         school = School.objects.filter(
+
             id=request.data.get("school_id"),
+
         ).first()
 
-        if school is None:
-            return CustomResponse.errorResponse(
-                description="School not found.",
-            )
+        print("School :", school)
 
         academic_year = AcademicYear.objects.filter(
+
             id=request.data.get("academic_year_id"),
+
         ).first()
 
-        if academic_year is None:
-            return CustomResponse.errorResponse(
-                description="Academic year not found.",
-            )
+        print("Academic Year :", academic_year)
 
         grade = Grade.objects.filter(
+
             id=request.data.get("grade_id"),
+
         ).first()
 
-        if grade is None:
-            return CustomResponse.errorResponse(
-                description="Grade not found.",
-            )
+        print("Grade :", grade)
 
         section = Section.objects.filter(
+
             id=request.data.get("section_id"),
+
         ).first()
 
-        if section is None:
-            return CustomResponse.errorResponse(
-                description="Section not found.",
-            )
+        print("Section :", section)
 
-        if Student.objects.filter(
-            school=school,
-            admission_number=request.data.get(
-                "admission_number",
-            ),
-        ).exists():
-
-            return CustomResponse.errorResponse(
-                description="Admission number already exists.",
-            )
-
-        if Student.objects.filter(
-            section=section,
-            roll_number=request.data.get(
-                "roll_number",
-            ),
-        ).exists():
-
-            return CustomResponse.errorResponse(
-                description="Roll number already exists.",
-            )
+        print("Creating Father...")
 
         father = get_or_create_parent(
-            request.data.get(
-                "father_mobile",
-            ),
+
+            request.data.get("father_mobile"),
+
         )
+
+        print("Creating Mother...")
 
         mother = get_or_create_parent(
-            request.data.get(
-                "mother_mobile",
-            ),
+
+            request.data.get("mother_mobile"),
+
         )
 
+        print("Creating Guardian...")
+
         guardian = get_or_create_parent(
-            request.data.get(
-                "guardian_mobile",
-            ),
+
+            request.data.get("guardian_mobile"),
+
         )
+
+        print("Creating Student...")
 
         student = Student.objects.create(
 
@@ -570,6 +557,9 @@ class CreateStudentAPIView(APIView):
                 Student.Status.ACTIVE,
             ),
         )
+        print("Student Created :", student.id)
+
+        print("=" * 80)
 
         return CustomResponse.successResponse(
 
