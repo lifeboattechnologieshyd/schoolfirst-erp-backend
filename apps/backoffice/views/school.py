@@ -493,6 +493,24 @@ class CreateStudentAPIView(APIView):
             request.data.get("guardian_mobile"),
 
         )
+        if Student.objects.filter(
+                school=school,
+                admission_number=request.data.get(
+                    "admission_number",
+                ),
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="Admission number already exists.",
+            )
+        if Student.objects.filter(
+                section=section,
+                roll_number=request.data.get(
+                    "roll_number",
+                ),
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="Roll number already exists in this section.",
+            )
 
         print("Creating Student...")
 
