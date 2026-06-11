@@ -10,40 +10,45 @@ def get_or_create_parent(mobile_number):
     print("Mobile Number :", mobile_number)
 
     if not mobile_number:
-        print("Mobile number is empty.")
+        print("No mobile number")
         return None
 
     mobile_number = str(mobile_number).strip()
+
+    print("Searching UserMaster...")
 
     user = UserMaster.objects.filter(
         mobile_number=mobile_number,
     ).first()
 
-    if user:
+    print("User :", user)
 
-        print("Existing user found :", user.id)
+    if user is None:
 
-    else:
-
-        print("Creating new parent user...")
+        print("Creating UserMaster...")
 
         user = UserMaster.objects.create(
             username=mobile_number,
             mobile_number=mobile_number,
         )
 
-        print("Parent user created :", user.id)
+        print("User created :", user.id)
 
-    parent_role = Roles.objects.get(
+    print("Getting Parent Role...")
+
+    parent_role = Roles.objects.filter(
         role_name=RolesEnum.PARENT,
-    )
+    ).first()
+
+    print("Parent Role :", parent_role)
+
+    print("Creating UserRole...")
 
     UserRoles.objects.get_or_create(
         user=user,
         role=parent_role,
     )
 
-    print("Parent role assigned.")
-    print("=" * 50)
+    print("UserRole Created")
 
     return user
