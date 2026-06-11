@@ -3,38 +3,46 @@ from apps.core.models import Roles, UserRoles, UserMaster
 from shared.enums.roles import RolesEnum
 
 
-def get_or_create_parent(mobile_number):
+def get_or_create_parent(mobile):
 
-    print("=" * 50)
+    print("=" * 60)
     print("get_or_create_parent() called")
-    print("Mobile Number :", mobile_number)
+    print("Received Mobile :", mobile)
 
-    if not mobile_number:
-        print("No mobile number")
+    if not mobile:
+        print("Mobile number is empty.")
         return None
 
-    mobile_number = str(mobile_number).strip()
+    mobile = str(mobile).strip()
+
+    print("Mobile after strip :", mobile)
 
     print("Searching UserMaster...")
 
     user = UserMaster.objects.filter(
-        mobile_number=mobile_number,
+        mobile=mobile,
     ).first()
 
-    print("User :", user)
+    print("User Found :", user)
 
     if user is None:
 
+        print("User does not exist.")
         print("Creating UserMaster...")
 
         user = UserMaster.objects.create(
-            username=mobile_number,
-            mobile_number=mobile_number,
+            username=mobile,
+            mobile=mobile,
         )
 
-        print("User created :", user.id)
+        print("UserMaster Created Successfully.")
+        print("User ID :", user.id)
 
-    print("Getting Parent Role...")
+    else:
+
+        print("Existing User ID :", user.id)
+
+    print("Fetching Parent Role...")
 
     parent_role = Roles.objects.filter(
         role_name=RolesEnum.PARENT,
@@ -42,13 +50,32 @@ def get_or_create_parent(mobile_number):
 
     print("Parent Role :", parent_role)
 
-    print("Creating UserRole...")
+    if parent_role is None:
 
-    UserRoles.objects.get_or_create(
+        print("PARENT role not found in Roles table.")
+
+        raise Exception(
+            "PARENT role not found."
+        )
+
+    print("Assigning PARENT role...")
+
+    user_role, created = UserRoles.objects.get_or_create(
         user=user,
         role=parent_role,
     )
 
-    print("UserRole Created")
+    print("UserRole :", user_role)
+
+    if created:
+
+        print("PARENT role assigned successfully.")
+
+    else:
+
+        print("User already has PARENT role.")
+
+    print("Returning User :", user.id)
+    print("=" * 60)
 
     return user
