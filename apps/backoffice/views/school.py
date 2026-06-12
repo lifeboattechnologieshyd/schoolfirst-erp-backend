@@ -1254,6 +1254,74 @@ class StudentListAPIView(APIView):
 
         ).all()
 
+        school_id = request.query_params.get(
+            "school_id",
+        )
+
+        academic_year_id = request.query_params.get(
+            "academic_year_id",
+        )
+
+        grade_id = request.query_params.get(
+            "grade_id",
+        )
+
+        section_id = request.query_params.get(
+            "section_id",
+        )
+
+        status = request.query_params.get(
+            "status",
+        )
+
+        search = request.query_params.get(
+            "search",
+        )
+
+        if school_id:
+
+            students = students.filter(
+                school_id=school_id,
+            )
+
+        if academic_year_id:
+
+            students = students.filter(
+                academic_year_id=academic_year_id,
+            )
+
+        if grade_id:
+
+            students = students.filter(
+                grade_id=grade_id,
+            )
+
+        if section_id:
+
+            students = students.filter(
+                section_id=section_id,
+            )
+
+        if status:
+
+            students = students.filter(
+                status=status,
+            )
+
+        if search:
+
+            students = students.filter(
+
+                Q(
+                    name__icontains=search,
+                ) |
+
+                Q(
+                    admission_number__icontains=search,
+                )
+
+            )
+
         data = []
 
         for student in students:
@@ -1262,48 +1330,26 @@ class StudentListAPIView(APIView):
 
                 {
 
-                    "id": str(
-                        student.id,
-                    ),
+                    "id": str(student.id),
 
                     "school": {
-
-                        "id": str(
-                            student.school.id,
-                        ),
-
+                        "id": str(student.school.id),
                         "name": student.school.name,
-
                     },
 
                     "academic_year": {
-
-                        "id": str(
-                            student.academic_year.id,
-                        ),
-
+                        "id": str(student.academic_year.id),
                         "name": student.academic_year.name,
-
                     },
 
                     "grade": {
-
-                        "id": str(
-                            student.grade.id,
-                        ),
-
+                        "id": str(student.grade.id),
                         "name": student.grade.name,
-
                     },
 
                     "section": {
-
-                        "id": str(
-                            student.section.id,
-                        ),
-
+                        "id": str(student.section.id),
                         "name": student.section.name,
-
                     },
 
                     "admission_number": student.admission_number,
@@ -1314,33 +1360,13 @@ class StudentListAPIView(APIView):
 
                     "gender": student.gender,
 
-                    "date_of_birth": student.date_of_birth,
-
-                    "admission_date": student.admission_date,
-
                     "father_name": student.father_name,
 
                     "father_mobile": student.father_mobile,
 
-                    "father_occupation": student.father_occupation,
-
                     "mother_name": student.mother_name,
 
                     "mother_mobile": student.mother_mobile,
-
-                    "mother_occupation": student.mother_occupation,
-
-                    "guardian_name": student.guardian_name,
-
-                    "guardian_mobile": student.guardian_mobile,
-
-                    "guardian_occupation": student.guardian_occupation,
-
-                    "email": student.email,
-
-                    "address": student.address,
-
-                    "blood_group": student.blood_group,
 
                     "status": student.status,
 
@@ -1349,7 +1375,5 @@ class StudentListAPIView(APIView):
             )
 
         return CustomResponse.successResponse(
-
             data=data,
-
         )
