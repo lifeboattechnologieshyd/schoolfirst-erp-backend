@@ -62,6 +62,7 @@ class UserMaster(AbstractBaseUser):
     date_of_birth = models.DateField(null=True)
     gender = models.CharField(max_length=255, null=True)
     profile_image = models.CharField(max_length=500, null=True)
+    # occupation = models.CharField(max_length=100,blank=True,null=True)
     is_profile_updated = models.BooleanField(default=False, null=False)
     created_at = models.DateTimeField(auto_now_add=True, null=False)
 

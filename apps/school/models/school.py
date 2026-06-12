@@ -455,106 +455,53 @@ class Student(AuditModel):
 
         INACTIVE = "INACTIVE", "Inactive"
 
-    id = models.UUIDField(
-        primary_key=True,
-        default=uuid.uuid4,
-        editable=False,
-    )
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False,)
 
-    school = models.ForeignKey(
-        School,
-        on_delete=models.CASCADE,
-        related_name="students",
-    )
+    school = models.ForeignKey(School,on_delete=models.CASCADE,related_name="students",)
 
-    academic_year = models.ForeignKey(
-        AcademicYear,
-        on_delete=models.CASCADE,
-        related_name="students",
-    )
+    academic_year = models.ForeignKey(AcademicYear,on_delete=models.CASCADE,related_name="students",)
 
-    grade = models.ForeignKey(
-        Grade,
-        on_delete=models.CASCADE,
-        related_name="students",
-    )
+    grade = models.ForeignKey(Grade,on_delete=models.CASCADE,related_name="students",)
 
-    section = models.ForeignKey(
-        Section,
-        on_delete=models.CASCADE,
-        related_name="students",
-    )
+    section = models.ForeignKey(Section,on_delete=models.CASCADE,related_name="students",)
 
-    father = models.ForeignKey(
-        UserMaster,
-        on_delete=models.SET_NULL,
-        related_name="father_students",
-        null=True,
-        blank=True,
-    )
 
-    mother = models.ForeignKey(
-        UserMaster,
-        on_delete=models.SET_NULL,
-        related_name="mother_students",
-        null=True,
-        blank=True,
-    )
+    father_name = models.CharField(max_length=100,blank=True,null=True,)
 
-    guardian = models.ForeignKey(
-        UserMaster,
-        on_delete=models.SET_NULL,
-        related_name="guardian_students",
-        null=True,
-        blank=True,
-    )
+    father_mobile = models.CharField(max_length=20,blank=True,null=True,db_index=True,)
 
-    admission_number = models.CharField(
-        max_length=50,
-    )
+    mother_name = models.CharField(max_length=100,blank=True,null=True,)
+
+    mother_mobile = models.CharField(max_length=20,blank=True,null=True,db_index=True,)
+
+    guardian_name = models.CharField(max_length=100,blank=True,null=True,)
+
+    guardian_mobile = models.CharField(max_length=20,blank=True,null=True,db_index=True,)
+
+    admission_number = models.CharField(max_length=50,)
 
     roll_number = models.PositiveIntegerField()
 
-    first_name = models.CharField(
-        max_length=100,
-    )
+    name = models.CharField(max_length=100,)
 
-    last_name = models.CharField(
-        max_length=100,
-        blank=True,
-        null=True,
-    )
-
-    gender = models.CharField(
-        max_length=20,
-        choices=Gender.choices,
-    )
+    gender = models.CharField(max_length=20,choices=Gender.choices)
 
     date_of_birth = models.DateField()
 
     admission_date = models.DateField()
 
-    email = models.EmailField(
-        blank=True,
-        null=True,
-    )
+    email = models.EmailField(blank=True,null=True,)
 
-    address = models.TextField(
-        blank=True,
-        null=True,
-    )
+    address = models.TextField(blank=True,null=True,)
+    father_occupation = models.CharField(max_length=100, blank=True, null=True,)
 
-    blood_group = models.CharField(
-        max_length=10,
-        blank=True,
-        null=True,
-    )
+    mother_occupation = models.CharField(max_length=100,blank=True,null=True,)
 
-    status = models.CharField(
-        max_length=20,
-        choices=Status.choices,
-        default=Status.ACTIVE,
-    )
+    guardian_occupation = models.CharField(max_length=100,blank=True,null=True,)
+
+    blood_group = models.CharField(max_length=10,blank=True, null=True,)
+
+    status = models.CharField(max_length=20,choices=Status.choices,default=Status.ACTIVE,)
 
     class Meta:
 
@@ -600,4 +547,4 @@ class Student(AuditModel):
 
     def __str__(self):
 
-        return self.first_name
+        return self.name

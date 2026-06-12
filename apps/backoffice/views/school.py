@@ -14,13 +14,14 @@ from openpyxl import load_workbook
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
-from django.db import transaction
+from django.db import IntegrityError
 from apps.core.models import (
     Roles,
     UserRoles,
 )
 from shared.permissions.rbac import HasPermission
 from shared.enums.roles import RolesEnum
+from django.db import transaction
 
 class CreateAcademicYearAPIView(APIView):
 
@@ -425,170 +426,480 @@ class UpdateSectionAPIView(APIView):
 class CreateStudentAPIView(APIView):
 
     permission_classes = [
+
         IsAuthenticated,
+
         HasPermission,
+
     ]
 
     required_permission = "student.create"
 
     def post(self, request):
-        print("=" * 80)
 
-        print("Create Student API Called")
+        required_fields = [
 
-        print(request.data)
+            "school_id",
+
+            "academic_year_id",
+
+            "grade_id",
+
+            "section_id",
+
+            "admission_number",
+
+            "roll_number",
+
+            "name",
+
+            "gender",
+
+            "date_of_birth",
+
+            "admission_date",
+
+        ]
+
+        for field in required_fields:
+
+            value = request.data.get(field)
+
+            if value in [None, ""]:
+
+                return CustomResponse.errorResponse(
+
+                    description=f"{field} is required.",
+
+                )
 
         school = School.objects.filter(
 
-            id=request.data.get("school_id"),
+            id=request.data.get(
+
+                "school_id",
+
+            ),
 
         ).first()
 
-        print("School :", school)
+        if school is None:
+
+            return CustomResponse.errorResponse(
+
+                description="School not found.",
+
+            )
 
         academic_year = AcademicYear.objects.filter(
 
-            id=request.data.get("academic_year_id"),
+            id=request.data.get(
+
+                "academic_year_id",
+
+            ),
 
         ).first()
 
-        print("Academic Year :", academic_year)
+        if academic_year is None:
+
+            return CustomResponse.errorResponse(
+
+                description="Academic year not found.",
+
+            )
 
         grade = Grade.objects.filter(
 
-            id=request.data.get("grade_id"),
+            id=request.data.get(
+
+                "grade_id",
+
+            ),
 
         ).first()
 
-        print("Grade :", grade)
+        if grade is None:
+
+            return CustomResponse.errorResponse(
+
+                description="Grade not found.",
+
+            )
 
         section = Section.objects.filter(
 
-            id=request.data.get("section_id"),
+            id=request.data.get(
+
+                "section_id",
+
+            ),
 
         ).first()
 
-        print("Section :", section)
+        if section is None:
 
-        print("Creating Father...")
-
-        father = get_or_create_parent(
-
-            request.data.get("father_mobile"),
-
-        )
-
-        print("Creating Mother...")
-
-        mother = get_or_create_parent(
-
-            request.data.get("mother_mobile"),
-
-        )
-
-        print("Creating Guardian...")
-
-        guardian = get_or_create_parent(
-
-            request.data.get("guardian_mobile"),
-
-        )
-        if Student.objects.filter(
-                school=school,
-                admission_number=request.data.get(
-                    "admission_number",
-                ),
-        ).exists():
             return CustomResponse.errorResponse(
-                description="Admission number already exists.",
-            )
-        if Student.objects.filter(
-                section=section,
-                roll_number=request.data.get(
-                    "roll_number",
-                ),
-        ).exists():
-            return CustomResponse.errorResponse(
-                description="Roll number already exists in this section.",
+
+                description="Section not found.",
+
             )
 
-        print("Creating Student...")
+        if academic_year.school_id != school.id:
 
-        student = Student.objects.create(
+            return CustomResponse.errorResponse(
+
+                description="Academic year does not belong to the selected school.",
+
+            )
+
+        if grade.school_id != school.id:
+
+            return CustomResponse.errorResponse(
+
+                description="Grade does not belong to the selected school.",
+
+            )
+
+        if section.grade_id != grade.id:
+
+            return CustomResponse.errorResponse(
+
+                description="Section does not belong to the selected grade.",
+
+            )
+
+        if request.data.get(
+
+            "gender",
+
+        ) not in Student.Gender.values:
+
+            return CustomResponse.errorResponse(
+
+                description="Invalid gender.",
+
+            )
+
+        father_mobile = request.data.get(
+
+            "father_mobile",
+
+        )
+
+        if father_mobile and len(str(father_mobile)) != 10:
+
+            return CustomResponse.errorResponse(
+
+                description="Invalid father mobile number.",
+
+            )
+
+        mother_mobile = request.data.get(
+
+            "mother_mobile",
+
+        )
+
+        if mother_mobile and len(str(mother_mobile)) != 10:
+
+            return CustomResponse.errorResponse(
+
+                description="Invalid mother mobile number.",
+
+            )
+
+        guardian_mobile = request.data.get(
+
+            "guardian_mobile",
+
+        )
+
+        if guardian_mobile and len(str(guardian_mobile)) != 10:
+
+            return CustomResponse.errorResponse(
+
+                description="Invalid guardian mobile number.",
+
+            )
+
+        if Student.objects.filter(
 
             school=school,
 
-            academic_year=academic_year,
+            admission_number=request.data.get(
 
-            grade=grade,
+                "admission_number",
+
+            ),
+
+        ).exists():
+
+            return CustomResponse.errorResponse(
+
+                description="Admission number already exists.",
+
+            )
+
+        if Student.objects.filter(
 
             section=section,
 
-            father=father,
-
-            mother=mother,
-
-            guardian=guardian,
-
-            admission_number=request.data.get(
-                "admission_number",
-            ),
-
             roll_number=request.data.get(
+
                 "roll_number",
+
             ),
 
-            first_name=request.data.get(
-                "first_name",
-            ),
+        ).exists():
 
-            last_name=request.data.get(
-                "last_name",
-            ),
+            return CustomResponse.errorResponse(
 
-            gender=request.data.get(
-                "gender",
+                description="Roll number already exists in this section.",
+
+            )
+
+        if Student.objects.filter(
+
+            school=school,
+
+            name=request.data.get(
+
+                "name",
+
             ),
 
             date_of_birth=request.data.get(
+
                 "date_of_birth",
+
             ),
 
-            admission_date=request.data.get(
-                "admission_date",
+            father_mobile=request.data.get(
+
+                "father_mobile",
+
             ),
 
-            email=request.data.get(
-                "email",
-            ),
+        ).exists():
 
-            address=request.data.get(
-                "address",
-            ),
+            return CustomResponse.errorResponse(
 
-            blood_group=request.data.get(
-                "blood_group",
-            ),
+                description="Student already exists.",
 
-            status=request.data.get(
-                "status",
-                Student.Status.ACTIVE,
-            ),
+            )
+
+        valid_blood_groups = [
+
+            "A+",
+
+            "A-",
+
+            "B+",
+
+            "B-",
+
+            "AB+",
+
+            "AB-",
+
+            "O+",
+
+            "O-",
+
+        ]
+
+        blood_group = request.data.get(
+
+            "blood_group",
+
         )
-        print("Student Created :", student.id)
 
-        print("=" * 80)
+        if blood_group and blood_group not in valid_blood_groups:
+
+            return CustomResponse.errorResponse(
+
+                description="Invalid blood group.",
+
+            )
+
+        try:
+
+            with transaction.atomic():
+
+                student = Student.objects.create(
+
+                    school=school,
+
+                    academic_year=academic_year,
+
+                    grade=grade,
+
+                    section=section,
+
+                    admission_number=request.data.get(
+
+                        "admission_number",
+
+                    ).strip(),
+
+                    roll_number=request.data.get(
+
+                        "roll_number",
+
+                    ),
+
+                    name=request.data.get(
+
+                        "name",
+
+                    ).strip(),
+
+                    gender=request.data.get(
+
+                        "gender",
+
+                    ),
+
+                    date_of_birth=request.data.get(
+
+                        "date_of_birth",
+
+                    ),
+
+                    admission_date=request.data.get(
+
+                        "admission_date",
+
+                    ),
+
+                    father_name=request.data.get(
+
+                        "father_name",
+
+                    ),
+
+                    father_mobile=request.data.get(
+
+                        "father_mobile",
+
+                    ),
+
+                    father_occupation=request.data.get(
+
+                        "father_occupation",
+
+                    ),
+
+                    mother_name=request.data.get(
+
+                        "mother_name",
+
+                    ),
+
+                    mother_mobile=request.data.get(
+
+                        "mother_mobile",
+
+                    ),
+
+                    mother_occupation=request.data.get(
+
+                        "mother_occupation",
+
+                    ),
+
+                    guardian_name=request.data.get(
+
+                        "guardian_name",
+
+                    ),
+
+                    guardian_mobile=request.data.get(
+
+                        "guardian_mobile",
+
+                    ),
+
+                    guardian_occupation=request.data.get(
+
+                        "guardian_occupation",
+
+                    ),
+
+                    email=request.data.get(
+
+                        "email",
+
+                    ),
+
+                    address=request.data.get(
+
+                        "address",
+
+                    ),
+
+                    blood_group=blood_group,
+
+                    status=request.data.get(
+
+                        "status",
+
+                        Student.Status.ACTIVE,
+
+                    ),
+
+                )
+
+        except IntegrityError as e:
+
+            print("=" * 80)
+
+            print("IntegrityError")
+
+            print(str(e))
+
+            print("=" * 80)
+
+            return CustomResponse.errorResponse(
+
+                description=str(e),
+
+            )
+
+        except Exception as e:
+
+            print("=" * 80)
+
+            print("Exception")
+
+            print(type(e))
+
+            print(str(e))
+
+            print("=" * 80)
+
+            return CustomResponse.errorResponse(
+
+                description=str(e),
+
+            )
 
         return CustomResponse.successResponse(
 
             description="Student created successfully.",
 
             data={
+
                 "id": str(student.id),
+
+                "name": student.name,
+
+                "admission_number": student.admission_number,
+
             },
+
         )
-
-
 
 class BulkUploadStudentAPIView(APIView):
 
