@@ -1230,3 +1230,126 @@ class BulkUploadStudentAPIView(APIView):
             },
 
         )
+
+class StudentListAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "student.view"
+
+    def get(self, request):
+
+        students = Student.objects.select_related(
+
+            "school",
+
+            "academic_year",
+
+            "grade",
+
+            "section",
+
+        ).all()
+
+        data = []
+
+        for student in students:
+
+            data.append(
+
+                {
+
+                    "id": str(
+                        student.id,
+                    ),
+
+                    "school": {
+
+                        "id": str(
+                            student.school.id,
+                        ),
+
+                        "name": student.school.name,
+
+                    },
+
+                    "academic_year": {
+
+                        "id": str(
+                            student.academic_year.id,
+                        ),
+
+                        "name": student.academic_year.name,
+
+                    },
+
+                    "grade": {
+
+                        "id": str(
+                            student.grade.id,
+                        ),
+
+                        "name": student.grade.name,
+
+                    },
+
+                    "section": {
+
+                        "id": str(
+                            student.section.id,
+                        ),
+
+                        "name": student.section.name,
+
+                    },
+
+                    "admission_number": student.admission_number,
+
+                    "roll_number": student.roll_number,
+
+                    "name": student.name,
+
+                    "gender": student.gender,
+
+                    "date_of_birth": student.date_of_birth,
+
+                    "admission_date": student.admission_date,
+
+                    "father_name": student.father_name,
+
+                    "father_mobile": student.father_mobile,
+
+                    "father_occupation": student.father_occupation,
+
+                    "mother_name": student.mother_name,
+
+                    "mother_mobile": student.mother_mobile,
+
+                    "mother_occupation": student.mother_occupation,
+
+                    "guardian_name": student.guardian_name,
+
+                    "guardian_mobile": student.guardian_mobile,
+
+                    "guardian_occupation": student.guardian_occupation,
+
+                    "email": student.email,
+
+                    "address": student.address,
+
+                    "blood_group": student.blood_group,
+
+                    "status": student.status,
+
+                }
+
+            )
+
+        return CustomResponse.successResponse(
+
+            data=data,
+
+        )
