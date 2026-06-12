@@ -548,3 +548,91 @@ class Student(AuditModel):
     def __str__(self):
 
         return self.name
+
+
+class StudentDocument(AuditModel):
+
+    objects = SoftDeleteManager()
+
+    all_objects = models.Manager()
+
+    class DocumentType(models.TextChoices):
+
+        AADHAAR = "AADHAAR", "Aadhaar Card"
+
+        PHOTO = "PHOTO", "Photo"
+
+        BIRTH_CERTIFICATE = "BIRTH_CERTIFICATE", "Birth Certificate"
+
+        TRANSFER_CERTIFICATE = "TRANSFER_CERTIFICATE", "Transfer Certificate"
+
+        BONAFIDE = "BONAFIDE", "Bonafide Certificate"
+
+        ACADEMIC_RECORD = "ACADEMIC_RECORD", "Academic Record"
+
+        ID_CARD = "ID_CARD", "ID Card"
+
+        OTHER = "OTHER", "Other"
+
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE", "Active"
+
+        INACTIVE = "INACTIVE", "Inactive"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        related_name="documents",
+    )
+
+    document_type = models.CharField(
+        max_length=50,
+        choices=DocumentType.choices,
+    )
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+
+    title = models.CharField(
+        max_length=255,
+    )
+
+    file_url = models.CharField(
+        max_length=500,
+    )
+
+    remarks = models.TextField(
+        blank=True,
+        null=True,
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+
+    class Meta:
+
+        db_table = "student_documents"
+
+        indexes = [
+
+            models.Index(
+                fields=["student"],
+            ),
+
+            models.Index(
+                fields=["document_type"],
+            ),
+
+        ]

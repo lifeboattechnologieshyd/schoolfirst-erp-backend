@@ -3,7 +3,7 @@ from rest_framework.views import APIView
 
 from apps.core.models import Roles, UserMaster, UserRoles
 from apps.school.models import School
-from apps.school.models.school import AcademicYear, Grade, Section, Student
+from apps.school.models.school import AcademicYear, Grade, Section, Student, StudentDocument
 from shared.enums.roles import RolesEnum
 from shared.helpers.rbac import check_permission
 from shared.helpers.student import get_or_create_parent
@@ -1376,4 +1376,302 @@ class StudentListAPIView(APIView):
 
         return CustomResponse.successResponse(
             data=data,
+        )
+
+# -------------------------------
+# Create Student Document API
+# -------------------------------
+
+class CreateStudentDocumentAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "student_document.create"
+
+    def post(self, request):
+
+        student = Student.objects.filter(
+            id=request.data.get(
+                "student_id",
+            ),
+        ).first()
+
+        if student is None:
+
+            return CustomResponse.errorResponse(
+                description="Student not found.",
+            )
+
+        academic_year = None
+
+        if request.data.get(
+            "academic_year_id",
+        ):
+
+            academic_year = AcademicYear.objects.filter(
+                id=request.data.get(
+                    "academic_year_id",
+                ),
+            ).first()
+
+            if academic_year is None:
+
+                return CustomResponse.errorResponse(
+                    description="Academic year not found.",
+                )
+
+        if request.data.get(
+            "document_type",
+        ) not in StudentDocument.DocumentType.values:
+
+            return CustomResponse.errorResponse(
+                description="Invalid document type.",
+            )
+
+        document = StudentDocument.objects.create(
+
+            student=student,
+
+            academic_year=academic_year,
+
+            document_type=request.data.get(
+                "document_type",
+            ),
+
+            title=request.data.get(
+                "title",
+            ),
+
+            file_url=request.data.get(
+                "file_url",
+            ),
+
+            remarks=request.data.get(
+                "remarks",
+            ),
+
+            status=request.data.get(
+                "status",
+                StudentDocument.Status.ACTIVE,
+            ),
+
+        )
+
+        return CustomResponse.successResponse(
+
+            description="Student document created successfully.",
+
+            data={
+                "id": str(document.id),
+            },
+
+        )
+
+
+# -------------------------------
+# Student Document List API
+# -------------------------------
+
+class StudentDocumentListAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "student_document.view"
+
+    def get(self, request):
+
+        documents = StudentDocument.objects.select_related(
+
+            "student",
+
+            "academic_year",
+
+        ).all()
+
+        student_id = request.query_params.get(
+            "student_id",
+        )
+
+        academic_year_id = request.query_params.get(
+            "academic_year_id",
+        )
+
+        document_type = request.query_params.get(
+            "document_type",
+        )
+
+        status = request.query_params.get(
+            "status",
+        )
+
+        if student_id:
+
+            documents = documents.filter(
+                student_id=student_id,
+            )
+
+        if academic_year_id:
+
+            documents = documents.filter(
+                academic_year_id=academic_year_id,
+            )
+
+        if document_type:
+
+            documents = documents.filter(
+                document_type=document_type,
+            )
+
+        if status:
+
+            documents = documents.filter(
+                status=status,
+            )
+
+        data = []
+
+        for document in documents:
+
+            data.append(
+
+                {
+
+                    "id": str(document.id),
+
+                    "student": {
+
+                        "id": str(document.student.id),
+
+                        "name": document.student.name,
+
+                    },
+
+                    "academic_year": (
+
+                        {
+
+                            "id": str(document.academic_year.id),
+
+                            "name": document.academic_year.name,
+
+                        }
+
+                        if document.academic_year
+
+                        else None
+
+                    ),
+
+                    "document_type": document.document_type,
+
+                    "title": document.title,
+
+                    "file_url": document.file_url,
+
+                    "remarks": document.remarks,
+
+                    "status": document.status,
+
+                }
+
+            )
+
+        return CustomResponse.successResponse(
+            data=data,
+        )
+
+
+# -------------------------------
+# Update Student Document API
+# -------------------------------
+
+class UpdateStudentDocumentAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "student_document.update"
+
+    def put(
+        self,
+        request,
+        document_id,
+    ):
+
+        document = StudentDocument.objects.filter(
+            id=document_id,
+        ).first()
+
+        if document is None:
+
+            return CustomResponse.errorResponse(
+                description="Student document not found.",
+            )
+
+        if request.data.get(
+            "academic_year_id",
+        ):
+
+            academic_year = AcademicYear.objects.filter(
+                id=request.data.get(
+                    "academic_year_id",
+                ),
+            ).first()
+
+            if academic_year is None:
+
+                return CustomResponse.errorResponse(
+                    description="Academic year not found.",
+                )
+
+            document.academic_year = academic_year
+
+        if request.data.get(
+            "document_type",
+        ):
+
+            if request.data.get(
+                "document_type",
+            ) not in StudentDocument.DocumentType.values:
+
+                return CustomResponse.errorResponse(
+                    description="Invalid document type.",
+                )
+
+            document.document_type = request.data.get(
+                "document_type",
+            )
+
+        document.title = request.data.get(
+            "title",
+            document.title,
+        )
+
+        document.file_url = request.data.get(
+            "file_url",
+            document.file_url,
+        )
+
+        document.remarks = request.data.get(
+            "remarks",
+            document.remarks,
+        )
+
+        document.status = request.data.get(
+            "status",
+            document.status,
+        )
+
+        document.save()
+
+        return CustomResponse.successResponse(
+            description="Student document updated successfully.",
         )
