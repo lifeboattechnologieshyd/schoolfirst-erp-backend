@@ -900,7 +900,6 @@ class CreateStudentAPIView(APIView):
             },
 
         )
-
 class BulkUploadStudentAPIView(APIView):
 
     permission_classes = [
@@ -947,7 +946,13 @@ class BulkUploadStudentAPIView(APIView):
 
             "Roll Number",
 
-            "First Name",
+            "Name",
+
+            "Gender",
+
+            "Date Of Birth",
+
+            "Admission Date",
 
         ]
 
@@ -964,6 +969,19 @@ class BulkUploadStudentAPIView(APIView):
         failed_count = 0
 
         errors = []
+
+        valid_blood_groups = [
+
+            "A+",
+            "A-",
+            "B+",
+            "B-",
+            "AB+",
+            "AB-",
+            "O+",
+            "O-",
+
+        ]
 
         for row_number, row in enumerate(
 
@@ -1032,6 +1050,22 @@ class BulkUploadStudentAPIView(APIView):
                         "Section not found.",
                     )
 
+                if data.get("Gender") not in Student.Gender.values:
+
+                    raise Exception(
+                        "Invalid gender.",
+                    )
+
+                blood_group = data.get(
+                    "Blood Group",
+                )
+
+                if blood_group and blood_group not in valid_blood_groups:
+
+                    raise Exception(
+                        "Invalid blood group.",
+                    )
+
                 if Student.objects.filter(
                     school=school,
                     admission_number=data.get(
@@ -1054,25 +1088,29 @@ class BulkUploadStudentAPIView(APIView):
                         "Roll number already exists.",
                     )
 
+                if Student.objects.filter(
+
+                    school=school,
+
+                    name=data.get(
+                        "Name",
+                    ),
+
+                    date_of_birth=data.get(
+                        "Date Of Birth",
+                    ),
+
+                    father_mobile=data.get(
+                        "Father Mobile",
+                    ),
+
+                ).exists():
+
+                    raise Exception(
+                        "Student already exists.",
+                    )
+
                 with transaction.atomic():
-
-                    father = get_or_create_parent(
-                        data.get(
-                            "Father Mobile",
-                        ),
-                    )
-
-                    mother = get_or_create_parent(
-                        data.get(
-                            "Mother Mobile",
-                        ),
-                    )
-
-                    guardian = get_or_create_parent(
-                        data.get(
-                            "Guardian Mobile",
-                        ),
-                    )
 
                     Student.objects.create(
 
@@ -1084,27 +1122,21 @@ class BulkUploadStudentAPIView(APIView):
 
                         section=section,
 
-                        father=father,
-
-                        mother=mother,
-
-                        guardian=guardian,
-
-                        admission_number=data.get(
-                            "Admission Number",
-                        ),
+                        admission_number=str(
+                            data.get(
+                                "Admission Number",
+                            )
+                        ).strip(),
 
                         roll_number=data.get(
                             "Roll Number",
                         ),
 
-                        first_name=data.get(
-                            "First Name",
-                        ),
-
-                        last_name=data.get(
-                            "Last Name",
-                        ),
+                        name=str(
+                            data.get(
+                                "Name",
+                            )
+                        ).strip(),
 
                         gender=data.get(
                             "Gender",
@@ -1118,6 +1150,42 @@ class BulkUploadStudentAPIView(APIView):
                             "Admission Date",
                         ),
 
+                        father_name=data.get(
+                            "Father Name",
+                        ),
+
+                        father_mobile=data.get(
+                            "Father Mobile",
+                        ),
+
+                        father_occupation=data.get(
+                            "Father Occupation",
+                        ),
+
+                        mother_name=data.get(
+                            "Mother Name",
+                        ),
+
+                        mother_mobile=data.get(
+                            "Mother Mobile",
+                        ),
+
+                        mother_occupation=data.get(
+                            "Mother Occupation",
+                        ),
+
+                        guardian_name=data.get(
+                            "Guardian Name",
+                        ),
+
+                        guardian_mobile=data.get(
+                            "Guardian Mobile",
+                        ),
+
+                        guardian_occupation=data.get(
+                            "Guardian Occupation",
+                        ),
+
                         email=data.get(
                             "Email",
                         ),
@@ -1126,9 +1194,7 @@ class BulkUploadStudentAPIView(APIView):
                             "Address",
                         ),
 
-                        blood_group=data.get(
-                            "Blood Group",
-                        ),
+                        blood_group=blood_group,
 
                         status=Student.Status.ACTIVE,
 
@@ -1162,4 +1228,5 @@ class BulkUploadStudentAPIView(APIView):
                 "errors": errors,
 
             },
+
         )
