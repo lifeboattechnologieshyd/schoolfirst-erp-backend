@@ -20,17 +20,19 @@ def get_user_roles(user, school_id=None):
     if roles is None:
 
         queryset = UserRoles.objects.filter(
-            user=user
+            user=user,
         )
 
         if school_id:
 
+            # Return Global + Selected School roles
             queryset = queryset.filter(
                 Q(school_id=school_id)
                 | Q(school__isnull=True)
             )
 
-        # No filter when school_id is None
+        # If school_id is None, DO NOT filter.
+        # Return all roles assigned to the user.
 
         roles = list(
             queryset.values_list(
@@ -46,6 +48,8 @@ def get_user_roles(user, school_id=None):
         )
 
     return roles
+
+
 
 def has_role(
     user,
