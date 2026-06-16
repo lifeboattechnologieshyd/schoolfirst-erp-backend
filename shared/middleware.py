@@ -1,6 +1,9 @@
 from collections.abc import Callable
 
 from django.http import HttpRequest, HttpResponse
+from rest_framework.exceptions import PermissionDenied
+
+from apps.core.models import UserRoles
 from shared.helpers.rbac import (
     get_user_roles,
     get_user_permissions,
@@ -25,16 +28,14 @@ class StripTrailingSlashMiddleware:
 
 
 
-
-class RBACMiddleware:
+class SchoolMiddleware:
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
 
-        request.roles = []
-        request.permissions = []
+        request.current_school = None
 
         if request.user.is_authenticated:
 
@@ -42,16 +43,19 @@ class RBACMiddleware:
                 "X-School-Id"
             )
 
-            request.roles = get_user_roles(
-                user=request.user,
-                school_id=school_id,
-            )
+            if school_id:
 
-            request.permissions = get_user_permissions(
-                user=request.user,
-                school_id=school_id,
-            )
+                user_role = UserRoles.objects.filter(
+                    user=request.user,
+                    school_id=school_id,
+                ).first()
 
-        response = self.get_response(request)
+                if user_role is None:
 
-        return response
+                    raise PermissionDenied(
+                        "Invalid school access."
+                    )
+
+                request.current_school = user_role.school
+
+        return self.get_response(request)

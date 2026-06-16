@@ -71,7 +71,7 @@ MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    # "shared.middleware.RBACMiddleware",
+    "shared.middleware.SchoolMiddleware",
     # Custom
     "crum.CurrentRequestUserMiddleware",
     "django_structlog.middlewares.RequestMiddleware",
