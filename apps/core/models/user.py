@@ -78,6 +78,8 @@ class UserOTP(AuditModel):
         UserMaster,
         on_delete=models.CASCADE,
         related_name="otps",
+        null=True,
+        blank=True,
     )
     mobile = models.BigIntegerField(
         null=True, validators=[MinValueValidator(1000000000), MaxValueValidator(9999999999)]
