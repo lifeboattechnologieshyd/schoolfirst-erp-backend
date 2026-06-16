@@ -57,18 +57,29 @@ class ADMINSendOTPAPIView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        print("=" * 80)
+
+        print("Send OTP API Called")
+
+        print("Request Data :", request.data)
 
         mobile = normalize_mobile(request.data.get("mobile") )
+        print("Normalized Mobile :", mobile)
 
         if not mobile:
             return CustomResponse.errorResponse(description="Mobile is required.",status=status.HTTP_400_BAD_REQUEST,)
+        print("Searching User...")
 
         user = UserMaster.objects.filter(mobile=mobile,is_active=True,).first()
+        print("User :", user)
 
         if user is None:
             return CustomResponse.errorResponse(description="User not found.",status=status.HTTP_404_NOT_FOUND,)
 
+        print("Fetching User Roles...")
+
         roles = get_user_roles(user=user,)
+        print("Roles :", roles)
 
         allowed_roles = [
             RolesEnum.SUPERADMIN,
@@ -79,6 +90,7 @@ class ADMINSendOTPAPIView(APIView):
             RolesEnum.PRINCIPAL,
 
         ]
+        print("Allowed Roles :", allowed_roles)
 
         if not any(
             role in allowed_roles
