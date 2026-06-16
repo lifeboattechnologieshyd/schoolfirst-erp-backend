@@ -243,7 +243,7 @@ class GradeListAPIView(APIView):
         grades = Grade.objects.select_related(
             "school",
             "academic_year",
-        ).all()
+        ).filter(school=request.current_school,)
 
         data = []
 
