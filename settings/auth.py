@@ -43,8 +43,8 @@ SIMPLE_JWT = {
     "BLACKLIST_DB_ALIAS": "default",
     "BLACKLIST_AFTER_ROTATION": True,
     "ROTATE_REFRESH_TOKENS": True,
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=float(get_from_env("ACCESS_TOKEN_LIFETIME_IN_DAYS", 15))),
-    "REFRESH_TOKEN_LIFETIME": timedelta(minutes=float(get_from_env("REFRESH_TOKEN_LIFETIME_IN_DAYS", 30))),
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=float(get_from_env("ACCESS_TOKEN_LIFETIME_IN_DAYS", 15))),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=float(get_from_env("REFRESH_TOKEN_LIFETIME_IN_DAYS", 30))),
 }
 
 
