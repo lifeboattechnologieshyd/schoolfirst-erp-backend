@@ -13,64 +13,24 @@ CACHE_TIMEOUT = 300
 
 def get_user_roles(user, school_id=None):
 
-    print("=" * 80)
-    print("get_user_roles() called")
-    print("User :", user)
-    print("User ID :", user.id)
-    print("School ID :", school_id)
-
     cache_key = f"user_roles:{user.id}:{school_id}"
-
-    print("Cache Key :", cache_key)
 
     roles = cache.get(cache_key)
 
-    print("Roles From Cache :", roles)
-
     if roles is None:
 
-        print("Cache Miss")
-
         queryset = UserRoles.objects.filter(
-            user=user,
-        )
-
-        print(
-            "UserRoles Before Filter :",
-            list(
-                queryset.values(
-                    "role__role_name",
-                    "school_id",
-                )
-            ),
+            user=user
         )
 
         if school_id:
-
-            print("Applying School Filter")
 
             queryset = queryset.filter(
                 Q(school_id=school_id)
                 | Q(school__isnull=True)
             )
 
-        else:
-
-            print("Applying Global Role Filter")
-
-            queryset = queryset.filter(
-                school__isnull=True,
-            )
-
-        print(
-            "UserRoles After Filter :",
-            list(
-                queryset.values(
-                    "role__role_name",
-                    "school_id",
-                )
-            ),
-        )
+        # No filter when school_id is None
 
         roles = list(
             queryset.values_list(
@@ -79,25 +39,13 @@ def get_user_roles(user, school_id=None):
             ).distinct()
         )
 
-        print("Roles Retrieved :", roles)
-
         cache.set(
             cache_key,
             roles,
             CACHE_TIMEOUT,
         )
 
-        print("Roles Cached")
-
-    else:
-
-        print("Cache Hit")
-
-    print("Returning Roles :", roles)
-    print("=" * 80)
-
     return roles
-
 
 def has_role(
     user,
