@@ -232,26 +232,47 @@ class CreateGradeAPIView(APIView):
         )
 
 class GradeListAPIView(APIView):
-    permission_classes = [IsAuthenticated, HasPermission]
 
-    required_permission = "grade.view",
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "grade.view"
 
     def get(self, request):
 
-
+        print("=" * 80)
+        print("Grade List API Called")
+        print("User :", request.user)
+        print("Current School :", request.current_school)
+        print("Roles :", getattr(request, "roles", []))
+        print("Permissions :", getattr(request, "permissions", []))
 
         grades = Grade.objects.select_related(
             "school",
             "academic_year",
-        ).filter(school=request.current_school,)
+        ).filter(
+            school=request.current_school,
+        )
+
+        print("Total Grades Found :", grades.count())
 
         data = []
 
         for grade in grades:
 
+            print("-" * 40)
+            print("Grade ID :", grade.id)
+            print("School :", grade.school.name)
+            print("Academic Year :", grade.academic_year.name)
+            print("Grade Name :", grade.name)
+            print("Display Order :", grade.display_order)
+            print("Status :", grade.status)
+
             data.append(
                 {
-                    "id": grade.id,
+                    "id": str(grade.id),
                     "school": grade.school.name,
                     "academic_year": grade.academic_year.name,
                     "name": grade.name,
@@ -259,6 +280,9 @@ class GradeListAPIView(APIView):
                     "status": grade.status,
                 }
             )
+
+        print("Returning Total Records :", len(data))
+        print("=" * 80)
 
         return CustomResponse.successResponse(
             data=data,
