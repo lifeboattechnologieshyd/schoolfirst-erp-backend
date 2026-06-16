@@ -96,6 +96,7 @@ class ADMINSendOTPAPIView(APIView):
             role in allowed_roles
             for role in roles
         ):
+            print("User is not authorized.")
 
             return CustomResponse.errorResponse(
                 description="You are not authorized to login.",
@@ -105,9 +106,12 @@ class ADMINSendOTPAPIView(APIView):
         otp = 1234
 
         # otp = generate_otp()
+        print("Generated OTP :", otp)
 
         UserOTP.objects.create( user=user,mobile=int(mobile),otp=otp, expires_at=timezone.now() + timedelta(minutes=10),is_used=False,)
+        print("OTP Saved Successfully.")
 
+        print("=" * 80)
         return CustomResponse.successResponse(
             data={
                 "mobile_otp": otp,
