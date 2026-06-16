@@ -108,7 +108,21 @@ class ADMINSendOTPAPIView(APIView):
         # otp = generate_otp()
         print("Generated OTP :", otp)
 
-        UserOTP.objects.create( user=user,mobile=int(mobile),otp=otp, expires_at=timezone.now() + timedelta(minutes=10),is_used=False,)
+        print("Creating UserOTP...")
+
+        try:
+
+            otp_obj = UserOTP.objects.create(user=user,mobile=int(mobile),otp=otp,expires_at=timezone.now() + timedelta(minutes=10),is_used=False,
+
+            )
+
+            print("OTP Created :", otp_obj.id)
+
+        except Exception as e:
+
+            print("OTP Creation Failed :", str(e))
+
+            raise
         print("OTP Saved Successfully.")
 
         print("=" * 80)
