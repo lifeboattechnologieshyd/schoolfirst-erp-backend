@@ -74,7 +74,11 @@ class UserMaster(AbstractBaseUser):
 
 class UserOTP(AuditModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user_id = models.UUIDField(null=True)
+    user = models.ForeignKey(
+        UserMaster,
+        on_delete=models.CASCADE,
+        related_name="otps",
+    )
     mobile = models.BigIntegerField(
         null=True, validators=[MinValueValidator(1000000000), MaxValueValidator(9999999999)]
     )
