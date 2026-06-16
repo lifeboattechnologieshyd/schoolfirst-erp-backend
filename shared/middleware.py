@@ -4,6 +4,7 @@ from django.http import HttpRequest, HttpResponse
 from rest_framework.exceptions import PermissionDenied
 
 from apps.core.models import UserRoles
+from apps.school.models import School
 from shared.helpers.rbac import (
     get_user_roles,
     get_user_permissions,
@@ -35,27 +36,50 @@ class SchoolMiddleware:
 
     def __call__(self, request):
 
+        print("=" * 80)
+        print("SchoolMiddleware Called")
+
         request.current_school = None
+        request.roles = []
+        request.permissions = []
+
+        print("User :", request.user)
+        print("Is Authenticated :", request.user.is_authenticated)
 
         if request.user.is_authenticated:
 
-            school_id = request.headers.get(
-                "X-School-Id"
-            )
+            school_id = request.headers.get("X-School-Id")
+
+            print("Header X-School-Id :", school_id)
 
             if school_id:
 
-                user_role = UserRoles.objects.filter(
-                    user=request.user,
-                    school_id=school_id,
+                request.current_school = School.objects.filter(
+                    id=school_id,
                 ).first()
 
-                if user_role is None:
+                print("Current School :", request.current_school)
 
-                    raise PermissionDenied(
-                        "Invalid school access."
-                    )
+            request.roles = get_user_roles(
+                user=request.user,
+                school_id=school_id,
+            )
 
-                request.current_school = user_role.school
+            print("Roles :", request.roles)
 
-        return self.get_response(request)
+            request.permissions = get_user_permissions(
+                user=request.user,
+                school_id=school_id,
+            )
+
+            print("Permissions :", request.permissions)
+
+        else:
+
+            print("User is Anonymous")
+
+        print("=" * 80)
+
+        response = self.get_response(request)
+
+        return response
