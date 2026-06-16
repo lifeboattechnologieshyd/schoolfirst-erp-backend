@@ -1,12 +1,12 @@
 from django.urls import path
 
-from apps.core.views.auth import SendOTPAPIView, VerifyOTPAPIView, LogoutAPIView, FileUploadView
+from apps.core.views.auth import LogoutAPIView, FileUploadView, ADMINSendOTPAPIView, ADMINVerifyOTPAPIView
 
 urlpatterns = [
 
-    path("admin/send-otp", SendOTPAPIView.as_view(), name="send-otp"),
+    path("admin/send-otp", ADMINSendOTPAPIView.as_view(), name="send-otp"),
 
-    path("admin/verify-otp", VerifyOTPAPIView.as_view(), name="verify-otp"),
+    path("admin/verify-otp", ADMINVerifyOTPAPIView.as_view(), name="verify-otp"),
 
     path("logout", LogoutAPIView.as_view(), name="logout"),
 
