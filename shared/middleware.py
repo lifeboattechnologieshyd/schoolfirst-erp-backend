@@ -86,6 +86,11 @@ class SchoolMiddleware:
 
             print("Invalid School ID")
             print("=" * 80)
+            print("SchoolMiddleware Called")
+            print("Request Path :", request.path)
+            print("Request Method :", request.method)
+            print("X-School-Id :", request.headers.get("X-School-Id"))
+            print("Authorization :", request.headers.get("Authorization"))
 
             return self.get_response(request)
 
