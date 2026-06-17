@@ -83,6 +83,7 @@ class AcademicYearListAPIView(APIView):
     required_permission = "academic_year.view"
 
     def get(self, request):
+        print("AcademicYearListAPIView Called")
         queryset = AcademicYear.objects.filter(
 
             school=request.school,

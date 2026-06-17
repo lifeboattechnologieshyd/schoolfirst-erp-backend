@@ -33,7 +33,9 @@ class SchoolMiddleware:
 
     def __init__(self, get_response):
 
+
         self.get_response = get_response
+
 
         self.exempt_paths = (
             "/health/",
@@ -43,9 +45,11 @@ class SchoolMiddleware:
         )
 
     def __call__(self, request):
-
         print("=" * 80)
         print("SchoolMiddleware Called")
+        print("Path :", request.path)
+        print("Method :", request.method)
+        print("Headers :", dict(request.headers))
         print("Request Path :", request.path)
 
         request.school = None
