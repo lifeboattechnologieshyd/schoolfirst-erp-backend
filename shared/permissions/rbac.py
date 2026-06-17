@@ -27,10 +27,15 @@ class HasRole(BasePermission):
             for role in required_roles
         )
 
-
 class HasPermission(BasePermission):
 
     def has_permission(self, request, view):
+
+        print("=" * 80)
+        print("HasPermission Called")
+        print("User :", request.user)
+        print("School :", getattr(request, "school", None))
+        print("School ID :", getattr(request, "school_id", None))
 
         required_permission = getattr(
             view,
@@ -38,13 +43,18 @@ class HasPermission(BasePermission):
             None,
         )
 
-        if not required_permission:
-            return True
+        print("Required Permission :", required_permission)
 
-        return has_permission(
-            request.user,
-            required_permission,
+        result = has_permission(
+            user=request.user,
+            permission_name=required_permission,
+            school_id=request.school_id,
         )
+
+        print("Permission Result :", result)
+        print("=" * 80)
+
+        return result
 
 # class HasPermission(BasePermission):
 #

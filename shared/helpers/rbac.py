@@ -154,25 +154,26 @@ def has_permission(
     permission_name,
     school_id=None,
 ):
-    """
-    Returns True if user has permission.
 
-    SUPERADMIN bypasses all permission checks.
-    """
-
-    if has_role(
-        user=user,
-        role_name=RolesEnum.SUPERADMIN,
-        school_id=None,
-    ):
-        return True
+    print("=" * 80)
+    print("has_permission() called")
+    print("User :", user)
+    print("Permission :", permission_name)
+    print("School ID :", school_id)
 
     permissions = get_user_permissions(
         user=user,
         school_id=school_id,
     )
 
-    return permission_name in permissions
+    print("Permissions :", permissions)
+
+    result = permission_name in permissions
+
+    print("Has Permission :", result)
+    print("=" * 80)
+
+    return result
 
 
 def check_permission(
