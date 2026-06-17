@@ -1,7 +1,6 @@
-from django.db.models import Q
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
-
+from django.db.models import Q
 from apps.core.models import Roles, UserMaster, UserRoles
 from apps.school.models import School
 from apps.school.models.school import AcademicYear, Grade, Section, Student, StudentDocument
@@ -184,6 +183,7 @@ class CreateGradeAPIView(APIView):
     required_permission = "grade.create",
 
     def post(self, request):
+        school = request.school
 
 
         school = School.objects.filter(
@@ -193,7 +193,7 @@ class CreateGradeAPIView(APIView):
         ).first()
 
         academic_year = AcademicYear.objects.filter(
-            id=request.data.get("academic_year_id"),
+            id=request.data.get("academic_year_id"),school=school,
         ).first()
 
         if academic_year is None:
@@ -201,7 +201,7 @@ class CreateGradeAPIView(APIView):
                 description="Academic Year not found.",
             )
 
-        if Grade.objects.filter(
+        if Grade.objects.filter(school=school,
             academic_year=academic_year,
             name=request.data.get("name"),
         ).exists():
@@ -287,16 +287,11 @@ class UpdateGradeAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "grade.update",
 
-    def put(
-        self,
-        request,
-        grade_id,
-    ):
-
-
+    def put(self,request,grade_id,):
+        school = request.school
 
         grade = Grade.objects.filter(
-            id=grade_id,
+            id=grade_id,school=school,
         ).first()
 
         if grade is None:
@@ -328,15 +323,20 @@ class UpdateGradeAPIView(APIView):
 
 class CreateSectionAPIView(APIView):
 
-    permission_classes = [IsAuthenticated, HasPermission]
-    required_permission = "section.create",
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "section.create"
 
     def post(self, request):
 
-
+        school = request.school
 
         grade = Grade.objects.filter(
             id=request.data.get("grade_id"),
+            school=school,
         ).first()
 
         if grade is None:
@@ -348,6 +348,7 @@ class CreateSectionAPIView(APIView):
             grade=grade,
             name=request.data.get("name"),
         ).exists():
+
             return CustomResponse.errorResponse(
                 description="Section already exists.",
             )
@@ -355,7 +356,10 @@ class CreateSectionAPIView(APIView):
         section = Section.objects.create(
             grade=grade,
             name=request.data.get("name"),
-            capacity=request.data.get("capacity"),
+            capacity=request.data.get(
+                "capacity",
+                40,
+            ),
             status=request.data.get(
                 "status",
                 Section.Status.ACTIVE,
@@ -371,16 +375,23 @@ class CreateSectionAPIView(APIView):
 
 class SectionListAPIView(APIView):
 
-    permission_classes = [IsAuthenticated, HasPermission]
-    required_permission = "section.list",
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "section.view"
 
     def get(self, request):
 
-
+        school = request.school
 
         sections = Section.objects.select_related(
             "grade",
-        ).all()
+            "grade__school",
+        ).filter(
+            grade__school=school,
+        )
 
         data = []
 
@@ -388,9 +399,10 @@ class SectionListAPIView(APIView):
 
             data.append(
                 {
-                    "id": section.id,
-                    "name": section.name,
+                    "id": str(section.id),
+                    "school": section.grade.school.name,
                     "grade": section.grade.name,
+                    "name": section.name,
                     "capacity": section.capacity,
                     "status": section.status,
                 }
@@ -399,11 +411,14 @@ class SectionListAPIView(APIView):
         return CustomResponse.successResponse(
             data=data,
         )
-
 class UpdateSectionAPIView(APIView):
 
-    permission_classes = [IsAuthenticated,HasPermission]
-    required_permission = "section.update",
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "section.update"
 
     def put(
         self,
@@ -411,13 +426,15 @@ class UpdateSectionAPIView(APIView):
         section_id,
     ):
 
-
+        school = request.school
 
         section = Section.objects.filter(
             id=section_id,
+            grade__school=school,
         ).first()
 
         if section is None:
+
             return CustomResponse.errorResponse(
                 description="Section not found.",
             )
@@ -445,21 +462,15 @@ class UpdateSectionAPIView(APIView):
 
 class CreateStudentAPIView(APIView):
 
-    permission_classes = [
-
-        IsAuthenticated,
-
-        HasPermission,
-
-    ]
+    permission_classes = [IsAuthenticated,HasPermission,]
 
     required_permission = "student.create"
 
     def post(self, request):
+        school = request.school
 
         required_fields = [
 
-            "school_id",
 
             "academic_year_id",
 
@@ -493,31 +504,20 @@ class CreateStudentAPIView(APIView):
 
                 )
 
-        school = School.objects.filter(
-
-            id=request.data.get(
-
-                "school_id",
-
-            ),
-
-        ).first()
+        school = request.school
 
         if school is None:
-
             return CustomResponse.errorResponse(
-
                 description="School not found.",
-
             )
 
         academic_year = AcademicYear.objects.filter(
 
             id=request.data.get(
 
-                "academic_year_id",
+                "academic_year_id"
 
-            ),
+            ),school=school,
 
         ).first()
 
@@ -535,7 +535,7 @@ class CreateStudentAPIView(APIView):
 
                 "grade_id",
 
-            ),
+            ),school=school,
 
         ).first()
 
@@ -553,7 +553,7 @@ class CreateStudentAPIView(APIView):
 
                 "section_id",
 
-            ),
+            ),school=school,
 
         ).first()
 
@@ -565,29 +565,7 @@ class CreateStudentAPIView(APIView):
 
             )
 
-        if academic_year.school_id != school.id:
 
-            return CustomResponse.errorResponse(
-
-                description="Academic year does not belong to the selected school.",
-
-            )
-
-        if grade.school_id != school.id:
-
-            return CustomResponse.errorResponse(
-
-                description="Grade does not belong to the selected school.",
-
-            )
-
-        if section.grade_id != grade.id:
-
-            return CustomResponse.errorResponse(
-
-                description="Section does not belong to the selected grade.",
-
-            )
 
         if request.data.get(
 
@@ -954,7 +932,6 @@ class BulkUploadStudentAPIView(APIView):
 
         required_headers = [
 
-            "School Code",
 
             "Academic Year",
 
@@ -1023,11 +1000,7 @@ class BulkUploadStudentAPIView(APIView):
                     )
                 )
 
-                school = School.objects.filter(
-                    code=data.get(
-                        "School Code",
-                    ),
-                ).first()
+                school = request.school
 
                 if school is None:
                     raise Exception(
@@ -1261,6 +1234,7 @@ class StudentListAPIView(APIView):
     required_permission = "student.view"
 
     def get(self, request):
+        school = request.school
 
         students = Student.objects.select_related(
 
@@ -1274,9 +1248,7 @@ class StudentListAPIView(APIView):
 
         ).all()
 
-        school_id = request.query_params.get(
-            "school_id",
-        )
+
 
         academic_year_id = request.query_params.get(
             "academic_year_id",
@@ -1298,11 +1270,7 @@ class StudentListAPIView(APIView):
             "search",
         )
 
-        if school_id:
 
-            students = students.filter(
-                school_id=school_id,
-            )
 
         if academic_year_id:
 
@@ -1412,6 +1380,7 @@ class CreateStudentDocumentAPIView(APIView):
     required_permission = "student_document.create"
 
     def post(self, request):
+        school = request.school
 
         student = Student.objects.filter(
             id=request.data.get(
@@ -1434,7 +1403,7 @@ class CreateStudentDocumentAPIView(APIView):
             academic_year = AcademicYear.objects.filter(
                 id=request.data.get(
                     "academic_year_id",
-                ),
+                ),school=school,
             ).first()
 
             if academic_year is None:
@@ -1505,6 +1474,7 @@ class StudentDocumentListAPIView(APIView):
     required_permission = "student_document.view"
 
     def get(self, request):
+        school = request.school
 
         documents = StudentDocument.objects.select_related(
 
@@ -1512,7 +1482,7 @@ class StudentDocumentListAPIView(APIView):
 
             "academic_year",
 
-        ).all()
+        ).filter(student__school=school,)
 
         student_id = request.query_params.get(
             "student_id",
@@ -1620,14 +1590,11 @@ class UpdateStudentDocumentAPIView(APIView):
 
     required_permission = "student_document.update"
 
-    def put(
-        self,
-        request,
-        document_id,
-    ):
+    def put(self,request,document_id,):
+        school = request.school
 
         document = StudentDocument.objects.filter(
-            id=document_id,
+            id=document_id,student__school=school,
         ).first()
 
         if document is None:
@@ -1643,7 +1610,7 @@ class UpdateStudentDocumentAPIView(APIView):
             academic_year = AcademicYear.objects.filter(
                 id=request.data.get(
                     "academic_year_id",
-                ),
+                ),school=school,
             ).first()
 
             if academic_year is None:
