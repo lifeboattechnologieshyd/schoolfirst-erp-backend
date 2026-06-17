@@ -174,25 +174,50 @@ class ADMINVerifyOTPAPIView(APIView):
         refresh = RefreshToken.for_user(user,)
 
         permissions = get_user_permissions(user=user,)
+        assigned_schools = UserRoles.objects.filter(
+            user=user,
+            school__isnull=False,
+        ).select_related(
+            "school",
+        ).values(
+            "school__id",
+            "school__name",
+        ).distinct()
 
         return CustomResponse.successResponse(
 
             data={
 
                 "user": {
-
-                    "id": str(user.id,),
+                    "id": str(user.id),
                     "username": user.username,
                     "mobile": user.mobile,
                     "email": user.email,
                     "first_name": user.first_name,
                     "last_name": user.last_name,
                 },
+
                 "roles": roles,
+
                 "permissions": permissions,
+
+                "schools": [
+                    {
+                        "id": str(school["school__id"]),
+                        "name": school["school__name"],
+                    }
+                    for school in assigned_schools
+                ],
+
                 "tokens": {
-                    "access": str(refresh.access_token,),
-                    "refresh": str(refresh,),},},description="Login successful.",)
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
+                },
+
+            },
+
+            description="Login successful.",
+        )
 
 
 class LogoutAPIView(APIView):

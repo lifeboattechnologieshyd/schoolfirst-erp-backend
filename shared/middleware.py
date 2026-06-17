@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from rest_framework.exceptions import PermissionDenied
 
 from apps.core.models import UserRoles
@@ -32,54 +32,123 @@ class StripTrailingSlashMiddleware:
 class SchoolMiddleware:
 
     def __init__(self, get_response):
+
         self.get_response = get_response
+
+        self.exempt_paths = (
+
+            "/admin/",
+
+            "/health/",
+
+            "/user/admin/send-otp",
+
+            "/user/admin/verify-otp",
+
+            "/user/superadmin/send-otp",
+
+            "/user/superadmin/verify-otp",
+
+            "/user/parent/send-otp",
+
+            "/user/parent/verify-otp",
+
+            "/user/student/send-otp",
+
+            "/user/student/verify-otp",
+
+            "/user/teacher/send-otp",
+
+            "/user/teacher/verify-otp",
+
+            "/swagger/",
+
+            "/redoc/",
+
+            "/openapi/",
+
+        )
 
     def __call__(self, request):
 
         print("=" * 80)
+
         print("SchoolMiddleware Called")
 
-        request.current_school = None
-        request.roles = []
-        request.permissions = []
+        print("Path :", request.path)
 
-        print("User :", request.user)
-        print("Is Authenticated :", request.user.is_authenticated)
+        request.school = None
 
-        if request.user.is_authenticated:
+        request.school_id = None
 
-            school_id = request.headers.get("X-School-Id")
+        # Skip school validation for exempted APIs
 
-            print("Header X-School-Id :", school_id)
+        if any(
 
-            if school_id:
+            request.path.startswith(path)
 
-                request.current_school = School.objects.filter(
-                    id=school_id,
-                ).first()
+            for path in self.exempt_paths
 
-                print("Current School :", request.current_school)
+        ):
 
-            request.roles = get_user_roles(
-                user=request.user,
-                school_id=school_id,
+            print("Exempted Path")
+
+            return self.get_response(request)
+
+        school_id = request.headers.get(
+
+            "X-School-Id"
+
+        )
+
+        print("X-School-Id :", school_id)
+
+        if not school_id:
+
+            return JsonResponse(
+
+                {
+
+                    "success": False,
+
+                    "description": "X-School-Id header is required.",
+
+                },
+
+                status=400,
+
             )
 
-            print("Roles :", request.roles)
+        school = School.objects.filter(
 
-            request.permissions = get_user_permissions(
-                user=request.user,
-                school_id=school_id,
+            id=school_id,
+
+        ).first()
+
+        if school is None:
+
+            return JsonResponse(
+
+                {
+
+                    "success": False,
+
+                    "description": "Invalid school.",
+
+                },
+
+                status=404,
+
             )
 
-            print("Permissions :", request.permissions)
+        request.school = school
 
-        else:
+        request.school_id = school.id
 
-            print("User is Anonymous")
+        print("School :", school.name)
+
+        print("School ID :", school.id)
 
         print("=" * 80)
 
-        response = self.get_response(request)
-
-        return response
+        return self.get_response(request)

@@ -35,20 +35,16 @@ class CreateAcademicYearAPIView(APIView):
 
     def post(self, request):
 
-        school = School.objects.filter(
-            id=request.data.get("school_id"),
-        ).first()
+        school = request.school
 
-        if not school:
+        if school is None:
             return CustomResponse.errorResponse(
-                description="School not found",
+
+                description="School not found.",
+
             )
 
-        check_permission(
-            request,
-            "academic_year.create",
-            school.id,
-        )
+
 
         if request.data.get("status") == "ACTIVE":
             AcademicYear.objects.filter(
@@ -87,17 +83,14 @@ class AcademicYearListAPIView(APIView):
     required_permission = "academic_year.view"
 
     def get(self, request):
-
-        school_id = request.GET.get("school_id")
-
-        check_permission(
-            request,
-            "academic_year.view",
-            school_id,
-        )
-
         queryset = AcademicYear.objects.filter(
-            school_id=school_id,
+
+            school=request.school,
+
+        ).order_by(
+
+            "-created_at",
+
         )
 
         data = []
@@ -132,19 +125,21 @@ class UpdateAcademicYearAPIView(APIView):
     ):
 
         academic_year = AcademicYear.objects.filter(
+
             id=academic_year_id,
+
+            school=request.school,
+
         ).first()
 
-        if not academic_year:
+        if academic_year is None:
             return CustomResponse.errorResponse(
-                description="Academic year not found",
+
+                description="Academic year not found.",
+
             )
 
-        check_permission(
-            request,
-            "academic_year.update",
-            academic_year.school_id,
-        )
+
 
         if request.data.get("status") == "ACTIVE":
             AcademicYear.objects.filter(
@@ -241,6 +236,7 @@ class GradeListAPIView(APIView):
     required_permission = "grade.view"
 
     def get(self, request):
+        school = request.school
 
         print("=" * 80)
         print("Grade List API Called")
@@ -252,9 +248,7 @@ class GradeListAPIView(APIView):
         grades = Grade.objects.select_related(
             "school",
             "academic_year",
-        ).filter(
-            school=request.current_school,
-        )
+        ).filter(school=school)
 
         print("Total Grades Found :", grades.count())
 
