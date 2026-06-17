@@ -36,119 +36,67 @@ class SchoolMiddleware:
         self.get_response = get_response
 
         self.exempt_paths = (
-
-            "/admin/",
-
             "/health/",
-
+            "/admin/",
             "/user/admin/send-otp",
-
             "/user/admin/verify-otp",
-
-            "/user/superadmin/send-otp",
-
-            "/user/superadmin/verify-otp",
-
-            "/user/parent/send-otp",
-
-            "/user/parent/verify-otp",
-
-            "/user/student/send-otp",
-
-            "/user/student/verify-otp",
-
-            "/user/teacher/send-otp",
-
-            "/user/teacher/verify-otp",
-
-            "/swagger/",
-
-            "/redoc/",
-
-            "/openapi/",
-
         )
 
     def __call__(self, request):
 
         print("=" * 80)
-
         print("SchoolMiddleware Called")
-
-        print("Path :", request.path)
+        print("Request Path :", request.path)
 
         request.school = None
-
         request.school_id = None
 
-        # Skip school validation for exempted APIs
-
         if any(
-
             request.path.startswith(path)
-
             for path in self.exempt_paths
-
         ):
 
             print("Exempted Path")
+            print("=" * 80)
 
             return self.get_response(request)
 
         school_id = request.headers.get(
-
             "X-School-Id"
-
         )
 
-        print("X-School-Id :", school_id)
+        print("X-School-Id Header :", school_id)
 
         if not school_id:
 
-            return JsonResponse(
+            print("School ID Header Missing")
+            print("=" * 80)
 
-                {
+            return self.get_response(request)
 
-                    "success": False,
-
-                    "description": "X-School-Id header is required.",
-
-                },
-
-                status=400,
-
-            )
+        print("Fetching School...")
 
         school = School.objects.filter(
-
             id=school_id,
-
         ).first()
+
+        print("School Object :", school)
 
         if school is None:
 
-            return JsonResponse(
+            print("Invalid School ID")
+            print("=" * 80)
 
-                {
-
-                    "success": False,
-
-                    "description": "Invalid school.",
-
-                },
-
-                status=404,
-
-            )
+            return self.get_response(request)
 
         request.school = school
-
         request.school_id = school.id
 
-        print("School :", school.name)
-
-        print("School ID :", school.id)
+        print("Request School :", request.school)
+        print("Request School ID :", request.school_id)
 
         print("=" * 80)
 
-        return self.get_response(request)
+        response = self.get_response(request)
+
+        return response
