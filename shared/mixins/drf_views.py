@@ -168,7 +168,7 @@ class CustomResponse:
 
         extra_payload = {
             "description": description,
-            "status": status,
+            "status_code": status,
             **kwargs,
         }
 
