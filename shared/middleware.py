@@ -42,6 +42,16 @@ class SchoolMiddleware:
             "/admin/",
             "/user/admin/send-otp",
             "/user/admin/verify-otp",
+
+            "/backoffice/organizations",
+            "/backoffice/organizations/create",
+            "/backoffice/organizations/<uuid:organization_id>",
+            "/backoffice/schools/",
+            "/backoffice/schools/create",
+            "/backoffice/schools/<uuid:school_id>",
+            "/backoffice/branches",
+            "/backoffice/branches/create",
+            "/backoffice/branches/<uuid:branch_id>",
         )
 
     def __call__(self, request):
