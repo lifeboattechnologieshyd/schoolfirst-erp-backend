@@ -50,6 +50,14 @@ class SchoolMiddleware:
             "/backoffice/schools",
             "/backoffice/branches",
             "/backoffice/user/list",
+            "/backoffice/super-admin",
+            "/backoffice/leads",
+            "/backoffice/rbac",
+            "/backoffice/modules",
+            "/backoffice/permissions",
+            "/backoffice/roles",
+            "/backoffice/user-roles/assign",
+            "backoffice/create/super-admin"
         )
 
     def __call__(self, request):
