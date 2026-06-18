@@ -61,6 +61,7 @@ CORS_ALLOW_HEADERS = [
     "traceparent",
     "baggage",
     "Access-Control-Allow-Credentials",
+    "X-School-Id",
 ]
 CORS_EXPOSE_HEADERS = [
     "x-request-id",
