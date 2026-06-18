@@ -1,6 +1,7 @@
 from collections.abc import Callable
 
 from django.http import HttpRequest, HttpResponse, JsonResponse
+from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
 
 from apps.core.models import UserRoles
@@ -9,6 +10,8 @@ from shared.helpers.rbac import (
     get_user_roles,
     get_user_permissions,
 )
+from shared.mixins import CustomResponse
+
 
 class StripTrailingSlashMiddleware:
     """
@@ -44,14 +47,8 @@ class SchoolMiddleware:
             "/user/admin/verify-otp",
 
             "/backoffice/organizations",
-            "/backoffice/organizations/create",
-            "/backoffice/organizations/<uuid:organization_id>",
-            "/backoffice/schools/",
-            "/backoffice/schools/create",
-            "/backoffice/schools/<uuid:school_id>",
+            "/backoffice/schools",
             "/backoffice/branches",
-            "/backoffice/branches/create",
-            "/backoffice/branches/<uuid:branch_id>",
         )
 
     def __call__(self, request):
@@ -82,11 +79,15 @@ class SchoolMiddleware:
         print("X-School-Id Header :", school_id)
 
         if not school_id:
+            return CustomResponse.errorResponse(
 
-            print("School ID Header Missing")
-            print("=" * 80)
+                description="X-School-Id header is required.",
 
-            return self.get_response(request)
+                status=status.HTTP_400_BAD_REQUEST,
+
+            )
+
+
 
         print("Fetching School...")
 
@@ -97,16 +98,15 @@ class SchoolMiddleware:
         print("School Object :", school)
 
         if school is None:
+            return CustomResponse.errorResponse(
 
-            print("Invalid School ID")
-            print("=" * 80)
-            print("SchoolMiddleware Called")
-            print("Request Path :", request.path)
-            print("Request Method :", request.method)
-            print("X-School-Id :", request.headers.get("X-School-Id"))
-            print("Authorization :", request.headers.get("Authorization"))
+                description="Invalid school.",
 
-            return self.get_response(request)
+                status=status.HTTP_404_NOT_FOUND,
+
+            )
+
+
 
         request.school = school
         request.school_id = school.id
