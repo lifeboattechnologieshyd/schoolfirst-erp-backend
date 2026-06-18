@@ -68,6 +68,7 @@ CORS_EXPOSE_HEADERS = [
     "traceparent",
     "baggage",
     "Access-Control-Allow-Credentials",
+    "X-School-Id",
 ]
 
 
