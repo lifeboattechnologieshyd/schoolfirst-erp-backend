@@ -155,30 +155,21 @@ class CustomResponse:
         )
 
     @staticmethod
-    def errorResponse(  # noqa: N802
-        data: Any = None,
-        errorCode: Any = 0,  # noqa: N803
-        description: str = "Request Failed",
-        total: int = 0,
-        status: Any = status.HTTP_200_OK,
-        **kwargs: Any,
-    ) -> Response:
+    def errorResponse(
+            data=None,
+            description="Request Failed",
+            total=0,
+            status=status.HTTP_400_BAD_REQUEST,
+            **kwargs,
+    ):
+
         if data is None:
             data = {}
 
-        extra = dict(kwargs)
-
-        error_obj = extra.pop(
-            "error",
-            CustomResponse._default_error_object(
-                error_code=errorCode,
-                details=data,
-            ),
-        )
-
         extra_payload = {
             "description": description,
-            **extra,
+            "status": status,
+            **kwargs,
         }
 
         if total:
@@ -187,7 +178,6 @@ class CustomResponse:
         return CustomResponse.build_response(
             success=False,
             data=data,
-            error=error_obj,
             status=status,
             **extra_payload,
         )
