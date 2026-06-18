@@ -67,23 +67,8 @@ def get_user_permissions(
     user,
     school_id=None,
 ):
-    """
-    Returns all permissions assigned to the user.
 
-    Includes:
-    - Role permissions
-    - Direct permissions
-
-    school_id=None:
-        GLOBAL permissions only.
-
-    school_id=<id>:
-        GLOBAL permissions + School permissions.
-    """
-
-    cache_key = (
-        f"user_permissions:{user.id}:{school_id}"
-    )
+    cache_key = f"user_permissions:{user.id}:{school_id}"
 
     permissions = cache.get(cache_key)
 
@@ -109,28 +94,14 @@ def get_user_permissions(
                 | Q(school__isnull=True)
             )
 
-        else:
-
-            role_queryset = role_queryset.filter(
-                school__isnull=True
-            )
-
-            direct_queryset = direct_queryset.filter(
-                school__isnull=True
-            )
-
-        role_permissions = (
-            role_queryset.values_list(
-                "role__role_permissions_for_role__permission__permission_name",
-                flat=True,
-            )
+        role_permissions = role_queryset.values_list(
+            "role__role_permissions_for_role__permission__permission_name",
+            flat=True,
         )
 
-        direct_permissions = (
-            direct_queryset.values_list(
-                "permission__permission_name",
-                flat=True,
-            )
+        direct_permissions = direct_queryset.values_list(
+            "permission__permission_name",
+            flat=True,
         )
 
         permissions = list(
@@ -155,25 +126,19 @@ def has_permission(
     school_id=None,
 ):
 
-    print("=" * 80)
-    print("has_permission() called")
-    print("User :", user)
-    print("Permission :", permission_name)
-    print("School ID :", school_id)
+    # SUPERADMIN bypass
+    if has_role(
+        user=user,
+        role_name=RolesEnum.SUPERADMIN,
+    ):
+        return True
 
     permissions = get_user_permissions(
         user=user,
         school_id=school_id,
     )
 
-    print("Permissions :", permissions)
-
-    result = permission_name in permissions
-
-    print("Has Permission :", result)
-    print("=" * 80)
-
-    return result
+    return permission_name in permissions
 
 
 def check_permission(
