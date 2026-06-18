@@ -178,42 +178,80 @@ class UpdateAcademicYearAPIView(APIView):
 
 
 class CreateGradeAPIView(APIView):
-    permission_classes = [IsAuthenticated, HasPermission]
 
-    required_permission = "grade.create",
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "grade.create"
 
     def post(self, request):
+
+        print("=" * 80)
+        print("CreateGradeAPIView Called")
+        print("User :", request.user)
+        print("Request School :", request.school)
+        print("Request School ID :", request.school_id)
+        print("Request Data :", request.data)
+        print("=" * 80)
+
         school = request.school
 
-
+        print("Fetching Academic Year...")
 
         academic_year = AcademicYear.objects.filter(
-            id=request.data.get("academic_year_id"),school=school,
+            id=request.data.get("academic_year_id"),
+            school=school,
         ).first()
 
+        print("Academic Year :", academic_year)
+
         if academic_year is None:
+
+            print("Academic Year Not Found")
+
             return CustomResponse.errorResponse(
                 description="Academic Year not found.",
             )
 
-        if Grade.objects.filter(school=school,
+        print("Checking Existing Grade...")
+
+        grade_exists = Grade.objects.filter(
+            school=school,
             academic_year=academic_year,
             name=request.data.get("name"),
-        ).exists():
+        ).exists()
+
+        print("Grade Exists :", grade_exists)
+
+        if grade_exists:
+
+            print("Grade Already Exists")
+
             return CustomResponse.errorResponse(
                 description="Grade already exists.",
             )
+
+        print("Creating Grade...")
 
         grade = Grade.objects.create(
             school=school,
             academic_year=academic_year,
             name=request.data.get("name"),
-            display_order = request.data.get("display_order"),
+            display_order=request.data.get("display_order"),
             status=request.data.get(
                 "status",
                 Grade.Status.ACTIVE,
             ),
         )
+
+        print("Grade Created Successfully")
+        print("Grade ID :", grade.id)
+        print("Grade Name :", grade.name)
+        print("School :", grade.school)
+        print("Academic Year :", grade.academic_year)
+        print("=" * 80)
 
         return CustomResponse.successResponse(
             description="Grade created successfully.",
