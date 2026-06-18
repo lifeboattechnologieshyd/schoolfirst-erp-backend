@@ -242,7 +242,6 @@ class GradeListAPIView(APIView):
         print("=" * 80)
         print("Grade List API Called")
         print("User :", request.user)
-        print("Current School :", request.current_school)
         print("Roles :", getattr(request, "roles", []))
         print("Permissions :", getattr(request, "permissions", []))
 
