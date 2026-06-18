@@ -384,6 +384,15 @@ class SectionListAPIView(APIView):
 
     def get(self, request):
 
+        print("=" * 80)
+        print("Section List API Called")
+        print("User :", request.user)
+        print("School :", request.school)
+        print("School ID :", getattr(request, "school_id", None))
+        print("Roles :", getattr(request, "roles", []))
+        print("Permissions :", getattr(request, "permissions", []))
+        print("=" * 80)
+
         school = request.school
 
         sections = Section.objects.select_related(
@@ -393,9 +402,19 @@ class SectionListAPIView(APIView):
             grade__school=school,
         )
 
+        print("Total Sections Found :", sections.count())
+
         data = []
 
         for section in sections:
+
+            print("-" * 60)
+            print("Section ID :", section.id)
+            print("Section Name :", section.name)
+            print("Grade :", section.grade.name)
+            print("School :", section.grade.school.name)
+            print("Capacity :", section.capacity)
+            print("Status :", section.status)
 
             data.append(
                 {
@@ -407,6 +426,10 @@ class SectionListAPIView(APIView):
                     "status": section.status,
                 }
             )
+
+        print("=" * 80)
+        print("Returning Total Records :", len(data))
+        print("=" * 80)
 
         return CustomResponse.successResponse(
             data=data,
