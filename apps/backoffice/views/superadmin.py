@@ -956,31 +956,21 @@ class UserListAPIView(APIView):
 
         paginator = CustomPageNumberPagination()
 
-        paginated_queryset = paginator.paginate_queryset(
+        page = paginator.paginate_queryset(
             queryset,
             request,
         )
 
-        data = []
-
-        for user in paginated_queryset:
-
-            data.append(
-                {
-                    "id": str(user.id),
-                    "first_name": user.first_name,
-                    "last_name": user.last_name,
-                    "full_name": f"{user.first_name} {user.last_name}".strip(),
-                    "username": user.username,
-                    "email": user.email,
-                    "mobile": user.mobile,
-                }
-            )
-
-        return paginator.get_paginated_response(
+        data = [
             {
-                "success": True,
-                "data": data,
-                "description": "Request Successful",
+                "id": str(user.id),
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "mobile":user.mobile,
+                "email":user.email,
+
             }
-        )
+            for user in page
+        ]
+
+        return paginator.get_paginated_response(data)
