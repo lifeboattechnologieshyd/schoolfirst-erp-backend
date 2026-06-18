@@ -49,6 +49,7 @@ class SchoolMiddleware:
             "/backoffice/organizations",
             "/backoffice/schools",
             "/backoffice/branches",
+            "/backoffice/user/list/",
         )
 
     def __call__(self, request):

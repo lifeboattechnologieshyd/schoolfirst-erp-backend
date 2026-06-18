@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -9,8 +10,8 @@ from apps.core.models import UserRoles, Roles, Permissions, RolePermissions, Use
 from apps.school.models import SchoolLead
 from apps.school.models.school import Organization, School, Branch
 from shared.enums.roles import RolesEnum
-from shared.helpers.rbac import check_permission
-from shared.mixins import CustomResponse
+from shared.helpers.rbac import check_permission, has_role
+from shared.mixins import CustomResponse, CustomPageNumberPagination
 
 from django.contrib.auth.models import Group, Permission
 from django.db import transaction
@@ -900,4 +901,86 @@ class UpdateBranchAPIView(APIView):
 
         return CustomResponse.successResponse(
             description="Branch updated successfully"
+        )
+
+
+
+
+class UserListAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "user.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        search = request.query_params.get(
+            "search",
+            "",
+        ).strip()
+
+        if has_role(
+            request.user,
+            RolesEnum.SUPERADMIN,
+        ):
+
+            queryset = UserMaster.objects.filter(
+                is_active=True,
+            )
+
+        else:
+
+            queryset = UserMaster.objects.filter(
+                user_roles__school=school,
+                is_active=True,
+            ).distinct()
+
+        if search:
+
+            queryset = queryset.filter(
+                Q(first_name__icontains=search)
+                | Q(last_name__icontains=search)
+                | Q(username__icontains=search)
+                | Q(email__icontains=search)
+                | Q(mobile__icontains=search)
+            )
+
+        queryset = queryset.order_by(
+            "first_name",
+        )
+
+        paginator = CustomPageNumberPagination()
+
+        paginated_queryset = paginator.paginate_queryset(
+            queryset,
+            request,
+        )
+
+        data = []
+
+        for user in paginated_queryset:
+
+            data.append(
+                {
+                    "id": str(user.id),
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "full_name": f"{user.first_name} {user.last_name}".strip(),
+                    "username": user.username,
+                    "email": user.email,
+                    "mobile": user.mobile,
+                }
+            )
+
+        return paginator.get_paginated_response(
+            {
+                "success": True,
+                "data": data,
+                "description": "Request Successful",
+            }
         )

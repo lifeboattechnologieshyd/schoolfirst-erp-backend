@@ -12,7 +12,7 @@ from apps.backoffice.views.school import AcademicYearListAPIView, CreateAcademic
 from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdminRequestOTPAPIView, \
     SuperAdminVerifyOTPAPIView, SchoolLeadUpdateAPIView, OrganizationListAPIView, CreateOrganizationAPIView, \
     UpdateOrganizationAPIView, SchoolListAPIView, CreateSchoolAPIView, UpdateSchoolAPIView, CreateBranchAPIView, \
-    UpdateBranchAPIView, BranchListAPIView
+    UpdateBranchAPIView, BranchListAPIView, UserListAPIView
 
 urlpatterns = [
 
@@ -45,6 +45,8 @@ urlpatterns = [
     path("user-roles/assign", AssignRoleToUserAPIView.as_view(), name="assign-role-to-user"),
 
     path("rbac/dashboard", RBACDashboardAPIView.as_view(), name="rbac-dashboard"),
+
+    path("user/list",UserListAPIView.as_view(),name="user-list"),
 
     path("users/<uuid:user_id>/access",UserAccessAPIView.as_view(),),
 
