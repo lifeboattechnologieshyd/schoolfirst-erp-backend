@@ -67,43 +67,98 @@ from shared.mixins import CustomResponse
 #         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
 #     )
 
-# shared/exceptions.py
 
 from rest_framework.views import exception_handler
 from rest_framework import status
 
+#
+# def custom_exception_handler(exc, context):
+#
+#     response = exception_handler(exc, context)
+#
+#     if response is not None:
+#
+#         description = "Request failed."
+#
+#         if isinstance(response.data, dict):
+#
+#             if "detail" in response.data:
+#                 description = response.data["detail"]
+#
+#             else:
+#                 description = response.data
+#
+#         response.data = {
+#             "success": False,
+#             "data": {},
+#             "description": description,
+#             "status_code": response.status_code,
+#         }
+#
+#         return response
+#
+#     return Response(
+#         {
+#             "success": False,
+#             "data": {},
+#             "description": "Internal server error.",
+#             "status_code": status.HTTP_500_INTERNAL_SERVER_ERROR,
+#         },
+#         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#     )
 
 def custom_exception_handler(exc, context):
 
     response = exception_handler(exc, context)
 
+    if isinstance(exc, ValidationError):
+        return CustomResponse.errorResponse(
+            description=exc.detail,
+            status_code=400,
+        )
+
+    if isinstance(exc, AuthenticationFailed):
+        return CustomResponse.errorResponse(
+            description="Authentication failed.",
+            status_code=401,
+        )
+
+    if isinstance(exc, NotAuthenticated):
+        return CustomResponse.errorResponse(
+            description="Authentication credentials were not provided.",
+            status_code=401,
+        )
+
+    if isinstance(exc, PermissionDenied):
+        return CustomResponse.errorResponse(
+            description="Permission denied.",
+            status_code=403,
+        )
+
+    if isinstance(exc, NotFound):
+        return CustomResponse.errorResponse(
+            description="Resource not found.",
+            status_code=404,
+        )
+
+    if isinstance(exc, IntegrityError):
+        return CustomResponse.errorResponse(
+            description=str(exc),
+            status_code=400,
+        )
+
     if response is not None:
 
-        description = "Request failed."
+        return CustomResponse.errorResponse(
+            description=response.data,
+            status_code=response.status_code,
+        )
 
-        if isinstance(response.data, dict):
+    # Log unexpected errors here
+    import traceback
+    traceback.print_exc()
 
-            if "detail" in response.data:
-                description = response.data["detail"]
-
-            else:
-                description = response.data
-
-        response.data = {
-            "success": False,
-            "data": {},
-            "description": description,
-            "status_code": response.status_code,
-        }
-
-        return response
-
-    return Response(
-        {
-            "success": False,
-            "data": {},
-            "description": "Internal server error.",
-            "status_code": status.HTTP_500_INTERNAL_SERVER_ERROR,
-        },
-        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    return CustomResponse.errorResponse(
+        description="Internal server error.",
+        status_code=500,
     )
