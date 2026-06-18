@@ -103,7 +103,7 @@ urlpatterns = [
     # Grade  APIs
     # ====================================
 
-    path("grades/create",CreateGradeAPIView.as_view()),
+    path("grade/create",CreateGradeAPIView.as_view()),
 
     path("grades",GradeListAPIView.as_view(),),
 
