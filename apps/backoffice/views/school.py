@@ -575,7 +575,7 @@ class CreateStudentAPIView(APIView):
 
                 "section_id",
 
-            ),school=school,
+            )
 
         ).first()
 

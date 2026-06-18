@@ -503,6 +503,88 @@ class Student(AuditModel):
 
     status = models.CharField(max_length=20,choices=Status.choices,default=Status.ACTIVE,)
 
+    # place_of_birth = models.CharField(max_length=100,null=True,blank=True,)
+    #
+    # caste = models.CharField(max_length=100,null=True,blank=True,)
+    #
+    # sub_caste = models.CharField(max_length=100,null=True,blank=True,)
+    #
+    # religion = models.CharField(max_length=100,null=True,blank=True,)
+    #
+    # aadhaar_number = models.CharField(max_length=12,null=True,blank=True,)
+    #
+    # identification_marks = models.TextField(null=True,blank=True,)
+    #
+    # # Admission
+    # enrollment_type = models.CharField(max_length=30,
+    #
+    #     choices=[
+    #
+    #         ("NEW", "New"),
+    #
+    #         ("TRANSFER", "Transfer"),
+    #
+    #         ("RE_ADMISSION", "Re Admission"),
+    #
+    #     ],
+    #
+    #     default="NEW",
+    #
+    # )
+    #
+    # scholarship = models.BooleanField(default=False,)
+    #
+    # previous_school = models.CharField(max_length=255, null=True,blank=True,)
+    #
+    # previous_exam_percentage = models.DecimalField(max_digits=5,decimal_places=2,null=True,blank=True, )
+    #
+    # # Boarding
+    #
+    # hostel_type = models.CharField(
+    #
+    #     max_length=20,
+    #
+    #     choices=[
+    #
+    #         ("DAY_SCHOLAR", "Day Scholar"),
+    #
+    #         ("HOSTELLER", "Hosteller"),
+    #
+    #     ],
+    #
+    #     default="DAY_SCHOLAR",
+    #
+    # )
+    #
+    # # Transport
+    # transport_required = models.BooleanField(default=False,)
+    #
+    # # Board
+    #
+    # board = models.CharField(
+    #
+    #     max_length=30,
+    #
+    #     choices=[
+    #
+    #         ("STATE", "State"),
+    #
+    #         ("CBSE", "CBSE"),
+    #
+    #         ("ICSE", "ICSE"),
+    #
+    #         ("IB", "IB"),
+    #
+    #         ("IGCSE", "IGCSE"),
+    #
+    #         ("OTHER", "Other"),
+    #
+    #     ],
+    #
+    #     default="STATE",
+    #
+    # )
+
     class Meta:
 
         db_table = "students"
