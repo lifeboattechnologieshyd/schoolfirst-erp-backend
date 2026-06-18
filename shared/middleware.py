@@ -79,11 +79,14 @@ class SchoolMiddleware:
         print("X-School-Id Header :", school_id)
 
         if not school_id:
-            return CustomResponse.errorResponse(
-
-                description="X-School-Id header is required.",
-
-                status=status.HTTP_400_BAD_REQUEST,
+            return JsonResponse(
+                {
+                    "success": False,
+                    "data": {},
+                    "description": "X-School-Id header is required.",
+                    "status_code": 400,
+                },
+                status=400,
 
             )
 
@@ -98,11 +101,14 @@ class SchoolMiddleware:
         print("School Object :", school)
 
         if school is None:
-            return CustomResponse.errorResponse(
-
-                description="Invalid school.",
-
-                status=status.HTTP_404_NOT_FOUND,
+            return JsonResponse(
+                {
+                    "success": False,
+                    "data": {},
+                    "description": "Invalid school.",
+                    "status_code": 404,
+                },
+                status=404,
 
             )
 
