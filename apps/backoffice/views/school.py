@@ -186,11 +186,7 @@ class CreateGradeAPIView(APIView):
         school = request.school
 
 
-        school = School.objects.filter(
 
-            id=request.data.get("school_id"),
-
-        ).first()
 
         academic_year = AcademicYear.objects.filter(
             id=request.data.get("academic_year_id"),school=school,
