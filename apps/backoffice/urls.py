@@ -1,6 +1,8 @@
 from django.urls import path
 
-
+from apps.backoffice.views.fee import CreateFeeTypeAPIView, FeeTypeListAPIView, UpdateFeeTypeAPIView, \
+    DeleteFeeTypeAPIView, CreateFeeTemplateAPIView, FeeTemplateListAPIView, FeeTemplateDetailAPIView, \
+    UpdateFeeTemplateAPIView, DeleteFeeTemplateAPIView
 from apps.backoffice.views.leads import \
     SchoolLeadRequestOTPAPIView, SchoolLeadListAPIView, SchoolLeadVerifyOTPAPIView
 from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCreateAPIView, RoleListCreateAPIView, \
@@ -132,23 +134,23 @@ urlpatterns = [
 
     path("students/document/<uuid:document_id>",UpdateStudentDocumentAPIView.as_view(),name="student-document-update",),
 
-    # path("fee-types/create",CreateFeeTypeAPIView.as_view(),name="fee-type-create",),
-    #
-    # path("fee-types",FeeTypeListAPIView.as_view(),name="fee-type-list",),
-    #
-    # path("fee-types/<uuid:fee_type_id>",UpdateFeeTypeAPIView.as_view(),name="fee-type-update",),
-    #
-    # path("fee-types/<uuid:fee_type_id>/delete",DeleteFeeTypeAPIView.as_view(),name="fee-type-delete",),
-    #
-    # path("fee-templates/create",CreateFeeTemplateAPIView.as_view(),),
-    #
-    # path("fee-templates",FeeTemplateListAPIView.as_view(),),
-    #
-    # path("fee-templates/<uuid:fee_template_id>",FeeTemplateDetailAPIView.as_view(),),
-    #
-    # path( "fee-templates/<uuid:fee_template_id>/update",UpdateFeeTemplateAPIView.as_view(),),
-    #
-    # path("fee-templates/<uuid:fee_template_id>/delete",DeleteFeeTemplateAPIView.as_view(),),
+    path("fee-types/create",CreateFeeTypeAPIView.as_view(),name="fee-type-create",),
+
+    path("fee-types",FeeTypeListAPIView.as_view(),name="fee-type-list",),
+
+    path("fee-types/<uuid:fee_type_id>",UpdateFeeTypeAPIView.as_view(),name="fee-type-update",),
+
+    path("fee-types/<uuid:fee_type_id>/delete",DeleteFeeTypeAPIView.as_view(),name="fee-type-delete",),
+
+    path("fee-templates/create",CreateFeeTemplateAPIView.as_view(),name="fee-template-create",),
+
+    path("fee-templates",FeeTemplateListAPIView.as_view(),name="fee-template-list",),
+
+    path("fee-templates/<uuid:fee_template_id>",FeeTemplateDetailAPIView.as_view(),name="fee-template-detail",),
+
+    path( "fee-templates/<uuid:fee_template_id>/update",UpdateFeeTemplateAPIView.as_view(),name="fee-template-update",),
+
+    path("fee-templates/<uuid:fee_template_id>/delete",DeleteFeeTemplateAPIView.as_view(),name="fee-template-delete",),
 
 
 
