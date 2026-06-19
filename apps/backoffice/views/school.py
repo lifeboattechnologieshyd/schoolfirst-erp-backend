@@ -321,7 +321,7 @@ class UpdateGradeAPIView(APIView):
         HasPermission,
     ]
 
-    required_permission = "grade.update",
+    required_permission = "grade.update"
 
     def put(
         self,
