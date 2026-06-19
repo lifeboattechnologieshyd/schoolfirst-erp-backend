@@ -316,38 +316,75 @@ class GradeListAPIView(APIView):
         )
 class UpdateGradeAPIView(APIView):
 
-    permission_classes = [IsAuthenticated, HasPermission]
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
     required_permission = "grade.update",
 
-    def put(self,request,grade_id,):
+    def put(
+        self,
+        request,
+        grade_id,
+    ):
+
+        print("=" * 80)
+        print("Update Grade API Called")
+        print("User :", request.user)
+        print("School :", request.school)
+        print("School ID :", getattr(request, "school_id", None))
+        print("Grade ID :", grade_id)
+        print("Request Data :", request.data)
+        print("=" * 80)
+
         school = request.school
 
+        print("Fetching Grade...")
+
         grade = Grade.objects.filter(
-            id=grade_id,school=school,
+            id=grade_id,
+            school=school,
         ).first()
 
+        print("Grade Object :", grade)
+
         if grade is None:
+
+            print("Grade Not Found")
+            print("=" * 80)
+
             return CustomResponse.errorResponse(
                 description="Grade not found.",
             )
+
+        print("Old Grade Name :", grade.name)
+        print("Old Display Order :", grade.display_order)
+        print("Old Status :", grade.status)
 
         grade.name = request.data.get(
             "name",
             grade.name,
         )
+
         grade.display_order = request.data.get(
             "display_order",
             grade.display_order,
         )
-
-
 
         grade.status = request.data.get(
             "status",
             grade.status,
         )
 
+        print("Updated Grade Name :", grade.name)
+        print("Updated Display Order :", grade.display_order)
+        print("Updated Status :", grade.status)
+
         grade.save()
+
+        print("Grade Updated Successfully")
+        print("=" * 80)
 
         return CustomResponse.successResponse(
             description="Grade updated successfully.",
