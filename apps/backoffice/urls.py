@@ -1,5 +1,6 @@
 from django.urls import path
 
+
 from apps.backoffice.views.leads import \
     SchoolLeadRequestOTPAPIView, SchoolLeadListAPIView, SchoolLeadVerifyOTPAPIView
 from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCreateAPIView, RoleListCreateAPIView, \
@@ -130,6 +131,24 @@ urlpatterns = [
     path("students/document",StudentDocumentListAPIView.as_view(),name="student-document-list",),
 
     path("students/document/<uuid:document_id>",UpdateStudentDocumentAPIView.as_view(),name="student-document-update",),
+
+    # path("fee-types/create",CreateFeeTypeAPIView.as_view(),name="fee-type-create",),
+    #
+    # path("fee-types",FeeTypeListAPIView.as_view(),name="fee-type-list",),
+    #
+    # path("fee-types/<uuid:fee_type_id>",UpdateFeeTypeAPIView.as_view(),name="fee-type-update",),
+    #
+    # path("fee-types/<uuid:fee_type_id>/delete",DeleteFeeTypeAPIView.as_view(),name="fee-type-delete",),
+    #
+    # path("fee-templates/create",CreateFeeTemplateAPIView.as_view(),),
+    #
+    # path("fee-templates",FeeTemplateListAPIView.as_view(),),
+    #
+    # path("fee-templates/<uuid:fee_template_id>",FeeTemplateDetailAPIView.as_view(),),
+    #
+    # path( "fee-templates/<uuid:fee_template_id>/update",UpdateFeeTemplateAPIView.as_view(),),
+    #
+    # path("fee-templates/<uuid:fee_template_id>/delete",DeleteFeeTemplateAPIView.as_view(),),
 
 
 
