@@ -2,7 +2,14 @@ from django.urls import path
 
 from apps.backoffice.views.fee import CreateFeeTypeAPIView, FeeTypeListAPIView, UpdateFeeTypeAPIView, \
     DeleteFeeTypeAPIView, CreateFeeTemplateAPIView, FeeTemplateListAPIView, FeeTemplateDetailAPIView, \
-    UpdateFeeTemplateAPIView, DeleteFeeTemplateAPIView
+    UpdateFeeTemplateAPIView, DeleteFeeTemplateAPIView, CreateFeeTemplateItemAPIView, FeeTemplateItemListAPIView, \
+    FeeTemplateItemDetailAPIView, UpdateFeeTemplateItemAPIView, DeleteFeeTemplateItemAPIView, \
+    CreateFeeCollectionPlanAPIView, FeeCollectionPlanListAPIView, FeeCollectionPlanDetailAPIView, \
+    UpdateFeeCollectionPlanAPIView, CreateFeeInstallmentAPIView, FeeInstallmentListAPIView, FeeInstallmentDetailAPIView, \
+    UpdateFeeInstallmentAPIView, CreateFeeInstallmentItemAPIView, FeeInstallmentItemListAPIView, \
+    FeeInstallmentItemDetailAPIView, UpdateFeeInstallmentItemAPIView, CreateLateFeeRuleAPIView, LateFeeRuleListAPIView, \
+    LateFeeRuleDetailAPIView, UpdateLateFeeRuleAPIView, CreateFeeConcessionAPIView, FeeConcessionListAPIView, \
+    UpdateFeeConcessionAPIView
 from apps.backoffice.views.leads import \
     SchoolLeadRequestOTPAPIView, SchoolLeadListAPIView, SchoolLeadVerifyOTPAPIView
 from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCreateAPIView, RoleListCreateAPIView, \
@@ -134,6 +141,10 @@ urlpatterns = [
 
     path("students/document/<uuid:document_id>",UpdateStudentDocumentAPIView.as_view(),name="student-document-update",),
 
+    # ====================================
+    #  Fee APIs
+    # ====================================
+
     path("fee-types/create",CreateFeeTypeAPIView.as_view(),name="fee-type-create",),
 
     path("fee-types",FeeTypeListAPIView.as_view(),name="fee-type-list",),
@@ -151,6 +162,54 @@ urlpatterns = [
     path( "fee-templates/<uuid:fee_template_id>/update",UpdateFeeTemplateAPIView.as_view(),name="fee-template-update",),
 
     path("fee-templates/<uuid:fee_template_id>/delete",DeleteFeeTemplateAPIView.as_view(),name="fee-template-delete",),
+
+    path("fee-template-items/create",CreateFeeTemplateItemAPIView.as_view(),),
+
+    path("fee-template-items",FeeTemplateItemListAPIView.as_view(),),
+
+    path("fee-template-items/<uuid:fee_template_item_id>",FeeTemplateItemDetailAPIView.as_view(),),
+
+    path("fee-template-items/<uuid:fee_template_item_id>/update", UpdateFeeTemplateItemAPIView.as_view(),),
+
+    path("fee-template-items/<uuid:fee_template_item_id>/delete",DeleteFeeTemplateItemAPIView.as_view(),),
+
+    path("fee-collection-plans/create",CreateFeeCollectionPlanAPIView.as_view(),),
+
+    path("fee-collection-plans",FeeCollectionPlanListAPIView.as_view(),),
+
+    path("fee-collection-plans/<uuid:collection_plan_id>",FeeCollectionPlanDetailAPIView.as_view(),),
+
+    path("fee-collection-plans/<uuid:collection_plan_id>/update",UpdateFeeCollectionPlanAPIView.as_view(),),
+
+    path("fee-installments/create",CreateFeeInstallmentAPIView.as_view(),),
+
+    path("fee-installments",FeeInstallmentListAPIView.as_view(),),
+
+    path("fee-installments/<uuid:installment_id>",FeeInstallmentDetailAPIView.as_view(),),
+
+    path("fee-installments/<uuid:installment_id>/update",UpdateFeeInstallmentAPIView.as_view(),),
+
+    path("fee-installment-items/create",CreateFeeInstallmentItemAPIView.as_view(),),
+
+    path( "fee-installment-items",FeeInstallmentItemListAPIView.as_view(),),
+
+    path("fee-installment-items/<uuid:installment_item_id>",FeeInstallmentItemDetailAPIView.as_view(),),
+
+    path("fee-installment-items/<uuid:installment_item_id>/update",UpdateFeeInstallmentItemAPIView.as_view(),),
+
+    path("late-fee-rules/create",CreateLateFeeRuleAPIView.as_view(),),
+
+    path("late-fee-rules",LateFeeRuleListAPIView.as_view()),
+
+    path("late-fee-rules/<uuid:late_fee_rule_id>",LateFeeRuleDetailAPIView.as_view(),),
+
+    path("late-fee-rules/<uuid:late_fee_rule_id>/update",UpdateLateFeeRuleAPIView.as_view(),),
+
+    path("fee-concessions/create",CreateFeeConcessionAPIView.as_view()),
+
+    path("fee-concessions",FeeConcessionListAPIView.as_view(),),
+
+    path("fee-concessions/<uuid:concession_id>/update", UpdateFeeConcessionAPIView.as_view(),),
 
 
 

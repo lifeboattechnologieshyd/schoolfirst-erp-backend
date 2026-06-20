@@ -1,7 +1,8 @@
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.fee.models import FeeType, FeeTemplateItem, FeeTemplate
+from apps.fee.models import FeeType, FeeTemplateItem, FeeTemplate, FeeCollectionPlan, FeeInstallment, \
+    FeeInstallmentItem, LateFeeRule, FeeConcession
 from apps.school.models.school import AcademicYear
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
@@ -580,4 +581,1607 @@ class DeleteFeeTemplateAPIView(APIView):
 
         return CustomResponse.successResponse(
             description="Fee template deleted successfully.",
+        )
+
+class CreateFeeTemplateItemAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_template_item.create"
+
+    def post(self, request):
+
+        school = request.school
+
+        fee_template = FeeTemplate.objects.filter(
+            id=request.data.get("fee_template_id"),
+            school=school,
+        ).first()
+
+        if fee_template is None:
+
+            return CustomResponse.errorResponse(
+                description="Fee template not found.",
+            )
+
+        fee_type = FeeType.objects.filter(
+            id=request.data.get("fee_type_id"),
+            school=school,
+        ).first()
+
+        if fee_type is None:
+
+            return CustomResponse.errorResponse(
+                description="Fee type not found.",
+            )
+
+        if FeeTemplateItem.objects.filter(
+            fee_template=fee_template,
+            fee_type=fee_type,
+        ).exists():
+
+            return CustomResponse.errorResponse(
+                description="Fee type already added.",
+            )
+
+        amount = request.data.get(
+            "amount",
+        )
+
+        if not amount:
+
+            return CustomResponse.errorResponse(
+                description="Amount is required.",
+            )
+
+        item = FeeTemplateItem.objects.create(
+
+            fee_template=fee_template,
+
+            fee_type=fee_type,
+
+            amount=amount,
+
+            is_mandatory=request.data.get(
+                "is_mandatory",
+                True,
+            ),
+
+        )
+
+        return CustomResponse.successResponse(
+
+            description="Fee template item created successfully.",
+
+            data={
+                "id": str(item.id),
+            },
+
+        )
+
+class FeeTemplateItemListAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_template_item.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        queryset = FeeTemplateItem.objects.select_related(
+
+            "fee_template",
+
+            "fee_type",
+
+        ).filter(
+
+            fee_template__school=school,
+
+        )
+
+        fee_template_id = request.GET.get(
+            "fee_template_id",
+        )
+
+        if fee_template_id:
+
+            queryset = queryset.filter(
+                fee_template_id=fee_template_id,
+            )
+
+        paginator = CustomPageNumberPagination()
+
+        page = paginator.paginate_queryset(
+            queryset.order_by(
+                "fee_type__name",
+            ),
+            request,
+        )
+
+        data = []
+
+        for obj in page:
+
+            data.append({
+
+                "id": str(obj.id),
+
+                "fee_template": {
+
+                    "id": str(obj.fee_template.id),
+
+                    "name": obj.fee_template.name,
+
+                },
+
+                "fee_type": {
+
+                    "id": str(obj.fee_type.id),
+
+                    "name": obj.fee_type.name,
+
+                },
+
+                "amount": obj.amount,
+
+                "is_mandatory": obj.is_mandatory,
+
+            })
+
+        return CustomResponse.successResponse(
+
+            data=data,
+
+            total=queryset.count(),
+
+        )
+class FeeTemplateItemDetailAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_template_item.view"
+
+    def get(
+        self,
+        request,
+        fee_template_item_id,
+    ):
+
+        school = request.school
+
+        item = FeeTemplateItem.objects.select_related(
+
+            "fee_template",
+
+            "fee_type",
+
+        ).filter(
+
+            id=fee_template_item_id,
+
+            fee_template__school=school,
+
+        ).first()
+
+        if item is None:
+
+            return CustomResponse.errorResponse(
+                description="Fee template item not found.",
+            )
+
+        return CustomResponse.successResponse(
+
+            data={
+
+                "id": str(item.id),
+
+                "fee_template": {
+
+                    "id": str(item.fee_template.id),
+
+                    "name": item.fee_template.name,
+
+                },
+
+                "fee_type": {
+
+                    "id": str(item.fee_type.id),
+
+                    "name": item.fee_type.name,
+
+                },
+
+                "amount": item.amount,
+
+                "is_mandatory": item.is_mandatory,
+
+            }
+
+        )
+class UpdateFeeTemplateItemAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_template_item.update"
+
+    def put(
+        self,
+        request,
+        fee_template_item_id,
+    ):
+
+        school = request.school
+
+        item = FeeTemplateItem.objects.select_related(
+            "fee_template",
+        ).filter(
+            id=fee_template_item_id,
+            fee_template__school=school,
+        ).first()
+
+        if item is None:
+
+            return CustomResponse.errorResponse(
+                description="Fee template item not found.",
+            )
+
+        item.amount = request.data.get(
+            "amount",
+            item.amount,
+        )
+
+        item.is_mandatory = request.data.get(
+            "is_mandatory",
+            item.is_mandatory,
+        )
+
+        item.save()
+
+        return CustomResponse.successResponse(
+            description="Fee template item updated successfully.",
+        )
+
+class DeleteFeeTemplateItemAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_template_item.delete"
+
+    def delete(
+        self,
+        request,
+        fee_template_item_id,
+    ):
+
+        school = request.school
+
+        item = FeeTemplateItem.objects.filter(
+
+            id=fee_template_item_id,
+
+            fee_template__school=school,
+
+        ).first()
+
+        if item is None:
+
+            return CustomResponse.errorResponse(
+                description="Fee template item not found.",
+            )
+
+        item.delete()
+
+        return CustomResponse.successResponse(
+            description="Fee template item deleted successfully.",
+        )
+
+class CreateFeeCollectionPlanAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_collection_plan.create"
+
+    def post(self, request):
+
+        school = request.school
+
+        fee_template = FeeTemplate.objects.filter(
+            id=request.data.get("fee_template_id"),
+            school=school,
+        ).first()
+
+        if fee_template is None:
+
+            return CustomResponse.errorResponse(
+                description="Fee template not found.",
+            )
+
+        if FeeCollectionPlan.objects.filter(
+            fee_template=fee_template,
+        ).exists():
+
+            return CustomResponse.errorResponse(
+                description="Collection plan already exists.",
+            )
+
+        plan_type = request.data.get(
+            "plan_type",
+        )
+
+        if plan_type not in FeeCollectionPlan.PlanType.values:
+
+            return CustomResponse.errorResponse(
+                description="Invalid plan type.",
+            )
+
+        collection_plan = FeeCollectionPlan.objects.create(
+
+            fee_template=fee_template,
+
+            plan_type=plan_type,
+
+        )
+
+        return CustomResponse.successResponse(
+
+            description="Fee collection plan created successfully.",
+
+            data={
+                "id": str(collection_plan.id),
+            },
+
+        )
+
+class FeeCollectionPlanListAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_collection_plan.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        queryset = FeeCollectionPlan.objects.select_related(
+            "fee_template",
+            "fee_template__grade",
+            "fee_template__academic_year",
+        ).filter(
+            fee_template__school=school,
+        )
+
+        academic_year_id = request.GET.get(
+            "academic_year_id",
+        )
+
+        grade_id = request.GET.get(
+            "grade_id",
+        )
+
+        if academic_year_id:
+
+            queryset = queryset.filter(
+                fee_template__academic_year_id=academic_year_id,
+            )
+
+        if grade_id:
+
+            queryset = queryset.filter(
+                fee_template__grade_id=grade_id,
+            )
+
+        paginator = CustomPageNumberPagination()
+
+        page = paginator.paginate_queryset(
+            queryset,
+            request,
+        )
+
+        data = []
+
+        for obj in page:
+
+            data.append({
+
+                "id": str(obj.id),
+
+                "plan_type": obj.plan_type,
+
+                "fee_template": {
+
+                    "id": str(obj.fee_template.id),
+
+                    "name": obj.fee_template.name,
+
+                },
+
+                "grade": obj.fee_template.grade.name,
+
+                "academic_year": obj.fee_template.academic_year.name,
+
+            })
+
+        return CustomResponse.successResponse(
+            data=data,
+            total=queryset.count(),
+        )
+class FeeCollectionPlanDetailAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_collection_plan.view"
+
+    def get(
+        self,
+        request,
+        collection_plan_id,
+    ):
+
+        school = request.school
+
+        collection_plan = FeeCollectionPlan.objects.select_related(
+            "fee_template",
+            "fee_template__grade",
+            "fee_template__academic_year",
+        ).filter(
+            id=collection_plan_id,
+            fee_template__school=school,
+        ).first()
+
+        if collection_plan is None:
+
+            return CustomResponse.errorResponse(
+                description="Collection plan not found.",
+            )
+
+        return CustomResponse.successResponse(
+
+            data={
+
+                "id": str(collection_plan.id),
+
+                "plan_type": collection_plan.plan_type,
+
+                "fee_template": {
+
+                    "id": str(collection_plan.fee_template.id),
+
+                    "name": collection_plan.fee_template.name,
+
+                },
+
+                "grade": {
+
+                    "id": str(collection_plan.fee_template.grade.id),
+
+                    "name": collection_plan.fee_template.grade.name,
+
+                },
+
+                "academic_year": {
+
+                    "id": str(collection_plan.fee_template.academic_year.id),
+
+                    "name": collection_plan.fee_template.academic_year.name,
+
+                },
+
+            }
+
+        )
+class UpdateFeeCollectionPlanAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_collection_plan.update"
+
+    def put(
+        self,
+        request,
+        collection_plan_id,
+    ):
+
+        school = request.school
+
+        collection_plan = FeeCollectionPlan.objects.select_related(
+            "fee_template",
+        ).filter(
+            id=collection_plan_id,
+            fee_template__school=school,
+        ).first()
+
+        if collection_plan is None:
+
+            return CustomResponse.errorResponse(
+                description="Collection plan not found.",
+            )
+
+        plan_type = request.data.get(
+            "plan_type",
+            collection_plan.plan_type,
+        )
+
+        if plan_type not in FeeCollectionPlan.PlanType.values:
+
+            return CustomResponse.errorResponse(
+                description="Invalid plan type.",
+            )
+
+        collection_plan.plan_type = plan_type
+
+        collection_plan.save()
+
+        return CustomResponse.successResponse(
+            description="Collection plan updated successfully.",
+        )
+
+class CreateFeeInstallmentAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_installment.create"
+
+    def post(self, request):
+
+        school = request.school
+
+        collection_plan = FeeCollectionPlan.objects.select_related(
+            "fee_template",
+        ).filter(
+            id=request.data.get("collection_plan_id"),
+            fee_template__school=school,
+        ).first()
+
+        if collection_plan is None:
+
+            return CustomResponse.errorResponse(
+                description="Collection plan not found.",
+            )
+
+        name = str(
+            request.data.get(
+                "name",
+                "",
+            )
+        ).strip()
+
+        if not name:
+
+            return CustomResponse.errorResponse(
+                description="Installment name is required.",
+            )
+
+        if FeeInstallment.objects.filter(
+            collection_plan=collection_plan,
+            name=name,
+        ).exists():
+
+            return CustomResponse.errorResponse(
+                description="Installment already exists.",
+            )
+
+        installment = FeeInstallment.objects.create(
+
+            collection_plan=collection_plan,
+
+            name=name,
+
+            due_date=request.data.get(
+                "due_date",
+            ),
+
+            order=request.data.get(
+                "order",
+                1,
+            ),
+
+        )
+
+        return CustomResponse.successResponse(
+
+            description="Fee installment created successfully.",
+
+            data={
+                "id": str(installment.id),
+            },
+
+        )
+
+class FeeInstallmentListAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_installment.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        queryset = FeeInstallment.objects.select_related(
+            "collection_plan",
+            "collection_plan__fee_template",
+        ).filter(
+            collection_plan__fee_template__school=school,
+        )
+
+        collection_plan_id = request.GET.get(
+            "collection_plan_id",
+        )
+
+        if collection_plan_id:
+
+            queryset = queryset.filter(
+                collection_plan_id=collection_plan_id,
+            )
+
+        paginator = CustomPageNumberPagination()
+
+        page = paginator.paginate_queryset(
+            queryset.order_by(
+                "order",
+            ),
+            request,
+        )
+
+        data = []
+
+        for obj in page:
+
+            data.append({
+
+                "id": str(obj.id),
+
+                "name": obj.name,
+
+                "due_date": obj.due_date,
+
+                "order": obj.order,
+
+                "collection_plan": {
+
+                    "id": str(obj.collection_plan.id),
+
+                    "plan_type": obj.collection_plan.plan_type,
+
+                },
+
+            })
+
+        return CustomResponse.successResponse(
+            data=data,
+            total=queryset.count(),
+        )
+
+class FeeInstallmentDetailAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_installment.view"
+
+    def get(
+        self,
+        request,
+        installment_id,
+    ):
+
+        school = request.school
+
+        installment = FeeInstallment.objects.select_related(
+            "collection_plan",
+            "collection_plan__fee_template",
+        ).filter(
+            id=installment_id,
+            collection_plan__fee_template__school=school,
+        ).first()
+
+        if installment is None:
+
+            return CustomResponse.errorResponse(
+                description="Fee installment not found.",
+            )
+
+        return CustomResponse.successResponse(
+
+            data={
+
+                "id": str(installment.id),
+
+                "name": installment.name,
+
+                "due_date": installment.due_date,
+
+                "order": installment.order,
+
+                "collection_plan": {
+
+                    "id": str(installment.collection_plan.id),
+
+                    "plan_type": installment.collection_plan.plan_type,
+
+                },
+
+            },
+
+        )
+
+class UpdateFeeInstallmentAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_installment.update"
+
+    def put(
+        self,
+        request,
+        installment_id,
+    ):
+
+        school = request.school
+
+        installment = FeeInstallment.objects.select_related(
+            "collection_plan",
+            "collection_plan__fee_template",
+        ).filter(
+            id=installment_id,
+            collection_plan__fee_template__school=school,
+        ).first()
+
+        if installment is None:
+
+            return CustomResponse.errorResponse(
+                description="Fee installment not found.",
+            )
+
+        name = request.data.get(
+            "name",
+            installment.name,
+        ).strip()
+
+        if FeeInstallment.objects.filter(
+            collection_plan=installment.collection_plan,
+            name=name,
+        ).exclude(
+            id=installment.id,
+        ).exists():
+
+            return CustomResponse.errorResponse(
+                description="Installment already exists.",
+            )
+
+        installment.name = name
+
+        installment.due_date = request.data.get(
+            "due_date",
+            installment.due_date,
+        )
+
+        installment.order = request.data.get(
+            "order",
+            installment.order,
+        )
+
+        installment.save()
+
+        return CustomResponse.successResponse(
+            description="Fee installment updated successfully.",
+        )
+
+class CreateFeeInstallmentItemAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_installment_item.create"
+
+    def post(self, request):
+
+        school = request.school
+
+        installment = FeeInstallment.objects.select_related(
+            "collection_plan",
+            "collection_plan__fee_template",
+        ).filter(
+            id=request.data.get("installment_id"),
+            collection_plan__fee_template__school=school,
+        ).first()
+
+        if installment is None:
+
+            return CustomResponse.errorResponse(
+                description="Installment not found.",
+            )
+
+        fee_template_item = FeeTemplateItem.objects.select_related(
+            "fee_template",
+        ).filter(
+            id=request.data.get("fee_template_item_id"),
+            fee_template__school=school,
+        ).first()
+
+        if fee_template_item is None:
+
+            return CustomResponse.errorResponse(
+                description="Fee template item not found.",
+            )
+
+        if (
+            installment.collection_plan.fee_template_id
+            != fee_template_item.fee_template_id
+        ):
+
+            return CustomResponse.errorResponse(
+                description="Fee template mismatch.",
+            )
+
+        if FeeInstallmentItem.objects.filter(
+            installment=installment,
+            fee_template_item=fee_template_item,
+        ).exists():
+
+            return CustomResponse.errorResponse(
+                description="Fee installment item already exists.",
+            )
+
+        amount = request.data.get("amount")
+
+        if amount in [None, ""]:
+
+            return CustomResponse.errorResponse(
+                description="Amount is required.",
+            )
+
+        item = FeeInstallmentItem.objects.create(
+
+            installment=installment,
+
+            fee_template_item=fee_template_item,
+
+            amount=amount,
+
+        )
+
+        return CustomResponse.successResponse(
+
+            description="Fee installment item created successfully.",
+
+            data={
+                "id": str(item.id),
+            },
+
+        )
+
+class FeeInstallmentItemListAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_installment_item.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        queryset = FeeInstallmentItem.objects.select_related(
+            "installment",
+            "fee_template_item",
+            "fee_template_item__fee_type",
+            "fee_template_item__fee_template",
+        ).filter(
+            installment__collection_plan__fee_template__school=school,
+        )
+
+        installment_id = request.GET.get(
+            "installment_id",
+        )
+
+        if installment_id:
+
+            queryset = queryset.filter(
+                installment_id=installment_id,
+            )
+
+        paginator = CustomPageNumberPagination()
+
+        page = paginator.paginate_queryset(
+            queryset.order_by(
+                "fee_template_item__fee_type__name",
+            ),
+            request,
+        )
+
+        data = []
+
+        for obj in page:
+
+            data.append({
+
+                "id": str(obj.id),
+
+                "installment": {
+
+                    "id": str(obj.installment.id),
+
+                    "name": obj.installment.name,
+
+                },
+
+                "fee_template_item": {
+
+                    "id": str(obj.fee_template_item.id),
+
+                    "fee_type": obj.fee_template_item.fee_type.name,
+
+                },
+
+                "amount": obj.amount,
+
+            })
+
+        return CustomResponse.successResponse(
+            data=data,
+            total=queryset.count(),
+        )
+class FeeInstallmentItemDetailAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_installment_item.view"
+
+    def get(
+        self,
+        request,
+        installment_item_id,
+    ):
+
+        school = request.school
+
+        item = FeeInstallmentItem.objects.select_related(
+            "installment",
+            "fee_template_item",
+            "fee_template_item__fee_type",
+        ).filter(
+            id=installment_item_id,
+            installment__collection_plan__fee_template__school=school,
+        ).first()
+
+        if item is None:
+
+            return CustomResponse.errorResponse(
+                description="Fee installment item not found.",
+            )
+
+        return CustomResponse.successResponse(
+
+            data={
+
+                "id": str(item.id),
+
+                "installment": {
+
+                    "id": str(item.installment.id),
+
+                    "name": item.installment.name,
+
+                },
+
+                "fee_template_item": {
+
+                    "id": str(item.fee_template_item.id),
+
+                    "fee_type": item.fee_template_item.fee_type.name,
+
+                },
+
+                "amount": item.amount,
+
+            },
+
+        )
+
+
+class UpdateFeeInstallmentItemAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_installment_item.update"
+
+    def put(
+        self,
+        request,
+        installment_item_id,
+    ):
+
+        school = request.school
+
+        item = FeeInstallmentItem.objects.select_related(
+            "installment",
+            "installment__collection_plan",
+            "installment__collection_plan__fee_template",
+        ).filter(
+            id=installment_item_id,
+            installment__collection_plan__fee_template__school=school,
+        ).first()
+
+        if item is None:
+
+            return CustomResponse.errorResponse(
+                description="Fee installment item not found.",
+            )
+
+        item.amount = request.data.get(
+            "amount",
+            item.amount,
+        )
+
+        item.save()
+
+        return CustomResponse.successResponse(
+            description="Fee installment item updated successfully.",
+        )
+
+class CreateLateFeeRuleAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "late_fee_rule.create"
+
+    def post(self, request):
+
+        school = request.school
+
+        collection_plan = FeeCollectionPlan.objects.select_related(
+            "fee_template",
+        ).filter(
+            id=request.data.get("collection_plan_id"),
+            fee_template__school=school,
+        ).first()
+
+        if collection_plan is None:
+
+            return CustomResponse.errorResponse(
+                description="Collection plan not found.",
+            )
+
+        rule_type = request.data.get(
+            "rule_type",
+        )
+
+        if rule_type not in LateFeeRule.RuleType.values:
+
+            return CustomResponse.errorResponse(
+                description="Invalid rule type.",
+            )
+
+        from_day = request.data.get(
+            "from_day",
+        )
+
+        to_day = request.data.get(
+            "to_day",
+        )
+
+        if from_day is None or to_day is None:
+
+            return CustomResponse.errorResponse(
+                description="from_day and to_day are required.",
+            )
+
+        if int(from_day) > int(to_day):
+
+            return CustomResponse.errorResponse(
+                description="from_day should be less than or equal to to_day.",
+            )
+
+        overlap = LateFeeRule.objects.filter(
+            collection_plan=collection_plan,
+            from_day__lte=to_day,
+            to_day__gte=from_day,
+        ).exists()
+
+        if overlap:
+
+            return CustomResponse.errorResponse(
+                description="Late fee range overlaps existing rule.",
+            )
+
+        late_fee_rule = LateFeeRule.objects.create(
+
+            collection_plan=collection_plan,
+
+            from_day=from_day,
+
+            to_day=to_day,
+
+            rule_type=rule_type,
+
+            value=request.data.get(
+                "value",
+            ),
+
+        )
+
+        return CustomResponse.successResponse(
+
+            description="Late fee rule created successfully.",
+
+            data={
+                "id": str(late_fee_rule.id),
+            },
+
+        )
+
+class LateFeeRuleListAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "late_fee_rule.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        queryset = LateFeeRule.objects.select_related(
+            "collection_plan",
+            "collection_plan__fee_template",
+        ).filter(
+            collection_plan__fee_template__school=school,
+        )
+
+        collection_plan_id = request.GET.get(
+            "collection_plan_id",
+        )
+
+        if collection_plan_id:
+
+            queryset = queryset.filter(
+                collection_plan_id=collection_plan_id,
+            )
+
+        paginator = CustomPageNumberPagination()
+
+        page = paginator.paginate_queryset(
+            queryset.order_by(
+                "from_day",
+            ),
+            request,
+        )
+
+        data = []
+
+        for obj in page:
+
+            data.append({
+
+                "id": str(obj.id),
+
+                "collection_plan": {
+
+                    "id": str(obj.collection_plan.id),
+
+                    "plan_type": obj.collection_plan.plan_type,
+
+                },
+
+                "from_day": obj.from_day,
+
+                "to_day": obj.to_day,
+
+                "rule_type": obj.rule_type,
+
+                "value": obj.value,
+
+            })
+
+        return CustomResponse.successResponse(
+            data=data,
+            total=queryset.count(),
+        )
+class LateFeeRuleDetailAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "late_fee_rule.view"
+
+    def get(
+        self,
+        request,
+        late_fee_rule_id,
+    ):
+
+        school = request.school
+
+        rule = LateFeeRule.objects.select_related(
+            "collection_plan",
+            "collection_plan__fee_template",
+        ).filter(
+            id=late_fee_rule_id,
+            collection_plan__fee_template__school=school,
+        ).first()
+
+        if rule is None:
+
+            return CustomResponse.errorResponse(
+                description="Late fee rule not found.",
+            )
+
+        return CustomResponse.successResponse(
+
+            data={
+
+                "id": str(rule.id),
+
+                "collection_plan": {
+
+                    "id": str(rule.collection_plan.id),
+
+                    "plan_type": rule.collection_plan.plan_type,
+
+                },
+
+                "from_day": rule.from_day,
+
+                "to_day": rule.to_day,
+
+                "rule_type": rule.rule_type,
+
+                "value": rule.value,
+
+            },
+
+        )
+
+class UpdateLateFeeRuleAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "late_fee_rule.update"
+
+    def put(
+        self,
+        request,
+        late_fee_rule_id,
+    ):
+
+        school = request.school
+
+        rule = LateFeeRule.objects.select_related(
+            "collection_plan",
+            "collection_plan__fee_template",
+        ).filter(
+            id=late_fee_rule_id,
+            collection_plan__fee_template__school=school,
+        ).first()
+
+        if rule is None:
+
+            return CustomResponse.errorResponse(
+                description="Late fee rule not found.",
+            )
+
+        from_day = request.data.get(
+            "from_day",
+            rule.from_day,
+        )
+
+        to_day = request.data.get(
+            "to_day",
+            rule.to_day,
+        )
+
+        if int(from_day) > int(to_day):
+
+            return CustomResponse.errorResponse(
+                description="from_day should be less than or equal to to_day.",
+            )
+
+        overlap = LateFeeRule.objects.filter(
+            collection_plan=rule.collection_plan,
+            from_day__lte=to_day,
+            to_day__gte=from_day,
+        ).exclude(
+            id=rule.id,
+        ).exists()
+
+        if overlap:
+
+            return CustomResponse.errorResponse(
+                description="Late fee range overlaps existing rule.",
+            )
+
+        rule_type = request.data.get(
+            "rule_type",
+            rule.rule_type,
+        )
+
+        if rule_type not in LateFeeRule.RuleType.values:
+
+            return CustomResponse.errorResponse(
+                description="Invalid rule type.",
+            )
+
+        rule.from_day = from_day
+
+        rule.to_day = to_day
+
+        rule.rule_type = rule_type
+
+        rule.value = request.data.get(
+            "value",
+            rule.value,
+        )
+
+        rule.save()
+
+        return CustomResponse.successResponse(
+            description="Late fee rule updated successfully.",
+        )
+
+class CreateFeeConcessionAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_concession.create"
+
+    def post(self, request):
+
+        school = request.school
+
+        name = str(
+            request.data.get(
+                "name",
+                "",
+            )
+        ).strip()
+
+        if not name:
+
+            return CustomResponse.errorResponse(
+                description="Concession name is required.",
+            )
+
+        if FeeConcession.objects.filter(
+            school=school,
+            name=name,
+        ).exists():
+
+            return CustomResponse.errorResponse(
+                description="Fee concession already exists.",
+            )
+
+        concession_type = request.data.get(
+            "concession_type",
+        )
+
+        if concession_type not in FeeConcession.Type.values:
+
+            return CustomResponse.errorResponse(
+                description="Invalid concession type.",
+            )
+
+        value = request.data.get(
+            "value",
+        )
+
+        if value in [None, ""]:
+
+            return CustomResponse.errorResponse(
+                description="Value is required.",
+            )
+
+        concession = FeeConcession.objects.create(
+
+            school=school,
+
+            name=name,
+
+            concession_type=concession_type,
+
+            value=value,
+
+        )
+
+        return CustomResponse.successResponse(
+
+            description="Fee concession created successfully.",
+
+            data={
+                "id": str(concession.id),
+            },
+
+        )
+
+class FeeConcessionListAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_concession.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        queryset = FeeConcession.objects.filter(
+            school=school,
+        ).order_by(
+            "name",
+        )
+
+        search = request.GET.get(
+            "search",
+        )
+
+        if search:
+
+            queryset = queryset.filter(
+                name__icontains=search,
+            )
+
+        paginator = CustomPageNumberPagination()
+
+        page = paginator.paginate_queryset(
+            queryset,
+            request,
+        )
+
+        data = []
+
+        for obj in page:
+
+            data.append({
+
+                "id": str(obj.id),
+
+                "name": obj.name,
+
+                "concession_type": obj.concession_type,
+
+                "value": obj.value,
+
+            })
+
+        return CustomResponse.successResponse(
+
+            data=data,
+
+            total=queryset.count(),
+
+        )
+
+class UpdateFeeConcessionAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_concession.update"
+
+    def put(
+        self,
+        request,
+        concession_id,
+    ):
+
+        school = request.school
+
+        concession = FeeConcession.objects.filter(
+            id=concession_id,
+            school=school,
+        ).first()
+
+        if concession is None:
+
+            return CustomResponse.errorResponse(
+                description="Fee concession not found.",
+            )
+
+        name = request.data.get(
+            "name",
+            concession.name,
+        ).strip()
+
+        if FeeConcession.objects.filter(
+            school=school,
+            name=name,
+        ).exclude(
+            id=concession.id,
+        ).exists():
+
+            return CustomResponse.errorResponse(
+                description="Fee concession already exists.",
+            )
+
+        concession_type = request.data.get(
+            "concession_type",
+            concession.concession_type,
+        )
+
+        if concession_type not in FeeConcession.Type.values:
+
+            return CustomResponse.errorResponse(
+                description="Invalid concession type.",
+            )
+
+        concession.name = name
+
+        concession.concession_type = concession_type
+
+        concession.value = request.data.get(
+            "value",
+            concession.value,
+        )
+
+        concession.save()
+
+        return CustomResponse.successResponse(
+            description="Fee concession updated successfully.",
         )
