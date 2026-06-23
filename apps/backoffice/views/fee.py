@@ -3,7 +3,7 @@ from rest_framework.views import APIView
 
 from apps.fee.models import FeeType, FeeTemplateItem, FeeTemplate, FeeCollectionPlan, FeeInstallment, \
     FeeInstallmentItem, LateFeeRule, FeeConcession
-from apps.school.models.school import AcademicYear
+from apps.school.models.school import AcademicYear, Grade
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 
