@@ -414,10 +414,11 @@ class FeeTemplateListAPIView(APIView):
             })
 
         return CustomResponse.successResponse(
-
-            data=data,
-
             total=queryset.count(),
+
+
+            data=data
+
 
         )
 
