@@ -575,11 +575,11 @@ class StudentFee(AuditModel):
         blank=True,
     )
 
-    scholarship = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=0,
-    )
+    # scholarship = models.DecimalField(
+    #     max_digits=10,
+    #     decimal_places=2,
+    #     default=0,
+    # )
 
     late_fee = models.DecimalField(
         max_digits=10,
