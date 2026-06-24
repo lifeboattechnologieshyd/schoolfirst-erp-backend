@@ -718,10 +718,44 @@ class CreateStudentAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Roll number already exists in this section.",
             )
+        valid_blood_groups = [
+               "A+",
+                "A-",
+                "B+",
+                "B-",
+                "AB+",
+                "AB-",
+                "O+",
+                "O-",
+        ]
+        blood_group = request.data.get("blood_group",)
+        if blood_group and blood_group not in valid_blood_groups:
+            return CustomResponse.errorResponse(
+        description="Invalid blood group.",)
+
 
         try:
 
             with transaction.atomic():
+
+                fee_concession_id = request.data.get(
+                    "fee_concession_id",
+                )
+
+                concession = None
+
+                if fee_concession_id:
+
+                    concession = FeeConcession.objects.filter(
+                        id=fee_concession_id,
+                        school=school,
+                    ).first()
+
+                    if concession is None:
+
+                        return CustomResponse.errorResponse(
+                            description="Fee concession not found.",
+                        )
 
                 student = Student.objects.create(
 
@@ -770,9 +804,7 @@ class CreateStudentAPIView(APIView):
                         "place_of_birth",
                     ),
 
-                    blood_group=request.data.get(
-                        "blood_group",
-                    ),
+                    blood_group=blood_group,
 
                     photo_url=request.data.get(
                         "photo_url",
@@ -894,31 +926,30 @@ class CreateStudentAPIView(APIView):
                     grade=grade,
                 ).first()
 
-                if fee_template:
+                if fee_template is None:
 
-                    generate_student_fees(
-                        student=student,
-                        fee_template=fee_template,
-                        assigned_by=request.user,
+                    raise Exception(
+                        f"Fee template not configured for grade '{grade.name}'."
                     )
+
+                StudentFeeAssignment.objects.create(
+
+                    student=student,
+                    fee_template=fee_template,
+                    concession=concession,
+                    assigned_by=request.user,
+                )
+
+                generate_student_fees(
+                    student=student,
+                    fee_template=fee_template,
+                )
 
         except Exception as e:
 
             return CustomResponse.errorResponse(
                 description=str(e),
             )
-
-        return CustomResponse.successResponse(
-
-            description="Student created successfully.",
-
-            data={
-                "id": str(student.id),
-                "name": student.name,
-                "admission_number": student.admission_number,
-            },
-
-        )
 
 
 
