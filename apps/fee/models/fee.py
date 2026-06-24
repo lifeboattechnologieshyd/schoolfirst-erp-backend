@@ -645,26 +645,25 @@ class StudentFee(AuditModel):
 
     @property
     def concession_amount(self):
-        if not self.concession:
-            return 0
-        if (
-            self.concession.concession_type
-            == FeeConcession.Type.PERCENTAGE
-        ):
-            return (
-                self.amount
-                * self.concession.value
-            ) / 100
-        return self.concession.value
+        if not self.assignment.concession:
+                    return 0
+
+        concession = self.assignment.concession
+        if concession.concession_type == FeeConcession.Type.PERCENTAGE:
+             return (
+            self.amount * concession.value
+        ) / 100
+
+        return concession.value
 
     @property
     def payable_amount(self):
+
         return (
             self.amount
             - self.concession_amount
             + self.late_fee
             - self.paid_amount
-
         )
 
     def __str__(self):

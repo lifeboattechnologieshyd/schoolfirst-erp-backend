@@ -33,7 +33,6 @@ def generate_student_fees(
                 installment_item=item,
                 due_date=item.installment.due_date,
                 amount=item.amount,
-                concession=assignment.concession,
             )
         )
 
