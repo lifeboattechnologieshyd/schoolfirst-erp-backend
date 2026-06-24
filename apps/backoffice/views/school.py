@@ -1193,7 +1193,8 @@ class BulkUploadStudentAPIView(APIView):
                     fee_template = FeeTemplate.objects.filter(
                         school=school,
                         academic_year=academic_year,
-                        grade=grade,).first()
+                        grade=grade,
+                        is_active=True,).first()
                     if fee_template is None:
                         raise Exception(f"Fee template not configured for grade '{grade.name}'.")
                     assignment, _ = StudentFeeAssignment.objects.get_or_create(
