@@ -2555,19 +2555,38 @@ class GenerateStudentFeesAPIView(APIView):
                 description="Fee template not found.",
             )
 
+        print("=" * 80)
+        print("Fee Template :", fee_template.id)
+        print("School :", fee_template.school)
+        print("Academic Year :", fee_template.academic_year)
+        print("Grade :", fee_template.grade)
+
         students = Student.objects.filter(
-
             school=school,
-
             academic_year=fee_template.academic_year,
-
             grade=fee_template.grade,
-
         )
+
+        print("Students Count :", students.count())
+
+        for student in students:
+
+            print(
+                "Student ID :", student.id,
+                "Name :", student.name,
+                "Grade :", student.grade_id,
+                "Academic Year :", student.academic_year_id,
+            )
+
+        print("=" * 80)
 
         generated_count = 0
 
         for student in students:
+
+            print(
+                f"Generating fees for : {student.name}"
+            )
 
             generate_student_fees(
                 student=student,
@@ -2575,6 +2594,8 @@ class GenerateStudentFeesAPIView(APIView):
             )
 
             generated_count += 1
+
+        print("Generated Count :", generated_count)
 
         return CustomResponse.successResponse(
 
