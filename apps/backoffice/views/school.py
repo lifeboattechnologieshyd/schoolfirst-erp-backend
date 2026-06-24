@@ -29,7 +29,7 @@ from io import BytesIO
 
 from openpyxl import Workbook
 
-from django.http import HttpResponse
+from django.http import HttpResponse, FileResponse
 
 from rest_framework.views import APIView
 
@@ -1208,11 +1208,239 @@ class BulkUploadStudentAPIView(APIView):
 
 
 
+# class DownloadStudentTemplateAPIView(APIView):
+#
+#     permission_classes = [
+#         IsAuthenticated,
+#         HasPermission,
+#     ]
+#
+#     required_permission = "student.bulk_upload"
+#
+#     def get(self, request):
+#
+#         workbook = Workbook()
+#
+#         sheet = workbook.active
+#
+#         sheet.title = "Students"
+#
+#         headers = [
+#
+#             "Academic Year",
+#
+#             "Grade",
+#
+#             "Section",
+#
+#             "Board",
+#
+#             "Admission Number",
+#
+#             "Roll Number",
+#
+#             "Name",
+#
+#             "Gender",
+#
+#             "Date Of Birth",
+#
+#             "Admission Date",
+#
+#             "Enrollment Type",
+#
+#             "Place Of Birth",
+#
+#             "Blood Group",
+#
+#             "Nationality",
+#
+#             "Mother Tongue",
+#
+#             "Aadhaar Number",
+#
+#             "Religion",
+#
+#             "Caste",
+#
+#             "Sub Caste",
+#
+#             "Student Category",
+#
+#             "Identification Marks",
+#
+#             "Email",
+#
+#             "Address",
+#
+#             "Emergency Contact Name",
+#
+#             "Emergency Contact Mobile",
+#
+#             "Father Name",
+#
+#             "Father Mobile",
+#
+#             "Father Occupation",
+#
+#             "Mother Name",
+#
+#             "Mother Mobile",
+#
+#             "Mother Occupation",
+#
+#             "Guardian Name",
+#
+#             "Guardian Mobile",
+#
+#             "Guardian Occupation",
+#
+#             "Previous School",
+#
+#             "Previous School TC Number",
+#
+#             "Previous Exam Percentage",
+#
+#             "Transport Required",
+#
+#             "Pickup Point",
+#
+#             "Hostel Type",
+#
+#         ]
+#
+#         for column_number, header in enumerate(
+#             headers,
+#             start=1,
+#         ):
+#
+#             sheet.cell(
+#                 row=1,
+#                 column=column_number,
+#                 value=header,
+#             )
+#
+#         sample_row = [
+#
+#             "2025-2026",
+#
+#             "Grade 1",
+#
+#             "A",
+#
+#             "CBSE",
+#
+#             "ADM001",
+#
+#             1,
+#
+#             "Rahul Kumar",
+#
+#             "MALE",
+#
+#             "2018-05-10",
+#
+#             "2025-06-01",
+#
+#             "NEW",
+#
+#             "Hyderabad",
+#
+#             "O+",
+#
+#             "Indian",
+#
+#             "Telugu",
+#
+#             "123456789012",
+#
+#             "Hindu",
+#
+#             "OC",
+#
+#             "Kamma",
+#
+#             "General",
+#
+#             "Mole on chin",
+#
+#             "rahul@gmail.com",
+#
+#             "Hyderabad",
+#
+#             "Ramesh",
+#
+#             "9876543210",
+#
+#             "Ramesh",
+#
+#             "9876543210",
+#
+#             "Engineer",
+#
+#             "Sita",
+#
+#             "9876543211",
+#
+#             "Teacher",
+#
+#             "Ramesh",
+#
+#             "9876543210",
+#
+#             "Engineer",
+#
+#             "ABC School",
+#
+#             "TC123",
+#
+#             92.5,
+#
+#             True,
+#
+#             "Miyapur",
+#
+#             "DAY_SCHOLAR",
+#
+#         ]
+#
+#         for column_number, value in enumerate(
+#             sample_row,
+#             start=1,
+#         ):
+#
+#             sheet.cell(
+#                 row=2,
+#                 column=column_number,
+#                 value=value,
+#             )
+#
+#         output = BytesIO()
+#
+#         workbook.save(output)
+#
+#         output.seek(0)
+#
+#         response = HttpResponse(
+#             output.getvalue(),
+#             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+#         )
+#
+#         response["Content-Disposition"] = (
+#             'attachment; filename="student_bulk_upload_template.xlsx"'
+#         )
+#
+#         return response
+
+
 class DownloadStudentTemplateAPIView(APIView):
 
     permission_classes = [
+
         IsAuthenticated,
+
         HasPermission,
+
     ]
 
     required_permission = "student.bulk_upload"
@@ -1247,80 +1475,11 @@ class DownloadStudentTemplateAPIView(APIView):
 
             "Admission Date",
 
-            "Enrollment Type",
-
-            "Place Of Birth",
-
-            "Blood Group",
-
-            "Nationality",
-
-            "Mother Tongue",
-
-            "Aadhaar Number",
-
-            "Religion",
-
-            "Caste",
-
-            "Sub Caste",
-
-            "Student Category",
-
-            "Identification Marks",
-
-            "Email",
-
-            "Address",
-
-            "Emergency Contact Name",
-
-            "Emergency Contact Mobile",
-
-            "Father Name",
-
-            "Father Mobile",
-
-            "Father Occupation",
-
-            "Mother Name",
-
-            "Mother Mobile",
-
-            "Mother Occupation",
-
-            "Guardian Name",
-
-            "Guardian Mobile",
-
-            "Guardian Occupation",
-
-            "Previous School",
-
-            "Previous School TC Number",
-
-            "Previous Exam Percentage",
-
-            "Transport Required",
-
-            "Pickup Point",
-
-            "Hostel Type",
-
         ]
 
-        for column_number, header in enumerate(
-            headers,
-            start=1,
-        ):
+        sheet.append(headers)
 
-            sheet.cell(
-                row=1,
-                column=column_number,
-                value=header,
-            )
-
-        sample_row = [
+        sheet.append([
 
             "2025-2026",
 
@@ -1342,98 +1501,31 @@ class DownloadStudentTemplateAPIView(APIView):
 
             "2025-06-01",
 
-            "NEW",
+        ])
 
-            "Hyderabad",
+        excel_file = BytesIO()
 
-            "O+",
+        workbook.save(excel_file)
 
-            "Indian",
+        excel_file.seek(0)
 
-            "Telugu",
+        return FileResponse(
 
-            "123456789012",
+            excel_file,
 
-            "Hindu",
+            as_attachment=True,
 
-            "OC",
+            filename="student_bulk_upload_template.xlsx",
 
-            "Kamma",
+            content_type=(
 
-            "General",
+                "application/vnd.openxmlformats-officedocument."
 
-            "Mole on chin",
+                "spreadsheetml.sheet"
 
-            "rahul@gmail.com",
+            ),
 
-            "Hyderabad",
-
-            "Ramesh",
-
-            "9876543210",
-
-            "Ramesh",
-
-            "9876543210",
-
-            "Engineer",
-
-            "Sita",
-
-            "9876543211",
-
-            "Teacher",
-
-            "Ramesh",
-
-            "9876543210",
-
-            "Engineer",
-
-            "ABC School",
-
-            "TC123",
-
-            92.5,
-
-            True,
-
-            "Miyapur",
-
-            "DAY_SCHOLAR",
-
-        ]
-
-        for column_number, value in enumerate(
-            sample_row,
-            start=1,
-        ):
-
-            sheet.cell(
-                row=2,
-                column=column_number,
-                value=value,
-            )
-
-        output = BytesIO()
-
-        workbook.save(output)
-
-        output.seek(0)
-
-        response = HttpResponse(
-            output.getvalue(),
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-
-        response["Content-Disposition"] = (
-            'attachment; filename="student_bulk_upload_template.xlsx"'
-        )
-
-        return response
-
-
-
 
 
 class StudentListAPIView(APIView):
