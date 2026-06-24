@@ -643,6 +643,34 @@ class StudentFee(AuditModel):
 
         ]
 
+    @property
+    def concession_amount(self):
+        if not self.concession:
+            return 0
+        if (
+            self.concession.concession_type
+            == FeeConcession.Type.PERCENTAGE
+        ):
+            return (
+                self.amount
+                * self.concession.value
+            ) / 100
+        return self.concession.value
+
+    @property
+    def payable_amount(self):
+        return (
+            self.amount
+            - self.concession_amount
+            + self.late_fee
+            - self.paid_amount
+
+        )
+
+    def __str__(self):
+
+        return f"{self.student.name}"
+
 class StudentFeePayment(AuditModel):
     objects = SoftDeleteManager()
 

@@ -2337,50 +2337,45 @@ class StudentFeeListAPIView(APIView):
 
     required_permission = "student_fee.view"
 
+    pagination_class = CustomPageNumberPagination
+
     def get(self, request):
 
         school = request.school
 
         queryset = StudentFee.objects.select_related(
-
             "student",
-
             "installment_item",
-
             "installment_item__installment",
-
             "installment_item__fee_template_item",
-
+            "installment_item__fee_template_item__fee_type",
+            "concession",
         ).filter(
             student__school=school,
         )
 
-        student_id = request.GET.get(
-            "student_id",
+        student_id = request.query_params.get(
+            "student_id"
         )
 
-        status = request.GET.get(
-            "status",
+        status = request.query_params.get(
+            "status"
         )
 
         if student_id:
-
             queryset = queryset.filter(
                 student_id=student_id,
             )
 
         if status:
-
             queryset = queryset.filter(
                 status=status,
             )
 
-        paginator = CustomPageNumberPagination()
+        paginator = self.pagination_class()
 
         page = paginator.paginate_queryset(
-            queryset.order_by(
-                "due_date",
-            ),
+            queryset,
             request,
         )
 
@@ -2388,38 +2383,27 @@ class StudentFeeListAPIView(APIView):
 
         for fee in page:
 
-            balance = (
-                fee.amount
-                + fee.late_fee
-                - fee.scholarship
-                - fee.paid_amount
-            )
-
             data.append({
 
                 "id": str(fee.id),
 
-                "student": {
-                    "id": str(fee.student.id),
-                    "name": fee.student.name,
-                },
+                "student": fee.student.name,
+
+                "fee_type": fee.installment_item.fee_template_item.fee_type.name,
 
                 "installment": fee.installment_item.installment.name,
 
-                "fee_head":
-                    fee.installment_item.fee_template_item.fee_type.name,
-
-                "due_date": fee.due_date,
-
                 "amount": fee.amount,
 
-                "scholarship": fee.scholarship,
+                "concession_amount": fee.concession_amount,
 
                 "late_fee": fee.late_fee,
 
                 "paid_amount": fee.paid_amount,
 
-                "balance": balance,
+                "balance": fee.payable_amount,
+
+                "due_date": fee.due_date,
 
                 "status": fee.status,
 
@@ -2439,27 +2423,17 @@ class StudentFeeDetailAPIView(APIView):
 
     required_permission = "student_fee.view"
 
-    def get(
-        self,
-        request,
-        student_fee_id,
-    ):
-
-        school = request.school
+    def get(self, request, fee_id):
 
         fee = StudentFee.objects.select_related(
-
             "student",
-
+            "concession",
             "installment_item",
-
             "installment_item__installment",
-
             "installment_item__fee_template_item",
-
+            "installment_item__fee_template_item__fee_type",
         ).filter(
-            id=student_fee_id,
-            student__school=school,
+            id=fee_id,
         ).first()
 
         if fee is None:
@@ -2468,67 +2442,26 @@ class StudentFeeDetailAPIView(APIView):
                 description="Student fee not found.",
             )
 
-        payments = []
-
-        for payment in fee.payments.filter(
-            is_cancelled=False,
-        ):
-
-            payments.append({
-
-                "id": str(payment.id),
-
-                "receipt_number": payment.receipt_number,
-
-                "amount": payment.amount,
-
-                "payment_mode": payment.payment_mode,
-
-                "payment_date": payment.payment_date,
-
-            })
-
         return CustomResponse.successResponse(
-
             data={
-
                 "id": str(fee.id),
-
-                "student": {
-
-                    "id": str(fee.student.id),
-
-                    "name": fee.student.name,
-
-                    "admission_number":
-                        fee.student.admission_number,
-
-                },
-
-                "installment":
-                    fee.installment_item.installment.name,
-
-                "fee_head":
-                    fee.installment_item.fee_template_item.fee_type.name,
-
-                "due_date": fee.due_date,
-
+                "student": fee.student.name,
+                "fee_type": fee.installment_item.fee_template_item.fee_type.name,
+                "installment": fee.installment_item.installment.name,
                 "amount": fee.amount,
-
+                "concession": (
+                    fee.concession.name
+                    if fee.concession
+                    else None
+                ),
+                "concession_amount": fee.concession_amount,
                 "late_fee": fee.late_fee,
-
-                "scholarship": fee.scholarship,
-
                 "paid_amount": fee.paid_amount,
-
+                "balance": fee.payable_amount,
+                "due_date": fee.due_date,
                 "status": fee.status,
-
-                "payments": payments,
-
             }
-
         )
-
 class GenerateStudentFeesAPIView(APIView):
 
     permission_classes = [
@@ -2605,4 +2538,214 @@ class GenerateStudentFeesAPIView(APIView):
                 "students_processed": generated_count,
             },
 
+        )
+
+class CollectFeeAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "student_fee.collect"
+
+    def post(self, request):
+
+        fee = StudentFee.objects.filter(
+            id=request.data.get(
+                "student_fee_id",
+            )
+        ).first()
+
+        if fee is None:
+
+            return CustomResponse.errorResponse(
+                description="Student fee not found.",
+            )
+
+        amount = Decimal(
+            request.data.get(
+                "amount",
+                0,
+            )
+        )
+
+        if amount <= 0:
+
+            return CustomResponse.errorResponse(
+                description="Invalid amount.",
+            )
+
+        if amount > fee.payable_amount:
+
+            return CustomResponse.errorResponse(
+                description="Amount exceeds balance.",
+            )
+
+        payment = StudentFeePayment.objects.create(
+
+            student_fee=fee,
+
+            receipt_number=uuid.uuid4().hex[:12].upper(),
+
+            amount=amount,
+
+            payment_mode=request.data.get(
+                "payment_mode",
+            ),
+
+            transaction_id=request.data.get(
+                "transaction_id",
+            ),
+
+            remarks=request.data.get(
+                "remarks",
+            ),
+
+            collected_by=request.user,
+
+        )
+
+        fee.paid_amount += amount
+
+        if fee.payable_amount <= 0:
+
+            fee.status = StudentFee.Status.PAID
+
+        else:
+
+            fee.status = StudentFee.Status.PARTIAL
+
+        fee.save()
+
+        return CustomResponse.successResponse(
+            description="Fee collected successfully.",
+            data={
+                "receipt_number": payment.receipt_number,
+            },
+        )
+
+class PaymentHistoryAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "student_fee.view"
+
+    def get(self, request):
+
+        student_id = request.query_params.get(
+            "student_id"
+        )
+
+        payments = StudentFeePayment.objects.select_related(
+            "student_fee",
+            "student_fee__student",
+        )
+
+        if student_id:
+
+            payments = payments.filter(
+                student_fee__student_id=student_id,
+            )
+
+        data = []
+
+        for payment in payments:
+
+            data.append({
+
+                "receipt_number": payment.receipt_number,
+
+                "student": payment.student_fee.student.name,
+
+                "amount": payment.amount,
+
+                "payment_mode": payment.payment_mode,
+
+                "payment_date": payment.payment_date,
+
+                "is_cancelled": payment.is_cancelled,
+
+            })
+
+        return CustomResponse.successResponse(
+            data=data,
+        )
+class OutstandingFeesAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "student_fee.view"
+
+    def get(self, request):
+
+        fees = StudentFee.objects.filter(
+            status__in=[
+                StudentFee.Status.PENDING,
+                StudentFee.Status.PARTIAL,
+                StudentFee.Status.OVERDUE,
+            ]
+        )
+
+        data = []
+
+        for fee in fees:
+
+            data.append({
+
+                "student": fee.student.name,
+
+                "balance": fee.payable_amount,
+
+                "due_date": fee.due_date,
+
+            })
+
+        return CustomResponse.successResponse(
+            data=data,
+        )
+
+class FeeDefaultersAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "student_fee.view"
+
+    def get(self, request):
+
+        today = timezone.now().date()
+
+        fees = StudentFee.objects.filter(
+            due_date__lt=today,
+            status__in=[
+                StudentFee.Status.PENDING,
+                StudentFee.Status.PARTIAL,
+            ],
+        )
+
+        data = []
+
+        for fee in fees:
+
+            data.append({
+
+                "student": fee.student.name,
+
+                "amount_due": fee.payable_amount,
+
+                "due_date": fee.due_date,
+
+            })
+
+        return CustomResponse.successResponse(
+            data=data,
         )

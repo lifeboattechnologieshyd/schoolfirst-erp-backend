@@ -2,12 +2,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from django.db.models import Q
 from apps.core.models import Roles, UserMaster, UserRoles
+from apps.fee.models import FeeTemplate
 from apps.school.models import School
 from apps.school.models.school import AcademicYear, Grade, Section, Student, StudentDocument
 from shared.enums.roles import RolesEnum
 from shared.helpers.rbac import check_permission
 from shared.helpers.student import get_or_create_parent
-from shared.mixins import CustomResponse
+from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from openpyxl import load_workbook
 
@@ -22,6 +23,18 @@ from apps.core.models import (
 from shared.permissions.rbac import HasPermission
 from shared.enums.roles import RolesEnum
 from django.db import transaction
+
+from shared.utils.fee import generate_student_fees
+from io import BytesIO
+
+from openpyxl import Workbook
+
+from django.http import HttpResponse
+
+from rest_framework.views import APIView
+
+from rest_framework.permissions import IsAuthenticated
+
 
 class CreateAcademicYearAPIView(APIView):
 
@@ -554,15 +567,24 @@ class UpdateSectionAPIView(APIView):
 
 class CreateStudentAPIView(APIView):
 
-    permission_classes = [IsAuthenticated,HasPermission,]
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
 
     required_permission = "student.create"
 
     def post(self, request):
+
         school = request.school
 
-        required_fields = [
+        if school is None:
 
+            return CustomResponse.errorResponse(
+                description="School not found.",
+            )
+
+        required_fields = [
 
             "academic_year_id",
 
@@ -586,231 +608,112 @@ class CreateStudentAPIView(APIView):
 
         for field in required_fields:
 
-            value = request.data.get(field)
-
-            if value in [None, ""]:
+            if request.data.get(field) in [None, ""]:
 
                 return CustomResponse.errorResponse(
-
                     description=f"{field} is required.",
-
                 )
 
-        school = request.school
-
-        if school is None:
-            return CustomResponse.errorResponse(
-                description="School not found.",
-            )
-
         academic_year = AcademicYear.objects.filter(
-
             id=request.data.get(
-
-                "academic_year_id"
-
-            ),school=school,
-
+                "academic_year_id",
+            ),
+            school=school,
         ).first()
 
         if academic_year is None:
 
             return CustomResponse.errorResponse(
-
                 description="Academic year not found.",
-
             )
 
         grade = Grade.objects.filter(
-
             id=request.data.get(
-
                 "grade_id",
-
-            ),school=school,
-
+            ),
+            school=school,
         ).first()
 
         if grade is None:
 
             return CustomResponse.errorResponse(
-
                 description="Grade not found.",
-
             )
 
         section = Section.objects.filter(
-
             id=request.data.get(
-
                 "section_id",
-
-            )
-
+            ),
+            grade=grade,
         ).first()
 
         if section is None:
 
             return CustomResponse.errorResponse(
-
                 description="Section not found.",
-
             )
 
-
-
         if request.data.get(
-
             "gender",
-
         ) not in Student.Gender.values:
 
             return CustomResponse.errorResponse(
-
                 description="Invalid gender.",
-
             )
 
-        father_mobile = request.data.get(
-
-            "father_mobile",
-
+        board = request.data.get(
+            "board",
+            Student.Board.STATE,
         )
 
-        if father_mobile and len(str(father_mobile)) != 10:
+        if board not in Student.Board.values:
 
             return CustomResponse.errorResponse(
-
-                description="Invalid father mobile number.",
-
+                description="Invalid board.",
             )
 
-        mother_mobile = request.data.get(
-
-            "mother_mobile",
-
+        hostel_type = request.data.get(
+            "hostel_type",
+            Student.HostelType.DAY_SCHOLAR,
         )
 
-        if mother_mobile and len(str(mother_mobile)) != 10:
+        if hostel_type not in Student.HostelType.values:
 
             return CustomResponse.errorResponse(
-
-                description="Invalid mother mobile number.",
-
+                description="Invalid hostel type.",
             )
 
-        guardian_mobile = request.data.get(
-
-            "guardian_mobile",
-
+        enrollment_type = request.data.get(
+            "enrollment_type",
+            Student.EnrollmentType.NEW,
         )
 
-        if guardian_mobile and len(str(guardian_mobile)) != 10:
+        if enrollment_type not in Student.EnrollmentType.values:
 
             return CustomResponse.errorResponse(
-
-                description="Invalid guardian mobile number.",
-
+                description="Invalid enrollment type.",
             )
 
         if Student.objects.filter(
-
             school=school,
-
             admission_number=request.data.get(
-
                 "admission_number",
-
             ),
-
         ).exists():
 
             return CustomResponse.errorResponse(
-
                 description="Admission number already exists.",
-
             )
 
         if Student.objects.filter(
-
             section=section,
-
             roll_number=request.data.get(
-
                 "roll_number",
-
             ),
-
         ).exists():
 
             return CustomResponse.errorResponse(
-
                 description="Roll number already exists in this section.",
-
-            )
-
-        if Student.objects.filter(
-
-            school=school,
-
-            name=request.data.get(
-
-                "name",
-
-            ),
-
-            date_of_birth=request.data.get(
-
-                "date_of_birth",
-
-            ),
-
-            father_mobile=request.data.get(
-
-                "father_mobile",
-
-            ),
-
-        ).exists():
-
-            return CustomResponse.errorResponse(
-
-                description="Student already exists.",
-
-            )
-
-        valid_blood_groups = [
-
-            "A+",
-
-            "A-",
-
-            "B+",
-
-            "B-",
-
-            "AB+",
-
-            "AB-",
-
-            "O+",
-
-            "O-",
-
-        ]
-
-        blood_group = request.data.get(
-
-            "blood_group",
-
-        )
-
-        if blood_group and blood_group not in valid_blood_groups:
-
-            return CustomResponse.errorResponse(
-
-                description="Invalid blood group.",
-
             )
 
         try:
@@ -821,6 +724,8 @@ class CreateStudentAPIView(APIView):
 
                     school=school,
 
+                    board=board,
+
                     academic_year=academic_year,
 
                     grade=grade,
@@ -828,151 +733,176 @@ class CreateStudentAPIView(APIView):
                     section=section,
 
                     admission_number=request.data.get(
-
                         "admission_number",
-
                     ).strip(),
 
                     roll_number=request.data.get(
-
                         "roll_number",
-
                     ),
 
                     name=request.data.get(
-
                         "name",
-
                     ).strip(),
 
                     gender=request.data.get(
-
                         "gender",
-
                     ),
 
                     date_of_birth=request.data.get(
-
                         "date_of_birth",
-
                     ),
 
                     admission_date=request.data.get(
-
                         "admission_date",
-
                     ),
 
-                    father_name=request.data.get(
+                    enrollment_type=enrollment_type,
 
-                        "father_name",
-
+                    status=request.data.get(
+                        "status",
+                        Student.Status.ACTIVE,
                     ),
 
-                    father_mobile=request.data.get(
-
-                        "father_mobile",
-
+                    place_of_birth=request.data.get(
+                        "place_of_birth",
                     ),
 
-                    father_occupation=request.data.get(
-
-                        "father_occupation",
-
+                    blood_group=request.data.get(
+                        "blood_group",
                     ),
 
-                    mother_name=request.data.get(
-
-                        "mother_name",
-
+                    photo_url=request.data.get(
+                        "photo_url",
                     ),
 
-                    mother_mobile=request.data.get(
-
-                        "mother_mobile",
-
+                    nationality=request.data.get(
+                        "nationality",
+                        "Indian",
                     ),
 
-                    mother_occupation=request.data.get(
-
-                        "mother_occupation",
-
+                    mother_tongue=request.data.get(
+                        "mother_tongue",
                     ),
 
-                    guardian_name=request.data.get(
-
-                        "guardian_name",
-
+                    aadhaar_number=request.data.get(
+                        "aadhaar_number",
                     ),
 
-                    guardian_mobile=request.data.get(
-
-                        "guardian_mobile",
-
+                    religion=request.data.get(
+                        "religion",
                     ),
 
-                    guardian_occupation=request.data.get(
+                    caste=request.data.get(
+                        "caste",
+                    ),
 
-                        "guardian_occupation",
+                    sub_caste=request.data.get(
+                        "sub_caste",
+                    ),
 
+                    student_category=request.data.get(
+                        "student_category",
+                    ),
+
+                    identification_marks=request.data.get(
+                        "identification_marks",
                     ),
 
                     email=request.data.get(
-
                         "email",
-
                     ),
 
                     address=request.data.get(
-
                         "address",
-
                     ),
 
-                    blood_group=blood_group,
-
-                    status=request.data.get(
-
-                        "status",
-
-                        Student.Status.ACTIVE,
-
+                    emergency_contact_name=request.data.get(
+                        "emergency_contact_name",
                     ),
+
+                    emergency_contact_mobile=request.data.get(
+                        "emergency_contact_mobile",
+                    ),
+
+                    father_name=request.data.get(
+                        "father_name",
+                    ),
+
+                    father_mobile=request.data.get(
+                        "father_mobile",
+                    ),
+
+                    father_occupation=request.data.get(
+                        "father_occupation",
+                    ),
+
+                    mother_name=request.data.get(
+                        "mother_name",
+                    ),
+
+                    mother_mobile=request.data.get(
+                        "mother_mobile",
+                    ),
+
+                    mother_occupation=request.data.get(
+                        "mother_occupation",
+                    ),
+
+                    guardian_name=request.data.get(
+                        "guardian_name",
+                    ),
+
+                    guardian_mobile=request.data.get(
+                        "guardian_mobile",
+                    ),
+
+                    guardian_occupation=request.data.get(
+                        "guardian_occupation",
+                    ),
+
+                    previous_school_name=request.data.get(
+                        "previous_school_name",
+                    ),
+
+                    previous_school_tc_number=request.data.get(
+                        "previous_school_tc_number",
+                    ),
+
+                    previous_exam_percentage=request.data.get(
+                        "previous_exam_percentage",
+                    ),
+
+                    transport_required=request.data.get(
+                        "transport_required",
+                        False,
+                    ),
+
+                    pickup_point=request.data.get(
+                        "pickup_point",
+                    ),
+
+                    hostel_type=hostel_type,
 
                 )
 
-        except IntegrityError as e:
+                fee_template = FeeTemplate.objects.filter(
+                    school=school,
+                    academic_year=academic_year,
+                    grade=grade,
+                ).first()
 
-            print("=" * 80)
+                if fee_template:
 
-            print("IntegrityError")
-
-            print(str(e))
-
-            print("=" * 80)
-
-            return CustomResponse.errorResponse(
-
-                description=str(e),
-
-            )
+                    generate_student_fees(
+                        student=student,
+                        fee_template=fee_template,
+                        assigned_by=request.user,
+                    )
 
         except Exception as e:
 
-            print("=" * 80)
-
-            print("Exception")
-
-            print(type(e))
-
-            print(str(e))
-
-            print("=" * 80)
-
             return CustomResponse.errorResponse(
-
                 description=str(e),
-
             )
 
         return CustomResponse.successResponse(
@@ -980,17 +910,305 @@ class CreateStudentAPIView(APIView):
             description="Student created successfully.",
 
             data={
-
                 "id": str(student.id),
-
                 "name": student.name,
-
                 "admission_number": student.admission_number,
-
             },
 
         )
+
+
+
+
 class BulkUploadStudentAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+    required_permission = "student.bulk_upload"
+    parser_classes = [MultiPartParser,]
+    def post(self, request):
+        school = request.school
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found.",
+            )
+        file = request.FILES.get("file")
+        if file is None:
+            return CustomResponse.errorResponse(
+                description="Excel file is required.",
+            )
+        workbook = load_workbook(file)
+        sheet = workbook.active
+        headers = [
+            cell.value
+            for cell in sheet[1]
+        ]
+        required_headers = [
+            "Academic Year",
+            "Grade",
+            "Section",
+            "Admission Number",
+            "Roll Number",
+            "Name",
+            "Gender",
+            "Date Of Birth",
+            "Admission Date",
+        ]
+        for header in required_headers:
+            if header not in headers:
+                return CustomResponse.errorResponse(
+                    description=f"{header} column is missing.",
+                )
+        success_count = 0
+        failed_count = 0
+        errors = []
+        valid_blood_groups = [
+            "A+",
+            "A-",
+            "B+",
+            "B-",
+            "AB+",
+            "AB-",
+            "O+",
+            "O-",
+        ]
+        for row_number, row in enumerate(
+            sheet.iter_rows(
+                min_row=2,
+                values_only=True,
+            ),
+            start=2,
+        ):
+            try:
+                data = dict(
+                    zip(
+                        headers,
+                        row,
+                    )
+                )
+                academic_year = AcademicYear.objects.filter(
+                    school=school,
+                    name=data.get(
+                        "Academic Year",
+                    ),
+                ).first()
+                if academic_year is None:
+                    raise Exception(
+                        "Academic year not found.",
+                    )
+                grade = Grade.objects.filter(
+                    school=school,
+                    name=data.get(
+                        "Grade",
+                    ),
+                ).first()
+                if grade is None:
+                    raise Exception(
+                        "Grade not found.",
+                    )
+                section = Section.objects.filter(
+                    grade=grade,
+                    name=data.get(
+                        "Section",
+                    ),
+                ).first()
+                if section is None:
+                    raise Exception(
+                        "Section not found.",
+                    )
+                gender = str(
+                    data.get(
+                        "Gender",
+                    )
+                ).upper()
+                if gender not in Student.Gender.values:
+                    raise Exception(
+                        "Invalid gender.",
+                    )
+                board = str(
+                    data.get(
+                        "Board",
+                        Student.Board.STATE,
+                    )
+                ).upper()
+                if board not in Student.Board.values:
+                    raise Exception(
+                        "Invalid board.",
+                    )
+                blood_group = data.get(
+                    "Blood Group",
+                )
+                if blood_group and blood_group not in valid_blood_groups:
+                    raise Exception(
+                        "Invalid blood group.",
+                    )
+                if Student.objects.filter(
+                    school=school,
+                    admission_number=str(
+                        data.get(
+                            "Admission Number",
+                        )
+                    ),
+                ).exists():
+                    raise Exception(
+                        "Admission number already exists.",
+                    )
+                if Student.objects.filter(
+                    section=section,
+                    roll_number=data.get(
+                        "Roll Number",
+                    ),
+                ).exists():
+                    raise Exception(
+                        "Roll number already exists.",
+                    )
+                with transaction.atomic():
+                    student = Student.objects.create(
+                        school=school,
+                        board=board,
+                        academic_year=academic_year,
+                        grade=grade,
+                        section=section,
+                        admission_number=str(
+                            data.get(
+                                "Admission Number",
+                            )
+                        ).strip(),
+                        roll_number=data.get(
+                            "Roll Number",
+                        ),
+                        name=str(
+                            data.get(
+                                "Name",
+                            )
+                        ).strip(),
+                        gender=gender,
+                        date_of_birth=data.get(
+                            "Date Of Birth",
+                        ),
+                        admission_date=data.get(
+                            "Admission Date",
+                        ),
+                        enrollment_type=data.get(
+                            "Enrollment Type",
+                            Student.EnrollmentType.NEW,
+                        ),
+                        place_of_birth=data.get(
+                            "Place Of Birth",
+                        ),
+                        blood_group=blood_group,
+                        nationality=data.get(
+                            "Nationality",
+                            "Indian",
+                        ),
+                        mother_tongue=data.get(
+                            "Mother Tongue",
+                        ),
+                        aadhaar_number=data.get(
+                            "Aadhaar Number",
+                        ),
+                        religion=data.get(
+                            "Religion",
+                        ),
+                        caste=data.get(
+                            "Caste",
+                        ),
+                        sub_caste=data.get(
+                            "Sub Caste",
+                        ),
+                        student_category=data.get(
+                            "Student Category",
+                        ),
+                        email=data.get(
+                            "Email",
+                        ),
+                        address=data.get(
+                            "Address",
+                        ),
+                        father_name=data.get(
+                            "Father Name",
+                        ),
+                        father_mobile=data.get(
+                            "Father Mobile",
+                        ),
+                        father_occupation=data.get(
+                            "Father Occupation",
+                        ),
+                        mother_name=data.get(
+                            "Mother Name",
+                        ),
+                        mother_mobile=data.get(
+                            "Mother Mobile",
+                        ),
+                        mother_occupation=data.get(
+                            "Mother Occupation",
+                        ),
+                        guardian_name=data.get(
+                            "Guardian Name",
+                        ),
+                        guardian_mobile=data.get(
+                            "Guardian Mobile",
+                        ),
+                        guardian_occupation=data.get(
+                            "Guardian Occupation",
+                        ),
+                        previous_school_name=data.get(
+                            "Previous School",
+                        ),
+                        previous_exam_percentage=data.get(
+                            "Previous Exam Percentage",
+                        ),
+                        transport_required=bool(
+                            data.get(
+                                "Transport Required",
+                                False,
+                            )
+                        ),
+                        pickup_point=data.get(
+                            "Pickup Point",
+                        ),
+                        hostel_type=data.get(
+                            "Hostel Type",
+                            Student.HostelType.DAY_SCHOLAR,
+                        ),
+                        status=Student.Status.ACTIVE,
+                    )
+                    fee_template = FeeTemplate.objects.filter(
+                        school=school,
+                        academic_year=academic_year,
+                        grade=grade,
+                    ).first()
+                    if fee_template:
+                        generate_student_fees(
+                            student=student,
+                            fee_template=fee_template,
+                            assigned_by=request.user,
+                        )
+                success_count += 1
+            except Exception as e:
+                failed_count += 1
+                errors.append(
+                    {
+                        "row": row_number,
+                        "message": str(e),
+                    }
+                )
+        return CustomResponse.successResponse(
+            description="Student bulk upload completed.",
+            data={
+                "total_records": success_count + failed_count,
+                "success_count": success_count,
+                "failed_count": failed_count,
+                "errors": errors,
+            },
+        )
+
+
+
+
+class DownloadStudentTemplateAPIView(APIView):
 
     permission_classes = [
         IsAuthenticated,
@@ -999,37 +1217,23 @@ class BulkUploadStudentAPIView(APIView):
 
     required_permission = "student.bulk_upload"
 
-    parser_classes = [
-        MultiPartParser,
-    ]
+    def get(self, request):
 
-    def post(self, request):
-
-        file = request.FILES.get("file")
-
-        if file is None:
-
-            return CustomResponse.errorResponse(
-                description="Excel file is required.",
-            )
-
-        workbook = load_workbook(file)
+        workbook = Workbook()
 
         sheet = workbook.active
 
+        sheet.title = "Students"
+
         headers = [
-            cell.value
-            for cell in sheet[1]
-        ]
-
-        required_headers = [
-
 
             "Academic Year",
 
             "Grade",
 
             "Section",
+
+            "Board",
 
             "Admission Number",
 
@@ -1043,289 +1247,213 @@ class BulkUploadStudentAPIView(APIView):
 
             "Admission Date",
 
+            "Enrollment Type",
+
+            "Place Of Birth",
+
+            "Blood Group",
+
+            "Nationality",
+
+            "Mother Tongue",
+
+            "Aadhaar Number",
+
+            "Religion",
+
+            "Caste",
+
+            "Sub Caste",
+
+            "Student Category",
+
+            "Identification Marks",
+
+            "Email",
+
+            "Address",
+
+            "Emergency Contact Name",
+
+            "Emergency Contact Mobile",
+
+            "Father Name",
+
+            "Father Mobile",
+
+            "Father Occupation",
+
+            "Mother Name",
+
+            "Mother Mobile",
+
+            "Mother Occupation",
+
+            "Guardian Name",
+
+            "Guardian Mobile",
+
+            "Guardian Occupation",
+
+            "Previous School",
+
+            "Previous School TC Number",
+
+            "Previous Exam Percentage",
+
+            "Transport Required",
+
+            "Pickup Point",
+
+            "Hostel Type",
+
         ]
 
-        for header in required_headers:
-
-            if header not in headers:
-
-                return CustomResponse.errorResponse(
-                    description=f"{header} column is missing.",
-                )
-
-        success_count = 0
-
-        failed_count = 0
-
-        errors = []
-
-        valid_blood_groups = [
-
-            "A+",
-            "A-",
-            "B+",
-            "B-",
-            "AB+",
-            "AB-",
-            "O+",
-            "O-",
-
-        ]
-
-        for row_number, row in enumerate(
-
-            sheet.iter_rows(
-                min_row=2,
-                values_only=True,
-            ),
-
-            start=2,
-
+        for column_number, header in enumerate(
+            headers,
+            start=1,
         ):
 
-            try:
+            sheet.cell(
+                row=1,
+                column=column_number,
+                value=header,
+            )
 
-                data = dict(
-                    zip(
-                        headers,
-                        row,
-                    )
-                )
+        sample_row = [
 
-                school = request.school
+            "2025-2026",
 
-                if school is None:
-                    raise Exception(
-                        "School not found.",
-                    )
+            "Grade 1",
 
-                academic_year = AcademicYear.objects.filter(
-                    school=school,
-                    name=data.get(
-                        "Academic Year",
-                    ),
-                ).first()
+            "A",
 
-                if academic_year is None:
-                    raise Exception(
-                        "Academic year not found.",
-                    )
+            "CBSE",
 
-                grade = Grade.objects.filter(
-                    school=school,
-                    name=data.get(
-                        "Grade",
-                    ),
-                ).first()
+            "ADM001",
 
-                if grade is None:
-                    raise Exception(
-                        "Grade not found.",
-                    )
+            1,
 
-                section = Section.objects.filter(
-                    grade=grade,
-                    name=data.get(
-                        "Section",
-                    ),
-                ).first()
+            "Rahul Kumar",
 
-                if section is None:
-                    raise Exception(
-                        "Section not found.",
-                    )
+            "MALE",
 
-                if data.get("Gender") not in Student.Gender.values:
+            "2018-05-10",
 
-                    raise Exception(
-                        "Invalid gender.",
-                    )
+            "2025-06-01",
 
-                blood_group = data.get(
-                    "Blood Group",
-                )
+            "NEW",
 
-                if blood_group and blood_group not in valid_blood_groups:
+            "Hyderabad",
 
-                    raise Exception(
-                        "Invalid blood group.",
-                    )
+            "O+",
 
-                if Student.objects.filter(
-                    school=school,
-                    admission_number=data.get(
-                        "Admission Number",
-                    ),
-                ).exists():
+            "Indian",
 
-                    raise Exception(
-                        "Admission number already exists.",
-                    )
+            "Telugu",
 
-                if Student.objects.filter(
-                    section=section,
-                    roll_number=data.get(
-                        "Roll Number",
-                    ),
-                ).exists():
+            "123456789012",
 
-                    raise Exception(
-                        "Roll number already exists.",
-                    )
+            "Hindu",
 
-                if Student.objects.filter(
+            "OC",
 
-                    school=school,
+            "Kamma",
 
-                    name=data.get(
-                        "Name",
-                    ),
+            "General",
 
-                    date_of_birth=data.get(
-                        "Date Of Birth",
-                    ),
+            "Mole on chin",
 
-                    father_mobile=data.get(
-                        "Father Mobile",
-                    ),
+            "rahul@gmail.com",
 
-                ).exists():
+            "Hyderabad",
 
-                    raise Exception(
-                        "Student already exists.",
-                    )
+            "Ramesh",
 
-                with transaction.atomic():
+            "9876543210",
 
-                    Student.objects.create(
+            "Ramesh",
 
-                        school=school,
+            "9876543210",
 
-                        academic_year=academic_year,
+            "Engineer",
 
-                        grade=grade,
+            "Sita",
 
-                        section=section,
+            "9876543211",
 
-                        admission_number=str(
-                            data.get(
-                                "Admission Number",
-                            )
-                        ).strip(),
+            "Teacher",
 
-                        roll_number=data.get(
-                            "Roll Number",
-                        ),
+            "Ramesh",
 
-                        name=str(
-                            data.get(
-                                "Name",
-                            )
-                        ).strip(),
+            "9876543210",
 
-                        gender=data.get(
-                            "Gender",
-                        ),
+            "Engineer",
 
-                        date_of_birth=data.get(
-                            "Date Of Birth",
-                        ),
+            "ABC School",
 
-                        admission_date=data.get(
-                            "Admission Date",
-                        ),
+            "TC123",
 
-                        father_name=data.get(
-                            "Father Name",
-                        ),
+            92.5,
 
-                        father_mobile=data.get(
-                            "Father Mobile",
-                        ),
+            True,
 
-                        father_occupation=data.get(
-                            "Father Occupation",
-                        ),
+            "Miyapur",
 
-                        mother_name=data.get(
-                            "Mother Name",
-                        ),
+            "DAY_SCHOLAR",
 
-                        mother_mobile=data.get(
-                            "Mother Mobile",
-                        ),
+        ]
 
-                        mother_occupation=data.get(
-                            "Mother Occupation",
-                        ),
+        for column_number, value in enumerate(
+            sample_row,
+            start=1,
+        ):
 
-                        guardian_name=data.get(
-                            "Guardian Name",
-                        ),
+            sheet.cell(
+                row=2,
+                column=column_number,
+                value=value,
+            )
 
-                        guardian_mobile=data.get(
-                            "Guardian Mobile",
-                        ),
+        output = BytesIO()
 
-                        guardian_occupation=data.get(
-                            "Guardian Occupation",
-                        ),
+        workbook.save(output)
 
-                        email=data.get(
-                            "Email",
-                        ),
+        output.seek(0)
 
-                        address=data.get(
-                            "Address",
-                        ),
+        response = HttpResponse(
 
-                        blood_group=blood_group,
+            output.getvalue(),
 
-                        status=Student.Status.ACTIVE,
-
-                    )
-
-                success_count += 1
-
-            except Exception as e:
-
-                failed_count += 1
-
-                errors.append(
-                    {
-                        "row": row_number,
-                        "message": str(e),
-                    }
-                )
-
-        return CustomResponse.successResponse(
-
-            description="Student bulk upload completed.",
-
-            data={
-
-                "total_records": success_count + failed_count,
-
-                "success_count": success_count,
-
-                "failed_count": failed_count,
-
-                "errors": errors,
-
-            },
+            content_type=(
+                "application/"
+                "vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
 
         )
 
+        response[
+            "Content-Disposition"
+        ] = (
+            'attachment; '
+            'filename="student_bulk_upload_template.xlsx"'
+        )
+
+        return response
+
+
+
+
 class StudentListAPIView(APIView):
 
-    permission_classes = [
-        IsAuthenticated,
-        HasPermission,
-    ]
+    permission_classes = [IsAuthenticated,HasPermission,]
 
     required_permission = "student.view"
 
+    pagination_class = CustomPageNumberPagination
+
     def get(self, request):
+
         school = request.school
 
         students = Student.objects.select_related(
@@ -1338,54 +1466,100 @@ class StudentListAPIView(APIView):
 
             "section",
 
-        ).all()
+        ).filter(
 
+            school=school,
 
+        )
 
         academic_year_id = request.query_params.get(
+
             "academic_year_id",
+
         )
 
         grade_id = request.query_params.get(
+
             "grade_id",
+
         )
 
         section_id = request.query_params.get(
+
             "section_id",
+
+        )
+
+        board = request.query_params.get(
+
+            "board",
+
+        )
+
+        hostel_type = request.query_params.get(
+
+            "hostel_type",
+
         )
 
         status = request.query_params.get(
+
             "status",
+
         )
 
         search = request.query_params.get(
+
             "search",
+
         )
-
-
 
         if academic_year_id:
 
             students = students.filter(
+
                 academic_year_id=academic_year_id,
+
             )
 
         if grade_id:
 
             students = students.filter(
+
                 grade_id=grade_id,
+
             )
 
         if section_id:
 
             students = students.filter(
+
                 section_id=section_id,
+
+            )
+
+        if board:
+
+            students = students.filter(
+
+                board=board,
+
+            )
+
+        if hostel_type:
+
+            students = students.filter(
+
+                hostel_type=hostel_type,
+
             )
 
         if status:
 
             students = students.filter(
+
                 status=status,
+
             )
 
         if search:
@@ -1394,17 +1568,43 @@ class StudentListAPIView(APIView):
 
                 Q(
                     name__icontains=search,
-                ) |
-
+                )
+                |
                 Q(
                     admission_number__icontains=search,
+                )
+                |
+                Q(
+                    father_mobile__icontains=search,
+                )
+                |
+                Q(
+                    mother_mobile__icontains=search,
                 )
 
             )
 
+        students = students.order_by(
+
+            "roll_number",
+
+        )
+
+        total = students.count()
+
+        paginator = self.pagination_class()
+
+        page = paginator.paginate_queryset(
+
+            students,
+
+            request,
+
+        )
+
         data = []
 
-        for student in students:
+        for student in page:
 
             data.append(
 
@@ -1412,33 +1612,53 @@ class StudentListAPIView(APIView):
 
                     "id": str(student.id),
 
-                    "school": {
-                        "id": str(student.school.id),
-                        "name": student.school.name,
-                    },
-
-                    "academic_year": {
-                        "id": str(student.academic_year.id),
-                        "name": student.academic_year.name,
-                    },
-
-                    "grade": {
-                        "id": str(student.grade.id),
-                        "name": student.grade.name,
-                    },
-
-                    "section": {
-                        "id": str(student.section.id),
-                        "name": student.section.name,
-                    },
-
                     "admission_number": student.admission_number,
 
                     "roll_number": student.roll_number,
 
                     "name": student.name,
 
+                    "board": student.board,
+
                     "gender": student.gender,
+
+                    "date_of_birth": student.date_of_birth,
+
+                    "blood_group": student.blood_group,
+
+                    "status": student.status,
+
+                    "school": {
+
+                        "id": str(student.school.id),
+
+                        "name": student.school.name,
+
+                    },
+
+                    "academic_year": {
+
+                        "id": str(student.academic_year.id),
+
+                        "name": student.academic_year.name,
+
+                    },
+
+                    "grade": {
+
+                        "id": str(student.grade.id),
+
+                        "name": student.grade.name,
+
+                    },
+
+                    "section": {
+
+                        "id": str(student.section.id),
+
+                        "name": student.section.name,
+
+                    },
 
                     "father_name": student.father_name,
 
@@ -1448,14 +1668,24 @@ class StudentListAPIView(APIView):
 
                     "mother_mobile": student.mother_mobile,
 
-                    "status": student.status,
+                    "guardian_name": student.guardian_name,
+
+                    "guardian_mobile": student.guardian_mobile,
+
+                    "hostel_type": student.hostel_type,
+
+                    "transport_required": student.transport_required,
 
                 }
 
             )
 
         return CustomResponse.successResponse(
+
             data=data,
+
+            total=total,
+
         )
 
 # -------------------------------

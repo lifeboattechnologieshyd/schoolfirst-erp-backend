@@ -19,7 +19,8 @@ from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCr
 from apps.backoffice.views.school import AcademicYearListAPIView, CreateAcademicYearAPIView, UpdateAcademicYearAPIView, \
     CreateGradeAPIView, GradeListAPIView, UpdateGradeAPIView, CreateSectionAPIView, SectionListAPIView, \
     UpdateSectionAPIView, CreateStudentAPIView, BulkUploadStudentAPIView, StudentListAPIView, \
-    CreateStudentDocumentAPIView, StudentDocumentListAPIView, UpdateStudentDocumentAPIView
+    CreateStudentDocumentAPIView, StudentDocumentListAPIView, UpdateStudentDocumentAPIView, \
+    DownloadStudentTemplateAPIView
 from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdminRequestOTPAPIView, \
     SuperAdminVerifyOTPAPIView, SchoolLeadUpdateAPIView, OrganizationListAPIView, CreateOrganizationAPIView, \
     UpdateOrganizationAPIView, SchoolListAPIView, CreateSchoolAPIView, UpdateSchoolAPIView, CreateBranchAPIView, \
@@ -133,6 +134,8 @@ urlpatterns = [
     path("students/create",CreateStudentAPIView.as_view(),name="student-create",),
 
     path("students/bulkupload",BulkUploadStudentAPIView.as_view(),name="bulk-upload-student",),
+
+    path("students/download-template",DownloadStudentTemplateAPIView.as_view(),name="download-student-template",),
 
     path("students",StudentListAPIView.as_view(),name="student-list",),
 
