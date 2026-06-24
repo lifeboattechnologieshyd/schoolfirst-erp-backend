@@ -482,6 +482,13 @@ class StudentFeeAssignment(AuditModel):
         FeeTemplate,
         on_delete=models.CASCADE,
     )
+    concession = models.ForeignKey(
+
+        FeeConcession,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
 
     assigned_date = models.DateField(
         auto_now_add=True,
