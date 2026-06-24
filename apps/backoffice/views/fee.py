@@ -2330,10 +2330,7 @@ class StudentFeeAssignmentListAPIView(APIView):
 
 class StudentFeeListAPIView(APIView):
 
-    permission_classes = [
-        IsAuthenticated,
-        HasPermission,
-    ]
+    permission_classes = [IsAuthenticated, HasPermission,]
 
     required_permission = "student_fee.view"
 
@@ -2341,78 +2338,160 @@ class StudentFeeListAPIView(APIView):
 
     def get(self, request):
 
-        school = request.school
+        try:
 
-        queryset = StudentFee.objects.select_related(
-            "student",
-            "installment_item",
-            "installment_item__installment",
-            "installment_item__fee_template_item",
-            "installment_item__fee_template_item__fee_type",
-        ).filter(
-            student__school=school,
-        )
+            print("=" * 80)
+            print("StudentFeeListAPIView Started")
+            print("=" * 80)
 
-        student_id = request.query_params.get(
-            "student_id"
-        )
+            school = request.school
 
-        status = request.query_params.get(
-            "status"
-        )
+            print("School :", school)
 
-        if student_id:
-            queryset = queryset.filter(
-                student_id=student_id,
+            queryset = StudentFee.objects.select_related(
+                "student",
+                "installment_item",
+                "installment_item__installment",
+                "installment_item__fee_template_item",
+                "installment_item__fee_template_item__fee_type",
+            ).filter(
+                student__school=school,
             )
 
-        if status:
-            queryset = queryset.filter(
-                status=status,
+            print("Initial Count :", queryset.count())
+
+            student_id = request.query_params.get(
+                "student_id"
             )
 
-        paginator = self.pagination_class()
+            status = request.query_params.get(
+                "status"
+            )
 
-        page = paginator.paginate_queryset(
-            queryset,
-            request,
-        )
+            print("student_id :", student_id)
+            print("status :", status)
 
-        data = []
+            if student_id:
 
-        for fee in page:
+                queryset = queryset.filter(
+                    student_id=student_id,
+                )
 
-            data.append({
+                print(
+                    "After student filter :",
+                    queryset.count(),
+                )
 
-                "id": str(fee.id),
+            if status:
 
-                "student": fee.student.name,
+                queryset = queryset.filter(
+                    status=status,
+                )
 
-                "fee_type": fee.installment_item.fee_template_item.fee_type.name,
+                print(
+                    "After status filter :",
+                    queryset.count(),
+                )
 
-                "installment": fee.installment_item.installment.name,
+            paginator = self.pagination_class()
 
-                "amount": fee.amount,
+            page = paginator.paginate_queryset(
+                queryset,
+                request,
+            )
 
-                "concession_amount": fee.concession_amount,
+            print(
+                "Page Count :",
+                len(page) if page else 0,
+            )
 
-                "late_fee": fee.late_fee,
+            data = []
 
-                "paid_amount": fee.paid_amount,
+            for fee in page:
 
-                "balance": fee.payable_amount,
+                print("-" * 50)
+                print("Fee ID :", fee.id)
 
-                "due_date": fee.due_date,
+                print(
+                    "Student :",
+                    fee.student.name,
+                )
 
-                "status": fee.status,
+                print(
+                    "Fee Type :",
+                    fee.installment_item.fee_template_item.fee_type.name,
+                )
 
-            })
+                print(
+                    "Installment :",
+                    fee.installment_item.installment.name,
+                )
 
-        return CustomResponse.successResponse(
-            data=data,
-            total=queryset.count(),
-        )
+                print(
+                    "Amount :",
+                    fee.amount,
+                )
 
+                print(
+                    "Calculating concession_amount..."
+                )
+
+                print(
+                    "Concession Amount :",
+                    fee.concession_amount,
+                )
+
+                print(
+                    "Calculating payable_amount..."
+                )
+
+                print(
+                    "Payable Amount :",
+                    fee.payable_amount,
+                )
+
+                data.append({
+
+                    "id": str(fee.id),
+
+                    "student": fee.student.name,
+
+                    "fee_type": fee.installment_item.fee_template_item.fee_type.name,
+
+                    "installment": fee.installment_item.installment.name,
+
+                    "amount": fee.amount,
+
+                    "concession_amount": fee.concession_amount,
+
+                    "late_fee": fee.late_fee,
+
+                    "paid_amount": fee.paid_amount,
+
+                    "balance": fee.payable_amount,
+
+                    "due_date": fee.due_date,
+
+                    "status": fee.status,
+
+                })
+
+            print("Response Count :", len(data))
+
+            return CustomResponse.successResponse(
+                data=data,
+                total=queryset.count(),
+            )
+
+        except Exception as e:
+
+            print("=" * 80)
+            print("StudentFeeListAPIView Exception")
+            print(type(e))
+            print(str(e))
+            print("=" * 80)
+
+            raise
 class StudentFeeDetailAPIView(APIView):
 
     permission_classes = [
