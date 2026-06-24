@@ -568,12 +568,12 @@ class StudentFee(AuditModel):
         decimal_places=2,
     )
 
-    concession = models.ForeignKey(
-        FeeConcession,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-    )
+    # concession = models.ForeignKey(
+    #     FeeConcession,
+    #     on_delete=models.SET_NULL,
+    #     null=True,
+    #     blank=True,
+    # )
 
     # scholarship = models.DecimalField(
     #     max_digits=10,

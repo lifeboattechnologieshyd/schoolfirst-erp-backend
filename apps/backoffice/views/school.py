@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from django.db.models import Q
 from apps.core.models import Roles, UserMaster, UserRoles
-from apps.fee.models import FeeTemplate
+from apps.fee.models import FeeTemplate, StudentFeeAssignment, FeeConcession
 from apps.school.models import School
 from apps.school.models.school import AcademicYear, Grade, Section, Student, StudentDocument
 from shared.enums.roles import RolesEnum
@@ -958,6 +958,7 @@ class BulkUploadStudentAPIView(APIView):
             "Gender",
             "Date Of Birth",
             "Admission Date",
+            "Fee Concession"
         ]
         for header in required_headers:
             if header not in headers:
@@ -1012,6 +1013,7 @@ class BulkUploadStudentAPIView(APIView):
                         "Grade not found.",
                     )
                 section = Section.objects.filter(
+                    school=school,
                     grade=grade,
                     name=data.get(
                         "Section",
@@ -1067,6 +1069,12 @@ class BulkUploadStudentAPIView(APIView):
                     raise Exception(
                         "Roll number already exists.",
                     )
+                enrollment_type = str(data.get("Enrollment Type",Student.EnrollmentType.NEW,)).upper()
+                if enrollment_type not in Student.EnrollmentType.values:
+                    raise Exception("Invalid enrollment type.")
+                hostel_type = str(data.get("Hostel Type",Student.HostelType.DAY_SCHOLAR, )).upper()
+                if hostel_type not in Student.HostelType.values:
+                    raise Exception("Invalid hostel type.")
                 with transaction.atomic():
                     student = Student.objects.create(
                         school=school,
@@ -1094,10 +1102,7 @@ class BulkUploadStudentAPIView(APIView):
                         admission_date=data.get(
                             "Admission Date",
                         ),
-                        enrollment_type=data.get(
-                            "Enrollment Type",
-                            Student.EnrollmentType.NEW,
-                        ),
+                        enrollment_type=enrollment_type,
                         place_of_birth=data.get(
                             "Place Of Birth",
                         ),
@@ -1176,19 +1181,33 @@ class BulkUploadStudentAPIView(APIView):
                             "Hostel Type",
                             Student.HostelType.DAY_SCHOLAR,
                         ),
-                        status=Student.Status.ACTIVE,
-                    )
+                        status=Student.Status.ACTIVE,)
+                    fee_concession_name = (str(data.get("Fee Concession", "")).strip())
+                    concession = None
+                    if fee_concession_name:
+                        concession = FeeConcession.objects.filter(school=school,name__iexact=fee_concession_name).first()
+                        if concession is None:
+                            raise Exception(f"Fee concession '{fee_concession_name}' not found.")
+
+
                     fee_template = FeeTemplate.objects.filter(
                         school=school,
                         academic_year=academic_year,
-                        grade=grade,
-                    ).first()
-                    if fee_template:
-                        generate_student_fees(
-                            student=student,
-                            fee_template=fee_template,
-                            assigned_by=request.user,
+                        grade=grade,).first()
+                    if fee_template is None:
+                        raise Exception(f"Fee template not configured for grade '{grade.name}'.")
+                    assignment, _ = StudentFeeAssignment.objects.get_or_create(
+                        student=student,
+                        fee_template=fee_template,
+                        defaults={"concession": concession,
+                        "assigned_by": request.user,
+                        },)
+                    generate_student_fees(
+                        student=student,
+                        fee_template=fee_template,
                         )
+
+
                 success_count += 1
             except Exception as e:
                 failed_count += 1
@@ -1211,229 +1230,6 @@ class BulkUploadStudentAPIView(APIView):
 
 
 
-# class DownloadStudentTemplateAPIView(APIView):
-#
-#     permission_classes = [
-#         IsAuthenticated,
-#         HasPermission,
-#     ]
-#
-#     required_permission = "student.bulk_upload"
-#
-#     def get(self, request):
-#
-#         workbook = Workbook()
-#
-#         sheet = workbook.active
-#
-#         sheet.title = "Students"
-#
-#         headers = [
-#
-#             "Academic Year",
-#
-#             "Grade",
-#
-#             "Section",
-#
-#             "Board",
-#
-#             "Admission Number",
-#
-#             "Roll Number",
-#
-#             "Name",
-#
-#             "Gender",
-#
-#             "Date Of Birth",
-#
-#             "Admission Date",
-#
-#             "Enrollment Type",
-#
-#             "Place Of Birth",
-#
-#             "Blood Group",
-#
-#             "Nationality",
-#
-#             "Mother Tongue",
-#
-#             "Aadhaar Number",
-#
-#             "Religion",
-#
-#             "Caste",
-#
-#             "Sub Caste",
-#
-#             "Student Category",
-#
-#             "Identification Marks",
-#
-#             "Email",
-#
-#             "Address",
-#
-#             "Emergency Contact Name",
-#
-#             "Emergency Contact Mobile",
-#
-#             "Father Name",
-#
-#             "Father Mobile",
-#
-#             "Father Occupation",
-#
-#             "Mother Name",
-#
-#             "Mother Mobile",
-#
-#             "Mother Occupation",
-#
-#             "Guardian Name",
-#
-#             "Guardian Mobile",
-#
-#             "Guardian Occupation",
-#
-#             "Previous School",
-#
-#             "Previous School TC Number",
-#
-#             "Previous Exam Percentage",
-#
-#             "Transport Required",
-#
-#             "Pickup Point",
-#
-#             "Hostel Type",
-#
-#         ]
-#
-#         for column_number, header in enumerate(
-#             headers,
-#             start=1,
-#         ):
-#
-#             sheet.cell(
-#                 row=1,
-#                 column=column_number,
-#                 value=header,
-#             )
-#
-#         sample_row = [
-#
-#             "2025-2026",
-#
-#             "Grade 1",
-#
-#             "A",
-#
-#             "CBSE",
-#
-#             "ADM001",
-#
-#             1,
-#
-#             "Rahul Kumar",
-#
-#             "MALE",
-#
-#             "2018-05-10",
-#
-#             "2025-06-01",
-#
-#             "NEW",
-#
-#             "Hyderabad",
-#
-#             "O+",
-#
-#             "Indian",
-#
-#             "Telugu",
-#
-#             "123456789012",
-#
-#             "Hindu",
-#
-#             "OC",
-#
-#             "Kamma",
-#
-#             "General",
-#
-#             "Mole on chin",
-#
-#             "rahul@gmail.com",
-#
-#             "Hyderabad",
-#
-#             "Ramesh",
-#
-#             "9876543210",
-#
-#             "Ramesh",
-#
-#             "9876543210",
-#
-#             "Engineer",
-#
-#             "Sita",
-#
-#             "9876543211",
-#
-#             "Teacher",
-#
-#             "Ramesh",
-#
-#             "9876543210",
-#
-#             "Engineer",
-#
-#             "ABC School",
-#
-#             "TC123",
-#
-#             92.5,
-#
-#             True,
-#
-#             "Miyapur",
-#
-#             "DAY_SCHOLAR",
-#
-#         ]
-#
-#         for column_number, value in enumerate(
-#             sample_row,
-#             start=1,
-#         ):
-#
-#             sheet.cell(
-#                 row=2,
-#                 column=column_number,
-#                 value=value,
-#             )
-#
-#         output = BytesIO()
-#
-#         workbook.save(output)
-#
-#         output.seek(0)
-#
-#         response = HttpResponse(
-#             output.getvalue(),
-#             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-#         )
-#
-#         response["Content-Disposition"] = (
-#             'attachment; filename="student_bulk_upload_template.xlsx"'
-#         )
-#
-#         return response
 
 
 class DownloadStudentTemplateAPIView(APIView):
@@ -1537,6 +1333,8 @@ class DownloadStudentTemplateAPIView(APIView):
             "Pickup Point",
 
             "Hostel Type",
+
+            "Fee Concession"
 
         ]
 
