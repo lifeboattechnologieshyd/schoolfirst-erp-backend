@@ -455,135 +455,295 @@ class Student(AuditModel):
 
         INACTIVE = "INACTIVE", "Inactive"
 
+    class EnrollmentType(models.TextChoices):
+
+        NEW = "NEW", "New Admission"
+
+        TRANSFER = "TRANSFER", "Transfer"
+
+        RE_ADMISSION = "RE_ADMISSION", "Re Admission"
+
+    class HostelType(models.TextChoices):
+
+        DAY_SCHOLAR = "DAY_SCHOLAR", "Day Scholar"
+
+        HOSTELLER = "HOSTELLER", "Hosteller"
+
+    class Board(models.TextChoices):
+
+        STATE = "STATE", "State"
+
+        CBSE = "CBSE", "CBSE"
+
+        ICSE = "ICSE", "ICSE"
+
+        IB = "IB", "IB"
+
+        IGCSE = "IGCSE", "IGCSE"
+
+        NIOS = "NIOS", "NIOS"
+
+        OTHER = "OTHER", "Other"
+
+
+
+
     id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False,)
 
-    school = models.ForeignKey(School,on_delete=models.CASCADE,related_name="students",)
+    # Academic
+    board = models.CharField(max_length=20,choices=Board.choices,default=Board.STATE,db_index=True,)
 
-    academic_year = models.ForeignKey(AcademicYear,on_delete=models.CASCADE,related_name="students",)
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="students",
+    )
 
-    grade = models.ForeignKey(Grade,on_delete=models.CASCADE,related_name="students",)
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.CASCADE,
+        related_name="students",
+    )
 
-    section = models.ForeignKey(Section,on_delete=models.CASCADE,related_name="students",)
+    grade = models.ForeignKey(
+        Grade,
+        on_delete=models.CASCADE,
+        related_name="students",
+    )
 
+    section = models.ForeignKey(
+        Section,
+        on_delete=models.CASCADE,
+        related_name="students",
+    )
 
-    father_name = models.CharField(max_length=100,blank=True,null=True,)
-
-    father_mobile = models.CharField(max_length=20,blank=True,null=True,db_index=True,)
-
-    mother_name = models.CharField(max_length=100,blank=True,null=True,)
-
-    mother_mobile = models.CharField(max_length=20,blank=True,null=True,db_index=True,)
-
-    guardian_name = models.CharField(max_length=100,blank=True,null=True,)
-
-    guardian_mobile = models.CharField(max_length=20,blank=True,null=True,db_index=True,)
-
-    admission_number = models.CharField(max_length=50,)
+    admission_number = models.CharField(
+        max_length=50,
+    )
 
     roll_number = models.PositiveIntegerField()
 
-    name = models.CharField(max_length=100,)
-
-    gender = models.CharField(max_length=20,choices=Gender.choices)
-
-    date_of_birth = models.DateField()
+    enrollment_type = models.CharField(
+        max_length=20,
+        choices=EnrollmentType.choices,
+        default=EnrollmentType.NEW,
+    )
 
     admission_date = models.DateField()
 
-    email = models.EmailField(blank=True,null=True,)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
 
-    address = models.TextField(blank=True,null=True,)
-    father_occupation = models.CharField(max_length=100, blank=True, null=True,)
+    # Student Information
 
-    mother_occupation = models.CharField(max_length=100,blank=True,null=True,)
+    name = models.CharField(
+        max_length=100,
+    )
 
-    guardian_occupation = models.CharField(max_length=100,blank=True,null=True,)
+    gender = models.CharField(
+        max_length=20,
+        choices=Gender.choices,
+    )
 
-    blood_group = models.CharField(max_length=10,blank=True, null=True,)
+    date_of_birth = models.DateField()
 
-    status = models.CharField(max_length=20,choices=Status.choices,default=Status.ACTIVE,)
+    place_of_birth = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
 
-    # place_of_birth = models.CharField(max_length=100,null=True,blank=True,)
-    #
-    # caste = models.CharField(max_length=100,null=True,blank=True,)
-    #
-    # sub_caste = models.CharField(max_length=100,null=True,blank=True,)
-    #
-    # religion = models.CharField(max_length=100,null=True,blank=True,)
-    #
-    # aadhaar_number = models.CharField(max_length=12,null=True,blank=True,)
-    #
-    # identification_marks = models.TextField(null=True,blank=True,)
-    #
-    # # Admission
-    # enrollment_type = models.CharField(max_length=30,
-    #
-    #     choices=[
-    #
-    #         ("NEW", "New"),
-    #
-    #         ("TRANSFER", "Transfer"),
-    #
-    #         ("RE_ADMISSION", "Re Admission"),
-    #
-    #     ],
-    #
-    #     default="NEW",
-    #
-    # )
-    #
-    # scholarship = models.BooleanField(default=False,)
-    #
-    # previous_school = models.CharField(max_length=255, null=True,blank=True,)
-    #
-    # previous_exam_percentage = models.DecimalField(max_digits=5,decimal_places=2,null=True,blank=True, )
-    #
-    # # Boarding
-    #
-    # hostel_type = models.CharField(
-    #
-    #     max_length=20,
-    #
-    #     choices=[
-    #
-    #         ("DAY_SCHOLAR", "Day Scholar"),
-    #
-    #         ("HOSTELLER", "Hosteller"),
-    #
-    #     ],
-    #
-    #     default="DAY_SCHOLAR",
-    #
-    # )
-    #
-    # # Transport
-    # transport_required = models.BooleanField(default=False,)
-    #
-    # # Board
-    #
-    # board = models.CharField(
-    #
-    #     max_length=30,
-    #
-    #     choices=[
-    #
-    #         ("STATE", "State"),
-    #
-    #         ("CBSE", "CBSE"),
-    #
-    #         ("ICSE", "ICSE"),
-    #
-    #         ("IB", "IB"),
-    #
-    #         ("IGCSE", "IGCSE"),
-    #
-    #         ("OTHER", "Other"),
-    #
-    #     ],
-    #
-    #     default="STATE",
-    #
-    # )
+    blood_group = models.CharField(
+        max_length=10,
+        null=True,
+        blank=True,
+    )
+
+    photo_url = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+    )
+
+    nationality = models.CharField(
+        max_length=100,
+        default="Indian",
+    )
+
+    mother_tongue = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
+
+    # Government / Demographics
+
+    aadhaar_number = models.CharField(
+        max_length=12,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
+    religion = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
+
+    caste = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
+
+    sub_caste = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
+
+    student_category = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
+
+    identification_marks = models.TextField(
+        null=True,
+        blank=True,
+    )
+
+    # Contact
+
+    email = models.EmailField(
+        null=True,
+        blank=True,
+    )
+
+    address = models.TextField(
+        null=True,
+        blank=True,
+    )
+
+    emergency_contact_name = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
+
+    emergency_contact_mobile = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+    )
+
+    # Father
+
+    father_name = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
+
+    father_mobile = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
+    father_occupation = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
+
+    # Mother
+
+    mother_name = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
+
+    mother_mobile = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
+    mother_occupation = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
+
+    # Guardian
+
+    guardian_name = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
+
+    guardian_mobile = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
+    guardian_occupation = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
+
+    # Previous School
+
+    previous_school_name = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+    )
+
+    previous_school_tc_number = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
+
+    previous_exam_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+
+    # Transport
+
+    transport_required = models.BooleanField(
+        default=False,
+    )
+
+    pickup_point = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+    )
+
+    # Hostel
+
+    hostel_type = models.CharField(
+        max_length=20,
+        choices=HostelType.choices,
+        default=HostelType.DAY_SCHOLAR,
+    )
 
     class Meta:
 
@@ -615,15 +775,54 @@ class Student(AuditModel):
 
         indexes = [
 
-            models.Index(fields=["school"]),
+            models.Index(
+                fields=[
+                    "school",
+                ]
+            ),
 
-            models.Index(fields=["academic_year"]),
+            models.Index(
+                fields=[
+                    "academic_year",
+                ]
+            ),
 
-            models.Index(fields=["grade"]),
+            models.Index(
+                fields=[
+                    "grade",
+                ]
+            ),
 
-            models.Index(fields=["section"]),
+            models.Index(
+                fields=[
+                    "section",
+                ]
+            ),
 
-            models.Index(fields=["status"]),
+            models.Index(
+                fields=[
+                    "status",
+                ]
+            ),
+            models.Index(
+                fields=[
+                    "board",
+                ]
+            ),
+
+            models.Index(
+                fields=[
+                    "school",
+                    "academic_year",
+                ]
+            ),
+
+            models.Index(
+                fields=[
+                    "grade",
+                    "section",
+                ]
+            ),
 
         ]
 
