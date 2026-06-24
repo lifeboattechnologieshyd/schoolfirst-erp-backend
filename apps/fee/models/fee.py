@@ -734,6 +734,16 @@ class StudentFeePayment(AuditModel):
         blank=True,
         null=True,
     )
+    gateway_name = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+    )
+
+    gateway_response = models.JSONField(
+        null=True,
+        blank=True,
+    )
 
     remarks = models.TextField(
         blank=True,
@@ -753,36 +763,64 @@ class StudentFeePayment(AuditModel):
     class Meta:
         db_table = "student_fee_payments"
 
+        indexes = [models.Index(fields=["student_fee",]),
+            models.Index(fields=["payment_date",]),
+            models.Index(fields=["receipt_number",]),
+            models.Index(fields=["transaction_id",]),
+            models.Index(fields=["is_cancelled",]),]
+
+
+
+class SchoolPaymentGateway(AuditModel):
+    objects = SoftDeleteManager()
+
+    all_objects = models.Manager()
+
+    class Gateway(models.TextChoices):
+
+        RAZORPAY = "RAZORPAY"
+
+        PHONEPE = "PHONEPE"
+
+        STRIPE = "STRIPE"
+
+        PAYTM = "PAYTM"
+
+        CASHFREE = "CASHFREE"
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+    )
+
+    gateway = models.CharField(
+        max_length=50,
+        choices=Gateway.choices,
+    )
+
+    merchant_id = models.CharField(
+        max_length=255,
+    )
+
+    api_key = models.CharField(
+        max_length=500,
+    )
+
+    secret_key = models.CharField(max_length=500,
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+    )
+    class Meta:
+
+        db_table = "school_payment_gateways"
+        constraints = [
+            models.UniqueConstraint(fields=["school","gateway",],name="unique_school_gateway",)]
         indexes = [
-
-            models.Index(
-                fields=[
-                    "student_fee",
-                ]
-            ),
-
-            models.Index(
-                fields=[
-                    "payment_date",
-                ]
-            ),
-
-            models.Index(
-                fields=[
-                    "receipt_number",
-                ]
-            ),
-
-            models.Index(
-                fields=[
-                    "transaction_id",
-                ]
-            ),
-
-            models.Index(
-                fields=[
-                    "is_cancelled",
-                ]
-            ),
-
-        ]
+            models.Index(fields=["school",]),
+            models.Index(fields=["gateway",]),
+            models.Index(fields=["is_active",]),
+            models.Index(fields=["school","is_active",]),]
