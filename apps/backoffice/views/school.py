@@ -1,3 +1,5 @@
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from django.db.models import Q
@@ -11,6 +13,7 @@ from shared.helpers.student import get_or_create_parent
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from openpyxl import load_workbook
+from django.conf import settings
 
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
@@ -1509,24 +1512,45 @@ class DownloadStudentTemplateAPIView(APIView):
 
         excel_file.seek(0)
 
-        return FileResponse(
+        file_name = (
 
-            excel_file,
+            f"templates/student_template.xlsx"
 
-            as_attachment=True,
+        )
 
-            filename="student_bulk_upload_template.xlsx",
+        file_path = default_storage.save(
 
-            content_type=(
+            file_name,
 
-                "application/vnd.openxmlformats-officedocument."
+            ContentFile(
 
-                "spreadsheetml.sheet"
+                excel_file.getvalue()
 
             ),
 
         )
 
+        file_url = (
+
+            settings.MEDIA_URL
+
+            + file_path
+
+        )
+
+        return CustomResponse.successResponse(
+
+            description="Student template generated successfully.",
+
+            data={
+
+                "file_url": file_url,
+
+                "file_path": file_path,
+
+            },
+
+        )
 
 class StudentListAPIView(APIView):
 
