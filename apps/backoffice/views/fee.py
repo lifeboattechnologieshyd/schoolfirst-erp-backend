@@ -2349,7 +2349,6 @@ class StudentFeeListAPIView(APIView):
             "installment_item__installment",
             "installment_item__fee_template_item",
             "installment_item__fee_template_item__fee_type",
-            "concession",
         ).filter(
             student__school=school,
         )
