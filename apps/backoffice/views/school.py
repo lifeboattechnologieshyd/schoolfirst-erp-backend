@@ -1478,11 +1478,80 @@ class DownloadStudentTemplateAPIView(APIView):
 
             "Admission Date",
 
+            "Enrollment Type",
+
+            "Place Of Birth",
+
+            "Blood Group",
+
+            "Nationality",
+
+            "Mother Tongue",
+
+            "Aadhaar Number",
+
+            "Religion",
+
+            "Caste",
+
+            "Sub Caste",
+
+            "Student Category",
+
+            "Identification Marks",
+
+            "Email",
+
+            "Address",
+
+            "Emergency Contact Name",
+
+            "Emergency Contact Mobile",
+
+            "Father Name",
+
+            "Father Mobile",
+
+            "Father Occupation",
+
+            "Mother Name",
+
+            "Mother Mobile",
+
+            "Mother Occupation",
+
+            "Guardian Name",
+
+            "Guardian Mobile",
+
+            "Guardian Occupation",
+
+            "Previous School",
+
+            "Previous School TC Number",
+
+            "Previous Exam Percentage",
+
+            "Transport Required",
+
+            "Pickup Point",
+
+            "Hostel Type",
+
         ]
 
-        sheet.append(headers)
+        for column_number, header in enumerate(
+            headers,
+            start=1,
+        ):
 
-        sheet.append([
+            sheet.cell(
+                row=1,
+                column=column_number,
+                value=header,
+            )
+
+        sample_row = [
 
             "2025-2026",
 
@@ -1504,7 +1573,68 @@ class DownloadStudentTemplateAPIView(APIView):
 
             "2025-06-01",
 
-        ])
+            "NEW",
+
+            "Hyderabad",
+
+            "O+",
+
+            "Indian",
+
+            "Telugu",
+
+            "123456789012",
+
+            "Hindu",
+
+            "OC",
+
+            "Kamma",
+
+            "General",
+
+            "Mole on chin",
+
+            "rahul@gmail.com",
+
+            "Hyderabad",
+
+            "Ramesh",
+
+            "9876543210",
+
+            "Ramesh",
+
+            "9876543210",
+
+            "Engineer",
+
+            "Sita",
+
+            "9876543211",
+
+            "Teacher",
+
+            "Ramesh",
+
+            "9876543210",
+
+            "Engineer",
+
+            "ABC School",
+
+            "TC123",
+
+            92.5,
+
+            True,
+
+            "Miyapur",
+
+            "DAY_SCHOLAR",
+
+        ]
+
 
         excel_file = BytesIO()
 
