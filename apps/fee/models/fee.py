@@ -645,16 +645,29 @@ class StudentFee(AuditModel):
 
     @property
     def concession_amount(self):
-        if not self.assignment.concession:
+        fee_template = (
+        self.installment_item.installment
+        .collection_plan.fee_template
+        )
+        assignment = StudentFeeAssignment.objects.filter(
+        student=self.student,
+        fee_template=fee_template,
+    ).select_related(
+        "concession",
+    ).first()
+        if not assignment:
                     return 0
-
-        concession = self.assignment.concession
-        if concession.concession_type == FeeConcession.Type.PERCENTAGE:
-             return (
+        if not assignment.concession:
+            return 0
+        concession = assignment.concession
+        if (
+        concession.concession_type
+        == FeeConcession.Type.PERCENTAGE):
+            return (
             self.amount * concession.value
         ) / 100
-
         return concession.value
+
 
     @property
     def payable_amount(self):
