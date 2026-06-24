@@ -950,6 +950,14 @@ class CreateStudentAPIView(APIView):
             return CustomResponse.errorResponse(
                 description=str(e),
             )
+        return CustomResponse.successResponse(
+            description="Student created successfully.",
+            data={
+                "id": str(student.id),
+                "name": student.name,
+                "admission_number": student.admission_number,
+            },
+        )
 
 
 
