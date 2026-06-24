@@ -1422,24 +1422,16 @@ class DownloadStudentTemplateAPIView(APIView):
         output.seek(0)
 
         response = HttpResponse(
-
             output.getvalue(),
-
-            content_type=(
-                "application/"
-                "vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            ),
-
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
-        response[
-            "Content-Disposition"
-        ] = (
-            'attachment; '
-            'filename="student_bulk_upload_template.xlsx"'
+        response["Content-Disposition"] = (
+            'attachment; filename="student_bulk_upload_template.xlsx"'
         )
 
         return response
+
 
 
 
