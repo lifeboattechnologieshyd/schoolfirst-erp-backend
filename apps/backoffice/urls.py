@@ -9,7 +9,8 @@ from apps.backoffice.views.fee import CreateFeeTypeAPIView, FeeTypeListAPIView, 
     UpdateFeeInstallmentAPIView, CreateFeeInstallmentItemAPIView, FeeInstallmentItemListAPIView, \
     FeeInstallmentItemDetailAPIView, UpdateFeeInstallmentItemAPIView, CreateLateFeeRuleAPIView, LateFeeRuleListAPIView, \
     LateFeeRuleDetailAPIView, UpdateLateFeeRuleAPIView, CreateFeeConcessionAPIView, FeeConcessionListAPIView, \
-    UpdateFeeConcessionAPIView
+    UpdateFeeConcessionAPIView, CreateStudentFeeAssignmentAPIView, StudentFeeAssignmentListAPIView, \
+    StudentFeeListAPIView, StudentFeeDetailAPIView, GenerateStudentFeesAPIView
 from apps.backoffice.views.leads import \
     SchoolLeadRequestOTPAPIView, SchoolLeadListAPIView, SchoolLeadVerifyOTPAPIView
 from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCreateAPIView, RoleListCreateAPIView, \
@@ -210,6 +211,16 @@ urlpatterns = [
     path("fee-concessions",FeeConcessionListAPIView.as_view(),),
 
     path("fee-concessions/<uuid:concession_id>", UpdateFeeConcessionAPIView.as_view(),),
+
+    path("student-fee-assignments/create",CreateStudentFeeAssignmentAPIView.as_view(),),
+
+    path("student-fee-assignments", StudentFeeAssignmentListAPIView.as_view(),),
+
+    path("student-fees",StudentFeeListAPIView.as_view(),),
+
+    path("student-fees/<uuid:student_fee_id>",StudentFeeDetailAPIView.as_view(),),
+
+    path("generate-student-fees",GenerateStudentFeesAPIView.as_view(),),
 
 
 

@@ -2,10 +2,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.fee.models import FeeType, FeeTemplateItem, FeeTemplate, FeeCollectionPlan, FeeInstallment, \
-    FeeInstallmentItem, LateFeeRule, FeeConcession
-from apps.school.models.school import AcademicYear, Grade
+    FeeInstallmentItem, LateFeeRule, FeeConcession, StudentFeeAssignment, StudentFee
+from apps.school.models.school import AcademicYear, Grade, Student
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
+from shared.utils.fee import generate_student_fees
 
 
 class CreateFeeTypeAPIView(APIView):
@@ -2185,4 +2186,402 @@ class UpdateFeeConcessionAPIView(APIView):
 
         return CustomResponse.successResponse(
             description="Fee concession updated successfully.",
+        )
+
+class CreateStudentFeeAssignmentAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "student_fee_assignment.create"
+
+    def post(self, request):
+
+        school = request.school
+
+        student = Student.objects.filter(
+            id=request.data.get(
+                "student_id",
+            ),
+            school=school,
+        ).first()
+
+        if student is None:
+
+            return CustomResponse.errorResponse(
+                description="Student not found.",
+            )
+
+        fee_template = FeeTemplate.objects.filter(
+            id=request.data.get(
+                "fee_template_id",
+            ),
+            school=school,
+        ).first()
+
+        if fee_template is None:
+
+            return CustomResponse.errorResponse(
+                description="Fee template not found.",
+            )
+
+        if StudentFeeAssignment.objects.filter(
+            student=student,
+            fee_template=fee_template,
+        ).exists():
+
+            return CustomResponse.errorResponse(
+                description="Fee template already assigned.",
+            )
+
+        assignment = StudentFeeAssignment.objects.create(
+
+            student=student,
+
+            fee_template=fee_template,
+
+            assigned_by=request.user,
+
+        )
+
+        return CustomResponse.successResponse(
+
+            description="Fee template assigned successfully.",
+
+            data={
+                "id": str(assignment.id),
+            },
+
+        )
+
+class StudentFeeAssignmentListAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "student_fee_assignment.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        queryset = StudentFeeAssignment.objects.select_related(
+            "student",
+            "fee_template",
+        ).filter(
+            student__school=school,
+        )
+
+        student_id = request.GET.get(
+            "student_id",
+        )
+
+        if student_id:
+
+            queryset = queryset.filter(
+                student_id=student_id,
+            )
+
+        paginator = CustomPageNumberPagination()
+
+        page = paginator.paginate_queryset(
+            queryset,
+            request,
+        )
+
+        data = []
+
+        for obj in page:
+
+            data.append({
+
+                "id": str(obj.id),
+
+                "student": {
+
+                    "id": str(obj.student.id),
+
+                    "name": obj.student.name,
+
+                    "admission_number": obj.student.admission_number,
+
+                },
+
+                "fee_template": {
+
+                    "id": str(obj.fee_template.id),
+
+                    "name": obj.fee_template.name,
+
+                },
+
+                "assigned_date": obj.assigned_date,
+
+            })
+
+        return CustomResponse.successResponse(
+            data=data,
+            total=queryset.count(),
+        )
+
+class StudentFeeListAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "student_fee.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        queryset = StudentFee.objects.select_related(
+
+            "student",
+
+            "installment_item",
+
+            "installment_item__installment",
+
+            "installment_item__fee_template_item",
+
+        ).filter(
+            student__school=school,
+        )
+
+        student_id = request.GET.get(
+            "student_id",
+        )
+
+        status = request.GET.get(
+            "status",
+        )
+
+        if student_id:
+
+            queryset = queryset.filter(
+                student_id=student_id,
+            )
+
+        if status:
+
+            queryset = queryset.filter(
+                status=status,
+            )
+
+        paginator = CustomPageNumberPagination()
+
+        page = paginator.paginate_queryset(
+            queryset.order_by(
+                "due_date",
+            ),
+            request,
+        )
+
+        data = []
+
+        for fee in page:
+
+            balance = (
+                fee.amount
+                + fee.late_fee
+                - fee.scholarship
+                - fee.paid_amount
+            )
+
+            data.append({
+
+                "id": str(fee.id),
+
+                "student": {
+                    "id": str(fee.student.id),
+                    "name": fee.student.name,
+                },
+
+                "installment": fee.installment_item.installment.name,
+
+                "fee_head":
+                    fee.installment_item.fee_template_item.fee_type.name,
+
+                "due_date": fee.due_date,
+
+                "amount": fee.amount,
+
+                "scholarship": fee.scholarship,
+
+                "late_fee": fee.late_fee,
+
+                "paid_amount": fee.paid_amount,
+
+                "balance": balance,
+
+                "status": fee.status,
+
+            })
+
+        return CustomResponse.successResponse(
+            data=data,
+            total=queryset.count(),
+        )
+
+class StudentFeeDetailAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "student_fee.view"
+
+    def get(
+        self,
+        request,
+        student_fee_id,
+    ):
+
+        school = request.school
+
+        fee = StudentFee.objects.select_related(
+
+            "student",
+
+            "installment_item",
+
+            "installment_item__installment",
+
+            "installment_item__fee_template_item",
+
+        ).filter(
+            id=student_fee_id,
+            student__school=school,
+        ).first()
+
+        if fee is None:
+
+            return CustomResponse.errorResponse(
+                description="Student fee not found.",
+            )
+
+        payments = []
+
+        for payment in fee.payments.filter(
+            is_cancelled=False,
+        ):
+
+            payments.append({
+
+                "id": str(payment.id),
+
+                "receipt_number": payment.receipt_number,
+
+                "amount": payment.amount,
+
+                "payment_mode": payment.payment_mode,
+
+                "payment_date": payment.payment_date,
+
+            })
+
+        return CustomResponse.successResponse(
+
+            data={
+
+                "id": str(fee.id),
+
+                "student": {
+
+                    "id": str(fee.student.id),
+
+                    "name": fee.student.name,
+
+                    "admission_number":
+                        fee.student.admission_number,
+
+                },
+
+                "installment":
+                    fee.installment_item.installment.name,
+
+                "fee_head":
+                    fee.installment_item.fee_template_item.fee_type.name,
+
+                "due_date": fee.due_date,
+
+                "amount": fee.amount,
+
+                "late_fee": fee.late_fee,
+
+                "scholarship": fee.scholarship,
+
+                "paid_amount": fee.paid_amount,
+
+                "status": fee.status,
+
+                "payments": payments,
+
+            }
+
+        )
+
+class GenerateStudentFeesAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "student_fee.create"
+
+    def post(self, request):
+
+        school = request.school
+
+        fee_template = FeeTemplate.objects.filter(
+            id=request.data.get(
+                "fee_template_id",
+            ),
+            school=school,
+        ).first()
+
+        if fee_template is None:
+
+            return CustomResponse.errorResponse(
+                description="Fee template not found.",
+            )
+
+        students = Student.objects.filter(
+
+            school=school,
+
+            academic_year=fee_template.academic_year,
+
+            grade=fee_template.grade,
+
+        )
+
+        generated_count = 0
+
+        for student in students:
+
+            generate_student_fees(
+                student=student,
+                fee_template=fee_template,
+            )
+
+            generated_count += 1
+
+        return CustomResponse.successResponse(
+
+            description="Student fees generated successfully.",
+
+            data={
+                "students_processed": generated_count,
+            },
+
         )
