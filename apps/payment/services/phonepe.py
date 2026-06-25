@@ -30,6 +30,13 @@ class PhonePeService:
         }
 
 def get_phonepe_client(gateway):
+    print("=" * 80)
+    print("CREATING PHONEPE CLIENT")
+    print("Merchant ID:", gateway.merchant_id)
+    print("Secret Key:", gateway.secret_key[:8] + "****")
+    print("Client Version:", settings.PHONEPE_CLIENT_VERSION)
+    print("Environment:", Env.SANDBOX)
+    print("=" * 80)
 
     client = StandardCheckoutClient.get_instance(
         client_id=gateway.merchant_id,
@@ -44,6 +51,12 @@ def get_phonepe_client(gateway):
 def create_phonepe_payment(transaction, amount_paisa):
 
     gateway = transaction.gateway
+    print("=" * 80)
+    print("CREATE PHONEPE PAYMENT")
+    print("Transaction:", transaction.transaction_number)
+    print("Amount (Paise):", amount_paisa)
+    print("Gateway:", gateway.gateway)
+    print("=" * 80)
 
     client = get_phonepe_client(gateway)
 
