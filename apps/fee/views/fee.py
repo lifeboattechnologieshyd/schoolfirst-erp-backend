@@ -236,8 +236,7 @@ class CreatePaymentAPIView(APIView):
                     "transaction_id": str(transaction.id),
                     "gateway": gateway.gateway,
                     "amount": total_amount,
-                    "payment_url": payment_response["payment_url"],
-                },
+                    "payment_url": payment_response["redirectUrl"]}
             )
 
         except Exception as e:
