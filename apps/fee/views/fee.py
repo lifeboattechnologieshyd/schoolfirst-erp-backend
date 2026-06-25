@@ -1,3 +1,5 @@
+import uuid
+
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
@@ -187,6 +189,7 @@ class CreatePaymentAPIView(APIView):
                 school=school,
                 student=student,
                 gateway=gateway,
+                transaction_number=f"TXN-{uuid.uuid4().hex[:12].upper()}",
                 amount=total_amount,
                 status=PaymentTransaction.Status.INITIATED,
             )
