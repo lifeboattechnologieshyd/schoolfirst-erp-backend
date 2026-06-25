@@ -37,6 +37,11 @@ openpyxl==3.1.*
 django-crontab==0.7.*
 # resource monitoring
 psutil==7.2.*
+# phonepe
+phonepe-pg-sdk-python==2.1.9
+setuptools==80.9.0
+
+
 # health check
 django-health-check==4.4.*
 # OpenTelemetry core packages

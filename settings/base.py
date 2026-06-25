@@ -128,3 +128,6 @@ except ImportError:
     raise ImportError(  # noqa: B904
         "Failed to import settings modules. Please ensure all dependencies are installed."
     )  # noqa: B904
+
+
+PHONEPE_CLIENT_VERSION = 1

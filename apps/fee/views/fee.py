@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from apps.fee.models import StudentFee, SchoolPaymentGateway
 from apps.payment.models import PaymentTransaction, PaymentTransactionItem
 from apps.payment.services.gateway import PaymentGatewayService
+from apps.payment.services.phonepe import create_phonepe_payment
 from apps.school.models.school import Student
 from shared.mixins import CustomResponse
 
@@ -185,6 +186,12 @@ class CreatePaymentAPIView(APIView):
 
             print("Creating transaction...")
 
+            total_amount = sum(
+            fee.payable_amount
+            for fee in fees)
+
+            amount_paisa = int(total_amount * 100)
+
             transaction = PaymentTransaction.objects.create(
                 school=school,
                 student=student,
@@ -194,29 +201,12 @@ class CreatePaymentAPIView(APIView):
                 status=PaymentTransaction.Status.INITIATED,
             )
 
-            print("Transaction Created:", transaction.id)
-
-            for fee in fees:
-
-                print("Creating transaction item for:", fee.id)
-
-                PaymentTransactionItem.objects.create(
-                    transaction=transaction,
-                    student_fee=fee,
-                    amount=fee.payable_amount,
-                )
-
-            print("Calling Payment Gateway Service...")
-
-            payment_response = PaymentGatewayService(
-                gateway,
-            ).create_payment(
-                transaction=transaction,
+            phonepe_response = create_phonepe_payment(
+                transaction,
+                amount_paisa,
             )
 
-            print("Gateway Response:", payment_response)
-
-            transaction.gateway_order_id = payment_response["order_id"]
+            transaction.gateway_order_id = phonepe_response["order_id"]
 
             transaction.save(
                 update_fields=[
@@ -236,7 +226,7 @@ class CreatePaymentAPIView(APIView):
                     "transaction_id": str(transaction.id),
                     "gateway": gateway.gateway,
                     "amount": total_amount,
-                    "payment_url": payment_response["redirectUrl"]}
+                    "payment_url": phonepe_response["redirect_url"]}
             )
 
         except Exception as e:
