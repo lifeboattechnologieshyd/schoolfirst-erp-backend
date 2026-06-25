@@ -25,6 +25,7 @@ from shared.mixins import CustomResponse
 from rest_framework.parsers import FormParser, MultiPartParser
 from django.conf import settings
 
+from shared.utils.otp import send_otp_to_mobile
 from shared.utils.s3 import add_unique_suffix_to_filename, sanitize_filename
 
 
@@ -103,10 +104,12 @@ class ADMINSendOTPAPIView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        otp = 1234
+        # otp = 1234
 
-        # otp = generate_otp()
+
+        otp = generate_otp()
         print("Generated OTP :", otp)
+        send_otp_to_mobile(otp, mobile)
 
         print("Creating UserOTP...")
 
