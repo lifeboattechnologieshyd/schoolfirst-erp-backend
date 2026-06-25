@@ -29,19 +29,23 @@ class PhonePeService:
 
         }
 
-def get_phonepe_client():
+def get_phonepe_client(gateway):
+
     client = StandardCheckoutClient.get_instance(
-        client_id=SchoolPaymentGateway.merchant_id,
-        client_secret=SchoolPaymentGateway.secret_key,
+        client_id=gateway.merchant_id,
+        client_secret=gateway.secret_key,
         client_version=int(settings.PHONEPE_CLIENT_VERSION),
-        env=Env.SANDBOX,  # change to PRODUCTION later
-        should_publish_events=False
+        env=Env.SANDBOX,
+        should_publish_events=False,
     )
+
     return client
 
 def create_phonepe_payment(transaction, amount_paisa):
 
-    client = get_phonepe_client()
+    gateway = transaction.gateway
+
+    client = get_phonepe_client(gateway)
 
     request = StandardCheckoutPayRequest.build_request(
         merchant_order_id=transaction.transaction_number,
