@@ -186,7 +186,7 @@ class CreatePaymentAPIView(APIView):
             transaction = PaymentTransaction.objects.create(
                 school=school,
                 student=student,
-                gateway=gateway.gateway,
+                gateway=gateway,
                 amount=total_amount,
                 status=PaymentTransaction.Status.INITIATED,
             )
