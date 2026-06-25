@@ -46,7 +46,7 @@ def create_phonepe_payment(transaction, amount_paisa):
     request = StandardCheckoutPayRequest.build_request(
         merchant_order_id=transaction.transaction_number,
         amount=amount_paisa,
-        redirect_url=settings.PHONEPE_REDIRECT_URL,
+        redirect_url="https://google.com",
         meta_info=MetaInfo(
             udf1=str(transaction.student.id),
         ),
