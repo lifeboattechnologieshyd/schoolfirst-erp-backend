@@ -1,3 +1,4 @@
+import random
 import secrets
 
 from datetime import timedelta
@@ -51,7 +52,7 @@ def normalize_mobile(value):
 
 def generate_otp():
 
-    return f"{secrets.randbelow(1000000):06d}"
+    return str(random.randint(1000, 9999))
 
 class ADMINSendOTPAPIView(APIView):
 
