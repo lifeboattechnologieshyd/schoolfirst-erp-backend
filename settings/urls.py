@@ -78,6 +78,10 @@ if "apps.school" in settings.INSTALLED_APPS:
     urlpatterns.append(path("school/", include("apps.school.urls")))
 if "apps.backoffice" in settings.INSTALLED_APPS:
     urlpatterns.append(path("backoffice/", include("apps.backoffice.urls")))
+if "apps.fee" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("fee/", include("apps.fee.urls")))
+if "apps.payment" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("payment/", include("apps.payment.urls")))
 
 
 ####################################
