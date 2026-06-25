@@ -95,121 +95,159 @@ class CreatePaymentAPIView(APIView):
 
     def post(self, request):
 
-        school = request.school
+        try:
 
-        student = Student.objects.filter(
-            id=request.data.get(
-                "student_id",
-            ),
-            school=school,
-        ).first()
+            print("=" * 100)
+            print("CREATE PAYMENT API STARTED")
+            print("Request Data:", request.data)
+            print("=" * 100)
 
-        if student is None:
+            school = request.school
 
-            return CustomResponse.errorResponse(
-                description="Student not found.",
+            print("School:", school)
+
+            student = Student.objects.filter(
+                id=request.data.get("student_id"),
+                school=school,
+            ).first()
+
+            print("Student:", student)
+
+            if student is None:
+
+                print("Student not found")
+
+                return CustomResponse.errorResponse(
+                    description="Student not found.",
+                )
+
+            student_fee_ids = request.data.get(
+                "student_fee_ids",
+                [],
             )
 
-        student_fee_ids = request.data.get(
-            "student_fee_ids",
-            [],
-        )
+            print("Student Fee IDs:", student_fee_ids)
 
-        if not student_fee_ids:
+            if not student_fee_ids:
 
-            return CustomResponse.errorResponse(
-                description="Please select fees.",
+                print("No fee ids selected")
+
+                return CustomResponse.errorResponse(
+                    description="Please select fees.",
+                )
+
+            fees = StudentFee.objects.filter(
+                id__in=student_fee_ids,
+                student=student,
+            ).exclude(
+                status=StudentFee.Status.PAID,
             )
 
-        fees = StudentFee.objects.filter(
+            print("Pending Fees Count:", fees.count())
 
-            id__in=student_fee_ids,
+            if not fees.exists():
 
-            student=student,
+                print("No pending fees")
 
-        ).exclude(
+                return CustomResponse.errorResponse(
+                    description="No pending fees found.",
+                )
 
-            status=StudentFee.Status.PAID,
+            total_amount = 0
 
-        )
+            for fee in fees:
 
-        if not fees.exists():
+                print("-" * 80)
+                print("Fee ID:", fee.id)
+                print("Amount:", fee.amount)
+                print("Payable:", fee.payable_amount)
 
-            return CustomResponse.errorResponse(
-                description="No pending fees found.",
+                total_amount += fee.payable_amount
+
+            print("Total Amount:", total_amount)
+
+            gateway = SchoolPaymentGateway.objects.filter(
+                school=school,
+                is_active=True,
+            ).first()
+
+            print("Gateway:", gateway)
+
+            if gateway is None:
+
+                print("Gateway not configured")
+
+                return CustomResponse.errorResponse(
+                    description="Payment gateway not configured.",
+                )
+
+            print("Creating transaction...")
+
+            transaction = PaymentTransaction.objects.create(
+                school=school,
+                student=student,
+                gateway=gateway.gateway,
+                amount=total_amount,
+                status=PaymentTransaction.Status.INITIATED,
             )
 
-        total_amount = 0
+            print("Transaction Created:", transaction.id)
 
-        for fee in fees:
+            for fee in fees:
 
-            total_amount += fee.payable_amount
+                print("Creating transaction item for:", fee.id)
 
-        gateway = SchoolPaymentGateway.objects.filter(
+                PaymentTransactionItem.objects.create(
+                    transaction=transaction,
+                    student_fee=fee,
+                    amount=fee.payable_amount,
+                )
 
-            school=school,
+            print("Calling Payment Gateway Service...")
 
-            is_active=True,
-
-        ).first()
-
-        if gateway is None:
-
-            return CustomResponse.errorResponse(
-
-                description="Payment gateway not configured.",
-
-            )
-
-        transaction = PaymentTransaction.objects.create(
-
-            school=school,
-
-            student=student,
-
-            gateway=gateway.gateway,
-
-            amount=total_amount,
-
-            status=PaymentTransaction.Status.INITIATED,
-
-        )
-
-        for fee in fees:
-
-            PaymentTransactionItem.objects.create(
-
+            payment_response = PaymentGatewayService(
+                gateway,
+            ).create_payment(
                 transaction=transaction,
-
-                student_fee=fee,
-
-                amount=fee.payable_amount,
-
             )
 
-        payment_response = PaymentGatewayService(
+            print("Gateway Response:", payment_response)
 
-            gateway,
+            transaction.gateway_order_id = payment_response["order_id"]
 
-        ).create_payment(
+            transaction.save(
+                update_fields=[
+                    "gateway_order_id",
+                ]
+            )
 
-            transaction=transaction,
+            print("Transaction Updated")
 
-        )
+            print("=" * 100)
+            print("CREATE PAYMENT SUCCESS")
+            print("=" * 100)
 
-        transaction.gateway_order_id = payment_response["order_id"]
-        transaction.save(
-            update_fields=[
-                "gateway_order_id",
-            ]
-        )
+            return CustomResponse.successResponse(
+                description="Payment created successfully.",
+                data={
+                    "transaction_id": str(transaction.id),
+                    "gateway": gateway.gateway,
+                    "amount": total_amount,
+                    "payment_url": payment_response["payment_url"],
+                },
+            )
 
-        return CustomResponse.successResponse(
-            description="Payment created successfully.",
-            data={
-                "transaction_id": str(transaction.id),
-                "gateway": gateway.gateway,
-                "amount": total_amount,
-                "payment_url": payment_response["payment_url"],
-            },
-        )
+        except Exception as e:
+
+            import traceback
+
+            print("=" * 100)
+            print("CREATE PAYMENT FAILED")
+            print(type(e))
+            print(str(e))
+            traceback.print_exc()
+            print("=" * 100)
+
+            return CustomResponse.errorResponse(
+                description=str(e),
+            )
