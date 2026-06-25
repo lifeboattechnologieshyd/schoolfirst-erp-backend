@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "apps.school",
     "apps.backoffice",
     "apps.fee",
+    "apps.payment",
     # Third Party
     "rest_framework",
     "rest_framework.authtoken",

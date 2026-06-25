@@ -1,8 +1,11 @@
+import uuid
+from decimal import Decimal
+
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.fee.models import FeeType, FeeTemplateItem, FeeTemplate, FeeCollectionPlan, FeeInstallment, \
-    FeeInstallmentItem, LateFeeRule, FeeConcession, StudentFeeAssignment, StudentFee
+    FeeInstallmentItem, LateFeeRule, FeeConcession, StudentFeeAssignment, StudentFee, StudentFeePayment
 from apps.school.models.school import AcademicYear, Grade, Student
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
@@ -2826,4 +2829,91 @@ class FeeDefaultersAPIView(APIView):
 
         return CustomResponse.successResponse(
             data=data,
+        )
+
+class PendingStudentFeeAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+    ]
+
+    def get(self, request):
+
+        student = Student.objects.filter(
+            id=request.query_params.get("student_id"),
+        ).first()
+
+        if student is None:
+
+            return CustomResponse.errorResponse(
+                description="Student not found.",
+            )
+
+        fees = StudentFee.objects.select_related(
+            "installment_item",
+            "installment_item__fee_template_item",
+            "installment_item__fee_template_item__fee_type",
+            "installment_item__installment",
+        ).filter(
+            student=student,
+        ).exclude(
+            status=StudentFee.Status.PAID,
+        ).order_by(
+            "due_date",
+        )
+
+        total_amount = 0
+
+        data = []
+
+        for fee in fees:
+
+            payable = fee.payable_amount
+
+            total_amount += payable
+
+            data.append({
+
+                "student_fee_id": str(fee.id),
+
+                "fee_type": fee.installment_item.fee_template_item.fee_type.name,
+
+                "installment": fee.installment_item.installment.name,
+
+                "amount": fee.amount,
+
+                "concession": fee.concession_amount,
+
+                "late_fee": fee.late_fee,
+
+                "paid_amount": fee.paid_amount,
+
+                "payable_amount": payable,
+
+                "due_date": fee.due_date,
+
+                "status": fee.status,
+
+            })
+
+        return CustomResponse.successResponse(
+
+            data={
+
+                "student": {
+
+                    "id": str(student.id),
+
+                    "name": student.name,
+
+                    "admission_number": student.admission_number,
+
+                },
+
+                "fees": data,
+
+                "total_payable_amount": total_amount,
+
+            }
+
         )
