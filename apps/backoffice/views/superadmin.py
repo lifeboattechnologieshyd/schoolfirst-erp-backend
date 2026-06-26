@@ -689,36 +689,24 @@ class UpdateSchoolAPIView(APIView):
                 description="School not found"
             )
 
-        check_permission(
-            request,
-            "school.update",
-            school.id,
-        )
+        check_permission(request,"school.update",school.id,)
+        school.name = request.data.get("name",school.name,)
+        school.address = request.data.get("address",school.address,)
+        school.city = request.data.get("city",school.city,)
+        school.state = request.data.get( "state",school.state,)
+        school.status = request.data.get("status",school.status,)
+        school.primary_color = request.data.get("primary_color",school.primary_color)
+        school.secondary_color = request.data.get("secondary_color",school.secondary_color)
+        school.principal_name = request.data.get("principal_name",school.principal_name)
+        school.principal_email = request.data.get("principal_email",school.principal_email)
+        school.email = request.data.get("email",school.email,)
+        school.logo = request.data.get("logo",school.logo,)
+        school.board = request.data.get("board",school.board,)
+        school.website = request.data.get("website",school.website,)
+        school.state = request.data.get("state",school.state,)
+        school.country = request.data.get("country",school.country,)
+        school.pincode = request.data.get("pincode",school.pincode,)
 
-        school.name = request.data.get(
-            "name",
-            school.name,
-        )
-
-        school.address = request.data.get(
-            "address",
-            school.address,
-        )
-
-        school.city = request.data.get(
-            "city",
-            school.city,
-        )
-
-        school.state = request.data.get(
-            "state",
-            school.state,
-        )
-
-        school.status = request.data.get(
-            "status",
-            school.status,
-        )
 
         school.save()
 
