@@ -42,3 +42,4 @@ def generate_student_fees(
     )
 
     return assignment
+

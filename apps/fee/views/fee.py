@@ -1,12 +1,13 @@
 import uuid
+from django.utils import timezone
 
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 
 from apps.fee.models import StudentFee, SchoolPaymentGateway
 from apps.payment.models import PaymentTransaction, PaymentTransactionItem
 from apps.payment.services.gateway import PaymentGatewayService
-from apps.payment.services.phonepe import create_phonepe_payment
+from apps.payment.services.phonepe import create_phonepe_payment, get_phonepe_client
 from apps.school.models.school import Student
 from shared.mixins import CustomResponse
 
@@ -243,3 +244,170 @@ class CreatePaymentAPIView(APIView):
             return CustomResponse.errorResponse(
                 description=str(e),
             )
+
+class PhonePeWebhookAPIView(APIView):
+
+    permission_classes = [AllowAny,]
+
+    authentication_classes = []
+
+    def post(self, request):
+
+        print("=" * 100)
+        print("PHONEPE WEBHOOK")
+        print("=" * 100)
+
+        raw_body = request.body.decode("utf-8")
+        auth_header = request.headers.get("Authorization")
+
+        print("Headers:", request.headers)
+        print("Body:", raw_body)
+
+        try:
+
+            gateway = SchoolPaymentGateway.objects.filter(
+                gateway=SchoolPaymentGateway.Gateway.PHONEPE,
+                is_active=True,
+            ).first()
+
+            if gateway is None:
+
+                print("PhonePe gateway not configured")
+
+                return CustomResponse.successResponse(
+                    description="Gateway not configured.",
+                )
+
+            client = get_phonepe_client(gateway)
+
+            callback = client.validate_callback(
+                username="Ranjith",
+                password="password123",
+                callback_header_data=auth_header,
+                callback_response_data=raw_body,
+            )
+
+            print("Webhook validated successfully")
+
+        except Exception as e:
+
+            print("Validation Failed:", str(e))
+
+            return CustomResponse.successResponse(
+                description="Ignored",
+            )
+
+        if not callback.payload:
+
+            print("Validation Ping")
+
+            return CustomResponse.successResponse(
+                description="Validation Success",
+            )
+
+        payload = callback.payload
+
+        merchant_order_id = payload.merchant_order_id
+
+        print("Merchant Order ID:", merchant_order_id)
+
+        transaction = PaymentTransaction.objects.select_related(
+            "student",
+        ).filter(
+            transaction_number=merchant_order_id,
+        ).first()
+
+        if transaction is None:
+
+            print("Transaction not found")
+
+            return CustomResponse.successResponse(
+                description="Transaction not found.",
+            )
+
+        if transaction.status == PaymentTransaction.Status.SUCCESS:
+
+            print("Already Processed")
+
+            return CustomResponse.successResponse(
+                description="Already processed.",
+            )
+
+        state = payload.state
+
+        print("Payment State:", state)
+
+        with transaction.atomic():
+
+            transaction.gateway_transaction_id = payload.order_id
+
+            if state == "COMPLETED":
+
+                transaction.status = PaymentTransaction.Status.SUCCESS
+
+                transaction.paid_at = timezone.now()
+
+                transaction.save()
+
+                self.update_student_fees(transaction)
+
+                print("Payment Success")
+
+            elif state == "FAILED":
+
+                transaction.status = PaymentTransaction.Status.FAILED
+
+                transaction.save()
+
+                print("Payment Failed")
+
+            else:
+
+                transaction.status = PaymentTransaction.Status.CANCELLED
+
+                transaction.save()
+
+                print("Payment Cancelled")
+
+        return CustomResponse.successResponse(
+            description="Webhook processed.",
+        )
+    def update_student_fees(self, transaction):
+
+        print("=" * 80)
+        print("Updating Student Fees")
+        print("=" * 80)
+
+        items = PaymentTransactionItem.objects.select_related(
+            "student_fee",
+        ).filter(
+            transaction=transaction,
+        )
+
+        for item in items:
+
+            fee = item.student_fee
+
+            print("Fee:", fee.id)
+            print("Before Paid:", fee.paid_amount)
+
+            fee.paid_amount += item.amount
+
+            if fee.paid_amount >= fee.amount:
+
+                fee.status = StudentFee.Status.PAID
+
+            else:
+
+                fee.status = StudentFee.Status.PARTIAL
+
+            fee.save(
+                update_fields=[
+                    "paid_amount",
+                    "status",
+                ],
+            )
+
+            print("After Paid:", fee.paid_amount)
+            print("Status:", fee.status)
+
