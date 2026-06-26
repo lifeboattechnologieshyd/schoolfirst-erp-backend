@@ -580,6 +580,9 @@ class CreateSchoolAPIView(APIView):
                 "country",
                 "India",
             ),
+            primary_color=request.data.get("primary_color"),
+            secondary_color=request.data.get("secondary_color"),
+
         )
 
         check_permission(
@@ -621,7 +624,7 @@ class SchoolListAPIView(APIView):
             school_id,
         )
 
-        queryset = School.objects.all()
+        queryset = School.objects.select_related("organization",).all()
 
         data = []
 
@@ -631,6 +634,26 @@ class SchoolListAPIView(APIView):
                 "id": obj.id,
                 "name": obj.name,
                 "code": obj.code,
+                "organization_name": obj.organization.name if obj.organization else None,
+                "address": obj.address,
+                "logo": obj.logo,
+                "city": obj.city,
+                "primary_color": obj.primary_color,
+                "secondary_color": obj.secondary_color,
+                "board": obj.board,
+                "email": obj.email,
+                "phone_number": obj.phone_number,
+                "principal_name": obj.principal_name,
+                "principal_email": obj.principal_email,
+                "established_year": obj.established_year,
+                "pincode": obj.pincode,
+                "website": obj.website,
+                "state": obj.state,
+                "country": obj.country,
+                "is_email_verified": obj.is_email_verified,
+                "is_phone_verified": obj.is_phone_verified,
+                "status": obj.status,
+
             })
 
         return CustomResponse.successResponse(
