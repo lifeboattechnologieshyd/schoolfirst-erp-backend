@@ -46,7 +46,7 @@ class SchoolMiddleware:
             "/user/admin/send-otp",
             "/user/admin/verify-otp",
 
-            "/fee/phonepe/webhook"
+            "/fee/phonepe/webhook",
 
             "/backoffice/organizations",
             "/backoffice/schools",
