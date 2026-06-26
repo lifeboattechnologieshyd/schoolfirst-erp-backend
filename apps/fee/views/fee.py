@@ -10,7 +10,7 @@ from apps.payment.services.gateway import PaymentGatewayService
 from apps.payment.services.phonepe import create_phonepe_payment, get_phonepe_client
 from apps.school.models.school import Student
 from shared.mixins import CustomResponse
-
+from django.db import transaction
 
 class PendingStudentFeeAPIView(APIView):
 
@@ -201,6 +201,22 @@ class CreatePaymentAPIView(APIView):
                 amount=total_amount,
                 status=PaymentTransaction.Status.INITIATED,
             )
+            print("Creating Transaction Items...")
+
+            for fee in fees:
+
+                print(
+                    f"Adding Fee -> {fee.id} | "
+                    f"{fee.installment_item.fee_template_item.fee_type.name} | "
+                    f"Amount: {fee.payable_amount}"
+                )
+                PaymentTransactionItem.objects.create(
+                            transaction=transaction,
+                            student_fee=fee,
+                            amount=fee.payable_amount,
+                        )
+
+            print("Transaction Items Created")
 
             phonepe_response = create_phonepe_payment(
                 transaction,
@@ -247,7 +263,9 @@ class CreatePaymentAPIView(APIView):
 
 class PhonePeWebhookAPIView(APIView):
 
-    permission_classes = [AllowAny,]
+    permission_classes = [
+        AllowAny,
+    ]
 
     authentication_classes = []
 
@@ -302,7 +320,7 @@ class PhonePeWebhookAPIView(APIView):
             print("Validation Ping")
 
             return CustomResponse.successResponse(
-                description="Validation Success",
+                description="Validation success",
             )
 
         payload = callback.payload
@@ -311,13 +329,13 @@ class PhonePeWebhookAPIView(APIView):
 
         print("Merchant Order ID:", merchant_order_id)
 
-        transaction = PaymentTransaction.objects.select_related(
+        payment_transaction = PaymentTransaction.objects.select_related(
             "student",
         ).filter(
             transaction_number=merchant_order_id,
         ).first()
 
-        if transaction is None:
+        if payment_transaction is None:
 
             print("Transaction not found")
 
@@ -325,9 +343,9 @@ class PhonePeWebhookAPIView(APIView):
                 description="Transaction not found.",
             )
 
-        if transaction.status == PaymentTransaction.Status.SUCCESS:
+        if payment_transaction.status == PaymentTransaction.Status.SUCCESS:
 
-            print("Already Processed")
+            print("Already processed")
 
             return CustomResponse.successResponse(
                 description="Already processed.",
@@ -339,40 +357,62 @@ class PhonePeWebhookAPIView(APIView):
 
         with transaction.atomic():
 
-            transaction.gateway_transaction_id = payload.order_id
+            payment_transaction.gateway_transaction_id = payload.order_id
 
             if state == "COMPLETED":
 
-                transaction.status = PaymentTransaction.Status.SUCCESS
+                payment_transaction.status = PaymentTransaction.Status.SUCCESS
+                payment_transaction.paid_at = timezone.now()
 
-                transaction.paid_at = timezone.now()
+                payment_transaction.save(
+                    update_fields=[
+                        "gateway_transaction_id",
+                        "status",
+                        "paid_at",
+                    ],
+                )
 
-                transaction.save()
-
-                self.update_student_fees(transaction)
+                self.update_student_fees(
+                    payment_transaction,
+                )
 
                 print("Payment Success")
 
             elif state == "FAILED":
 
-                transaction.status = PaymentTransaction.Status.FAILED
+                payment_transaction.status = PaymentTransaction.Status.FAILED
 
-                transaction.save()
+                payment_transaction.save(
+                    update_fields=[
+                        "gateway_transaction_id",
+                        "status",
+                    ],
+                )
 
                 print("Payment Failed")
 
             else:
 
-                transaction.status = PaymentTransaction.Status.CANCELLED
+                payment_transaction.status = PaymentTransaction.Status.CANCELLED
 
-                transaction.save()
+                payment_transaction.save(
+                    update_fields=[
+                        "gateway_transaction_id",
+                        "status",
+                    ],
+                )
 
                 print("Payment Cancelled")
+
+        print("=" * 100)
+        print("WEBHOOK COMPLETED")
+        print("=" * 100)
 
         return CustomResponse.successResponse(
             description="Webhook processed.",
         )
-    def update_student_fees(self, transaction):
+
+    def update_student_fees(self, payment_transaction):
 
         print("=" * 80)
         print("Updating Student Fees")
@@ -381,19 +421,24 @@ class PhonePeWebhookAPIView(APIView):
         items = PaymentTransactionItem.objects.select_related(
             "student_fee",
         ).filter(
-            transaction=transaction,
+            transaction=payment_transaction,
         )
+
+        print("Total Items:", items.count())
 
         for item in items:
 
             fee = item.student_fee
 
-            print("Fee:", fee.id)
-            print("Before Paid:", fee.paid_amount)
+            print("-" * 80)
+            print("Student Fee:", fee.id)
+            print("Fee Amount:", fee.amount)
+            print("Paid Before:", fee.paid_amount)
+            print("Transaction Amount:", item.amount)
 
             fee.paid_amount += item.amount
 
-            if fee.paid_amount >= fee.amount:
+            if fee.paid_amount >= fee.payable_amount:
 
                 fee.status = StudentFee.Status.PAID
 
@@ -408,6 +453,10 @@ class PhonePeWebhookAPIView(APIView):
                 ],
             )
 
-            print("After Paid:", fee.paid_amount)
-            print("Status:", fee.status)
+            print("Paid After:", fee.paid_amount)
+            print("Fee Status:", fee.status)
+
+        print("=" * 80)
+        print("Student Fee Update Completed")
+        print("=" * 80)
 
