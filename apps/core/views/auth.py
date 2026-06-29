@@ -506,7 +506,7 @@ class VerifyOTPAPIView(APIView):
 
                         "guardian_mobile": student.guardian_mobile,
 
-                        "is_active": student.is_active,
+                        "status": student.status,
 
                     })
 
