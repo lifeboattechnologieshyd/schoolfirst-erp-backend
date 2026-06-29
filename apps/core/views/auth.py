@@ -360,7 +360,7 @@ class SendOTPAPIView(APIView):
             )
 
 
-class ParentVerifyOTPAPIView(APIView):
+class VerifyOTPAPIView(APIView):
 
     permission_classes = [AllowAny,]
 
