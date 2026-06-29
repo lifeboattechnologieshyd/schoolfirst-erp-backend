@@ -456,7 +456,7 @@ class VerifyOTPAPIView(APIView):
 
                         "name": student.name,
 
-                        "profile_image": student.profile_image,
+                        "photo_url": student.photo_url,
 
                         "gender": student.gender,
 
