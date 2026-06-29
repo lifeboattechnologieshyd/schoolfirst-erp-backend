@@ -10,6 +10,8 @@ from django.contrib.auth.models import (
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
+
+from shared.managers import SoftDeleteManager
 from shared.mixins.base_model import AuditModel
 
 
@@ -95,6 +97,60 @@ class UserOTP(AuditModel):
             models.Index(fields=["mobile", "expires_at", "otp"]),
             models.Index(fields=["email", "expires_at", "otp"]),
         ]
+
+
+class UserDeviceSession(AuditModel):
+
+    objects = SoftDeleteManager()
+
+    all_objects = models.Manager()
+
+    class DeviceType(models.TextChoices):
+
+        ANDROID = "ANDROID"
+
+        IOS = "IOS"
+
+        WEB = "WEB"
+
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False, )
+
+    user = models.ForeignKey(UserMaster,on_delete=models.CASCADE,related_name="device_sessions",)
+
+    device_id = models.CharField(max_length=255,null=True,blank=True)
+
+    session_id = models.CharField(max_length=255,null=True,blank=True)
+
+    device_type = models.CharField( max_length=20,choices=DeviceType.choices,)
+
+    device_name = models.CharField(max_length=255,null=True,blank=True, )
+
+    device_model = models.CharField(max_length=255,null=True,blank=True,)
+
+    os_version = models.CharField(max_length=100,null=True,blank=True,)
+
+    app_version = models.CharField(max_length=50,null=True,blank=True,)
+
+    fcm_token = models.TextField(null=True,blank=True,)
+
+    ip_address = models.GenericIPAddressField(null=True,blank=True, )
+
+    user_agent = models.TextField(null=True,blank=True,)
+
+    last_login_at = models.DateTimeField(auto_now=True,)
+
+    is_active = models.BooleanField( default=True,)
+
+    class Meta:
+
+        db_table = "user_device_sessions"
+
+        indexes = [models.Index(fields=["user",],),
+                   models.Index(fields=["device_id",],),
+                   models.Index(fields=["session_id",],),
+                   models.Index(fields=["is_active",],),
+                   models.Index(fields=["user","device_id",],),
+                   ]
 
 class Modules(AuditModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

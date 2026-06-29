@@ -1,6 +1,6 @@
 import random
 import secrets
-
+from django.db.models import Q
 from datetime import timedelta
 
 from django.core.files.base import ContentFile
@@ -16,9 +16,10 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.core.models import UserOTP, UserMaster, UserRoles
+from apps.core.models import UserOTP, UserMaster, UserRoles, UserDeviceSession
 from django.db import transaction
 
+from apps.school.models.school import Student
 from shared.enums.roles import RolesEnum
 from shared.helpers import get_user_roles, get_user_permissions
 from shared.mixins import CustomResponse
@@ -280,3 +281,287 @@ class FileUploadView(APIView):
             return CustomResponse().errorResponse(
                 {"error": str(e)}, description="File upload failed", status=status.HTTP_400_BAD_REQUEST
             )
+
+
+class SendOTPAPIView(APIView):
+
+    permission_classes = [AllowAny,]
+
+    authentication_classes = []
+
+    def post(self, request):
+
+        try:
+
+            print("=" * 100)
+
+            print("PARENT SEND OTP API")
+
+            print("=" * 100)
+
+            mobile = request.data.get("mobile",)
+
+            print("Mobile:", mobile)
+
+            if not mobile:
+
+                return CustomResponse.errorResponse(description="Mobile number is required.",)
+
+            if not str(mobile).isdigit() or len(str(mobile)) != 10:
+
+                return CustomResponse.errorResponse(
+
+                    description="Enter valid mobile number.",
+
+                )
+
+            # Invalidate old unused OTPs
+
+            UserOTP.objects.filter(mobile=mobile,is_used=False,).update(is_used=True,)
+
+            otp = generate_otp()
+            print("Generated OTP :", otp)
+            send_otp_to_mobile(otp, mobile)
+
+            user = UserMaster.objects.filter(mobile=mobile,).first()
+
+            print("User:", user)
+
+            UserOTP.objects.create(user=user,mobile=mobile, otp=otp,expires_at=timezone.now() + timedelta(minutes=10,),
+
+                is_used=False,
+
+            )
+
+            sms_status = send_otp_to_mobile(otp=otp,mobile=str(mobile),)
+
+            print("SMS Status:", sms_status)
+
+            if not sms_status:
+                return CustomResponse.errorResponse(description="Unable to send OTP.",)
+            print("=" * 100)
+            print("OTP SENT SUCCESSFULLY")
+            print("=" * 100)
+            return CustomResponse.successResponse(description="OTP sent successfully.",)
+
+        except Exception as e:
+            import traceback
+            print("=" * 100)
+            print("SEND OTP FAILED")
+            print(str(e))
+            traceback.print_exc()
+
+            print("=" * 100)
+
+            return CustomResponse.errorResponse(
+
+                description=str(e),
+
+            )
+
+
+class ParentVerifyOTPAPIView(APIView):
+
+    permission_classes = [AllowAny,]
+
+    authentication_classes = []
+
+    def post(self, request):
+        try:
+            print("=" * 100)
+            print("PARENT VERIFY OTP API")
+            print("=" * 100)
+            mobile = request.data.get("mobile",)
+            otp = request.data.get("otp",)
+            device_id = request.data.get("device_id",)
+            session_id = request.data.get( "session_id",)
+            device_type = request.data.get("device_type",)
+            fcm_token = request.data.get("fcm_token",)
+            print("Mobile :", mobile)
+            print("OTP :", otp)
+
+            if not mobile or not otp:
+
+                return CustomResponse.errorResponse(description="Mobile and OTP are required.",)
+
+            otp_obj = UserOTP.objects.filter(
+                mobile=mobile,
+                otp=otp,
+                is_used=False,
+            ).order_by(
+                "-created_at",
+            ).first()
+
+            if otp_obj is None:
+
+                return CustomResponse.errorResponse(description="Invalid OTP.",)
+
+            if otp_obj.expires_at < timezone.now():
+
+                return CustomResponse.errorResponse(description="OTP expired.",)
+
+            with transaction.atomic():
+
+                otp_obj.is_used = True
+
+                otp_obj.save(update_fields=["is_used",])
+
+                user = UserMaster.objects.filter(mobile=mobile,).first()
+
+                if user is None:
+                    user = UserMaster.objects.create(username=str(mobile), mobile=mobile,status=UserMaster.Status.ACTIVE,)
+
+                    print("New User Created :", user.id)
+                students = Student.objects.filter(
+                    Q(father_mobile=mobile) |
+                    Q(mother_mobile=mobile) |
+                    Q(guardian_mobile=mobile)
+
+                )
+
+                refresh = RefreshToken.for_user(user,)
+                access_token = str(refresh.access_token,)
+                refresh_token = str(refresh,)
+
+                UserDeviceSession.objects.update_or_create(
+                    user=user,
+                    device_id=device_id,
+                    defaults={
+                        "session_id": session_id,
+                        "device_type": device_type,
+                        "fcm_token": fcm_token,
+                        "ip_address": self.get_client_ip(
+                            request,
+                        ),
+                        "user_agent": request.META.get(
+                            "HTTP_USER_AGENT",
+                        ),
+                        "is_active": True,
+
+                    },
+
+                )
+
+                student_data = []
+
+                for student in students:
+
+                    student_data.append({
+
+                        "student_id": str(student.id),
+
+                        "admission_number": student.admission_number,
+
+                        "roll_number": student.roll_number,
+
+                        "name": student.name,
+
+                        "profile_image": student.profile_image,
+
+                        "gender": student.gender,
+
+                        "date_of_birth": student.date_of_birth,
+
+                        "grade": {
+
+                            "id": str(student.grade.id),
+
+                            "name": student.grade.name,
+
+                        } if student.grade else None,
+
+                        "section": {
+
+                            "id": str(student.section.id),
+
+                            "name": student.section.name,
+
+                        } if student.section else None,
+
+                        "academic_year": student.academic_year.name if student.academic_year else None,
+
+                        "relationship": (
+
+                            "Father"
+
+                            if student.father_mobile == mobile
+
+                            else "Mother"
+
+                            if student.mother_mobile == mobile
+
+                            else "Guardian"
+
+                        ),
+
+                        "father_name": student.father_name,
+
+                        "mother_name": student.mother_name,
+
+                        "father_mobile": student.father_mobile,
+
+                        "mother_mobile": student.mother_mobile,
+
+                        "guardian_name": student.guardian_name,
+
+                        "guardian_mobile": student.guardian_mobile,
+
+                        "is_active": student.is_active,
+
+                    })
+
+            return CustomResponse.successResponse(
+
+                description="Login successful.",
+
+                data={
+
+                    "access": access_token,
+
+                    "refresh": refresh_token,
+
+                    "user_id": str(user.id),
+
+                    "students": student_data,
+
+                },
+
+            )
+
+        except Exception as e:
+
+            import traceback
+
+            print("=" * 100)
+
+            print("VERIFY OTP FAILED")
+
+            print(str(e))
+
+            traceback.print_exc()
+
+            print("=" * 100)
+
+            return CustomResponse.errorResponse(
+
+                description=str(e),
+
+            )
+
+    def get_client_ip(self, request):
+
+        x_forwarded_for = request.META.get(
+
+            "HTTP_X_FORWARDED_FOR",
+
+        )
+
+        if x_forwarded_for:
+
+            return x_forwarded_for.split(",")[0].strip()
+
+        return request.META.get(
+
+            "REMOTE_ADDR",
+
+        )
