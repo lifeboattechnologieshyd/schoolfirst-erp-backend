@@ -138,3 +138,6 @@ class SchoolMiddleware:
         response = self.get_response(request)
 
         return response
+
+
+

@@ -115,23 +115,75 @@ LOGGING = {
             "formatter": "json",
         },
     },
-    "loggers": {
+        "loggers": {
+
         "default": {
             "handlers": ["file_write", "console"],
             "level": DEFAULT_LOG_LEVEL,
             "propagate": False,
+
         },
-        "django": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "application": {
+            "handlers": ["file_write", "console"],
+            "level": DEFAULT_LOG_LEVEL,
+            "propagate": False,
+
+        },
+
+        "payment": {
+            "handlers": ["file_write", "console"],
+            "level": DEFAULT_LOG_LEVEL,
+            "propagate": False,
+
+        },
+
+        "auth": {
+            "handlers": ["file_write", "console"],
+            "level": DEFAULT_LOG_LEVEL,
+            "propagate": False,
+
+        },
+
+        "audit": {
+            "handlers": ["file_write", "console"],
+            "level": DEFAULT_LOG_LEVEL,
+            "propagate": False,
+
+        },
+
+        "scheduler": {
+            "handlers": ["file_write", "console"],
+            "level": DEFAULT_LOG_LEVEL,
+            "propagate": False,
+
+        },
+        "request": {
+            "handlers": ["file_write", "console"],
+            "level": DEFAULT_LOG_LEVEL,
+            "propagate": False,
+        },
+
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+
+        },
+
         "django.request": {
             "handlers": ["file_write", "console"],
             "level": "WARNING",
             "propagate": False,
+
         },
+
         "django_structlog.middlewares.request": {
             "handlers": ["null"],
             "level": "ERROR",
             "propagate": False,
+
         },
+
     },
 }
 
@@ -184,7 +236,10 @@ def bind_extra_request_finished_metadata(request, response, logger, log_kwargs, 
         request_path=normalize_request_path(request.path),
         request_method=request.method,
         response_status_code=response.status_code,
+        duration_ms=getattr(request, "duration_ms", None),
     )
+
+
 
 
 @receiver(signals.bind_extra_request_failed_metadata)

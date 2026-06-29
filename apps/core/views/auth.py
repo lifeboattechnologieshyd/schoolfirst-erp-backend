@@ -27,9 +27,9 @@ from shared.mixins import CustomResponse
 from rest_framework.parsers import FormParser, MultiPartParser
 from django.conf import settings
 
+from shared.utils.logger import auth_logger
 from shared.utils.otp import send_otp_to_mobile
 from shared.utils.s3 import add_unique_suffix_to_filename, sanitize_filename
-
 
 def normalize_email(value):
 
@@ -285,29 +285,41 @@ class FileUploadView(APIView):
 
 class SendOTPAPIView(APIView):
 
-    permission_classes = [AllowAny,]
+    permission_classes = [AllowAny]
 
     authentication_classes = []
 
     def post(self, request):
 
         try:
-
-            print("=" * 100)
-
-            print("PARENT SEND OTP API")
-
-            print("=" * 100)
-
-            mobile = request.data.get("mobile",)
-
-            print("Mobile:", mobile)
-
+            mobile = request.data.get("mobile")
+            auth_logger.info(
+                "otp_send_requested",
+                mobile=mobile,
+            )
             if not mobile:
+                auth_logger.warning(
+                    "otp_send_failed",
+                    reason="mobile_required",
+                )
 
-                return CustomResponse.errorResponse(description="Mobile number is required.",)
+                return CustomResponse.errorResponse(
+
+                    description="Mobile number is required.",
+
+                )
 
             if not str(mobile).isdigit() or len(str(mobile)) != 10:
+
+                auth_logger.warning(
+
+                    "otp_send_failed",
+
+                    mobile=mobile,
+
+                    reason="invalid_mobile",
+
+                )
 
                 return CustomResponse.errorResponse(
 
@@ -315,47 +327,123 @@ class SendOTPAPIView(APIView):
 
                 )
 
-            # Invalidate old unused OTPs
+            UserOTP.objects.filter(
 
-            UserOTP.objects.filter(mobile=mobile,is_used=False,).update(is_used=True,)
+                mobile=mobile,
+
+                is_used=False,
+
+            ).update(
+
+                is_used=True,
+
+            )
+
+            auth_logger.info(
+
+                "previous_otps_invalidated",
+
+                mobile=mobile,
+
+            )
 
             otp = generate_otp()
-            print("Generated OTP :", otp)
-            send_otp_to_mobile(otp, mobile)
 
-            user = UserMaster.objects.filter(mobile=mobile,).first()
+            auth_logger.info(
 
-            print("User:", user)
+                "otp_generated",
 
-            UserOTP.objects.create(user=user,mobile=mobile, otp=otp,expires_at=timezone.now() + timedelta(minutes=10,),
+                mobile=mobile,
+
+                expires_in_minutes=10,
+
+            )
+
+            user = UserMaster.objects.filter(
+
+                mobile=mobile,
+
+            ).first()
+
+            UserOTP.objects.create(
+
+                user=user,
+
+                mobile=mobile,
+
+                otp=otp,
+
+                expires_at=timezone.now() + timedelta(minutes=10),
 
                 is_used=False,
 
             )
 
-            sms_status = send_otp_to_mobile(otp=otp,mobile=str(mobile),)
+            auth_logger.info(
 
-            print("SMS Status:", sms_status)
+                "otp_saved",
+
+                mobile=mobile,
+
+                user_exists=user is not None,
+
+            )
+
+            sms_status = send_otp_to_mobile(
+
+                otp=otp,
+
+                mobile=str(mobile),
+
+            )
 
             if not sms_status:
-                return CustomResponse.errorResponse(description="Unable to send OTP.",)
-            print("=" * 100)
-            print("OTP SENT SUCCESSFULLY")
-            print("=" * 100)
-            return CustomResponse.successResponse(description="OTP sent successfully.",)
 
-        except Exception as e:
-            import traceback
-            print("=" * 100)
-            print("SEND OTP FAILED")
-            print(str(e))
-            traceback.print_exc()
+                auth_logger.error(
 
-            print("=" * 100)
+                    "otp_sms_send_failed",
+
+                    mobile=mobile,
+
+                    provider="full2ads",
+
+                )
+
+                return CustomResponse.errorResponse(
+
+                    description="Unable to send OTP.",
+
+                )
+
+            auth_logger.info(
+
+                "otp_sent",
+
+                mobile=mobile,
+
+                provider="full2ads",
+
+            )
+
+            return CustomResponse.successResponse(
+
+                description="OTP sent successfully.",
+
+            )
+
+        except Exception:
+
+            auth_logger.exception(
+
+                "send_otp_api_failed",
+
+                mobile=request.data.get("mobile"),
+
+            )
 
             return CustomResponse.errorResponse(
 
-                description=str(e),
+                description="Something went wrong while sending OTP.",
 
             )
 

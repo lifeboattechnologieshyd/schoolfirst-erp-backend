@@ -157,13 +157,17 @@ class UpdateAcademicYearAPIView(APIView):
 
 
 
+        # if request.data.get("status") == "ACTIVE":
+        #     AcademicYear.objects.filter(
+        #         school=academic_year.school,
+        #     ).exclude(
+        #         id=academic_year.id,
+        #     ).update(
+        #         status="INACTIVE",
+        #     )
         if request.data.get("status") == "ACTIVE":
             AcademicYear.objects.filter(
                 school=academic_year.school,
-            ).exclude(
-                id=academic_year.id,
-            ).update(
-                status="INACTIVE",
             )
 
         academic_year.name = request.data.get(
