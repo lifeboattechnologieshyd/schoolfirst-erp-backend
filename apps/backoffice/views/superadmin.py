@@ -996,7 +996,8 @@ class CreateSchoolConfigurationAPIView(APIView):
 
     def post(self, request):
 
-        school = request.school
+        # school = request.school
+        school = request.data.get("school_id")
         if school is None:
             return CustomResponse.errorResponse(description="School not found.",)
 
@@ -1246,7 +1247,8 @@ class GetSchoolConfigurationAPIView(APIView):
 
     def get(self, request):
 
-        school = request.school
+        # school = request.school
+        school = request.GET.get("school_id")
 
         if school is None:
 
@@ -1354,7 +1356,8 @@ class UpdateSchoolConfigurationAPIView(APIView):
 
     def put(self, request):
 
-        school = request.school
+        # school = request.school
+        school = request.GET.get("school_id")
 
         if school is None:
 

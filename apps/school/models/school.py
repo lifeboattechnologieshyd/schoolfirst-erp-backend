@@ -1027,3 +1027,87 @@ class StudentDocument(AuditModel):
             ),
 
         ]
+
+class Staff(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    class StaffType(models.TextChoices):
+        TEACHER = "TEACHER", "Teacher"
+        DRIVER = "DRIVER", "Driver"
+        ACCOUNTANT = "ACCOUNTANT", "Accountant"
+        RECEPTIONIST = "RECEPTIONIST", "Receptionist"
+        LIBRARIAN = "LIBRARIAN", "Librarian"
+        PRINCIPAL = "PRINCIPAL", "Principal"
+        ADMIN = "ADMIN", "Admin"
+        OFFICE_STAFF = "OFFICE_STAFF", "Office Staff"
+        SECURITY = "SECURITY", "Security"
+        ATTENDER = "ATTENDER", "Attender"
+        LAB_ASSISTANT = "LAB_ASSISTANT", "Lab Assistant"
+        TRANSPORT_MANAGER = "TRANSPORT_MANAGER", "Transport Manager"
+
+    class Gender(models.TextChoices):
+        MALE = "MALE", "Male"
+        FEMALE = "FEMALE", "Female"
+        OTHER = "OTHER", "Other"
+
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE", "Active"
+        INACTIVE = "INACTIVE", "Inactive"
+        RESIGNED = "RESIGNED", "Resigned"
+        TERMINATED = "TERMINATED", "Terminated"
+
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False,)
+
+    school = models.ForeignKey(School,on_delete=models.CASCADE,related_name="staffs",)
+
+    employee_id = models.CharField(max_length=50,)
+
+    staff_type = models.CharField(max_length=30,choices=StaffType.choices,)
+
+    name = models.CharField(max_length=255,)
+
+    gender = models.CharField(max_length=10,choices=Gender.choices,)
+
+    date_of_birth = models.DateField(null=True,blank=True,)
+
+    mobile = models.CharField(max_length=15,)
+
+    email = models.EmailField(null=True,blank=True,)
+
+    qualification = models.CharField(max_length=255,null=True,blank=True,)
+
+    experience = models.DecimalField(max_digits=5,decimal_places=1,default=0, )
+
+    joining_date = models.DateField()
+
+    status = models.CharField(max_length=20,choices=Status.choices,default=Status.ACTIVE,)
+
+    profile_image = models.URLField(null=True, blank=True,)
+
+    address = models.TextField(null=True,blank=True,)
+
+    emergency_contact_name = models.CharField(max_length=255,null=True,blank=True,)
+
+    emergency_contact_mobile = models.CharField(max_length=15,null=True,blank=True,)
+
+    class Meta:
+
+        db_table = "staff"
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "school",
+                    "employee_id",
+                ],
+                name="unique_staff_employee_id",
+            ),
+        ]
+
+        indexes = [
+            models.Index(fields=["school"]),
+            models.Index(fields=["staff_type"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["mobile"]),
+        ]
