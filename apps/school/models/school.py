@@ -242,6 +242,112 @@ class School(AuditModel):
 
         return self.name
 
+class SchoolConfiguration(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False,)
+
+    school = models.OneToOneField(School,on_delete=models.CASCADE,related_name="configuration",)
+
+    website_url = models.URLField(max_length=500,null=True,blank=True,)
+
+    backoffice_url = models.URLField(max_length=500,null=True,blank=True,)
+
+    api_base_url = models.URLField(max_length=500,null=True,blank=True,)
+
+    logo_url = models.URLField(max_length=500,null=True,blank=True,)
+
+    favicon_url = models.URLField(max_length=500,null=True,blank=True,)
+
+    primary_color = models.CharField(max_length=20,default="#2563EB",)
+
+    secondary_color = models.CharField(max_length=20,default="#FFFFFF",)
+
+    parent_android_version = models.CharField(max_length=20,null=True,blank=True,)
+
+    parent_android_force_update = models.BooleanField( default=False,)
+
+    parent_playstore_url = models.URLField(max_length=500,null=True,blank=True,)
+
+    parent_ios_version = models.CharField(max_length=20,null=True,blank=True,)
+
+    parent_ios_force_update = models.BooleanField(default=False,)
+
+    parent_appstore_url = models.URLField(max_length=500,null=True,blank=True,)
+
+    admin_android_version = models.CharField(max_length=20,null=True,blank=True,)
+
+    admin_android_force_update = models.BooleanField(default=False,)
+
+    admin_playstore_url = models.URLField( max_length=500,null=True,blank=True,)
+
+    admin_ios_version = models.CharField(max_length=20,null=True,blank=True,)
+
+    admin_ios_force_update = models.BooleanField(default=False,)
+
+    admin_appstore_url = models.URLField(max_length=500,null=True,blank=True,)
+
+    support_email = models.EmailField(null=True,blank=True,)
+
+    support_mobile = models.CharField(max_length=20,null=True,blank=True,)
+
+    class Meta:
+        db_table = "school_configuration"
+
+
+
+
+class SchoolClient(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    class ClientType(models.TextChoices):
+
+        WEBSITE = "WEBSITE", "Website"
+
+        BACKOFFICE = "BACKOFFICE", "Backoffice"
+
+        PARENT_ANDROID = "PARENT_ANDROID", "Parent Android"
+
+        PARENT_IOS = "PARENT_IOS", "Parent iOS"
+
+        ADMIN_ANDROID = "ADMIN_ANDROID", "Admin Android"
+
+        ADMIN_IOS = "ADMIN_IOS", "Admin iOS"
+
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False,)
+
+    school = models.ForeignKey(School,on_delete=models.CASCADE,related_name="clients",)
+
+    client_type = models.CharField(max_length=30,choices=ClientType.choices,)
+
+    identifier = models.CharField(
+        max_length=255,
+        unique=True,
+        db_index=True,
+        help_text="Website URL, Backoffice URL, Android Package or iOS Bundle Identifier",
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+    )
+
+    class Meta:
+
+        db_table = "school_client"
+
+        indexes = [models.Index(fields=["school"],),
+                   models.Index(fields=["client_type"],),
+                   ]
+
+        constraints = [models.UniqueConstraint(
+                fields=["school","client_type",],
+                name="unique_school_client_type",),]
+
+    def __str__(self):
+        return f"{self.school.name} - {self.client_type}"
+
 
 
 class Branch(AuditModel):

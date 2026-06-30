@@ -8,7 +8,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.backoffice.views.leads import normalize_email, normalize_mobile
 from apps.core.models import UserRoles, Roles, Permissions, RolePermissions, UserOTP, UserMaster
 from apps.school.models import SchoolLead
-from apps.school.models.school import Organization, School, Branch
+from apps.school.models.school import Organization, School, Branch, SchoolConfiguration, SchoolClient
 from shared.enums.roles import RolesEnum
 from shared.helpers.rbac import check_permission, has_role
 from shared.mixins import CustomResponse, CustomPageNumberPagination
@@ -987,3 +987,623 @@ class UserListAPIView(APIView):
         ]
 
         return paginator.get_paginated_response(data)
+
+class CreateSchoolConfigurationAPIView(APIView):
+
+    permission_classes = [IsAuthenticated,HasPermission,]
+
+    required_permission = "school.configuration.create"
+
+    def post(self, request):
+
+        school = request.school
+        if school is None:
+            return CustomResponse.errorResponse(description="School not found.",)
+
+        if SchoolConfiguration.objects.filter(
+            school=school,
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="School configuration already exists.",
+            )
+
+        clients = request.data.get(
+            "clients",
+            [],
+
+        )
+
+        if not isinstance(
+            clients,
+            list,
+        ):
+            return CustomResponse.errorResponse(
+
+                description="clients must be a list.",
+            )
+
+        client_types = []
+        for client in clients:
+            client_type = client.get(
+                "client_type",
+            )
+            identifier = client.get(
+                "identifier",
+            )
+
+            if not client_type:
+                return CustomResponse.errorResponse(
+                    description="client_type is required.",
+                )
+
+            if client_type not in SchoolClient.ClientType.values:
+                return CustomResponse.errorResponse(
+                    description=f"Invalid client_type '{client_type}'.",
+                )
+
+            if not identifier:
+                return CustomResponse.errorResponse(
+                    description=f"Identifier is required for {client_type}.",
+                )
+
+            if client_type in client_types:
+                return CustomResponse.errorResponse(
+                    description=f"Duplicate client_type '{client_type}'.",
+                )
+
+            client_types.append(client_type,)
+
+        try:
+
+            with transaction.atomic():
+
+                configuration = SchoolConfiguration.objects.create(
+                    school=school,
+                    website_url=request.data.get(
+                        "website_url",
+                    ),
+                    backoffice_url=request.data.get(
+                        "backoffice_url",
+                    ),
+                    api_base_url=request.data.get(
+                        "api_base_url",
+                    ),
+                    logo_url=request.data.get(
+                        "logo_url",
+
+                    ),
+
+                    favicon_url=request.data.get(
+
+                        "favicon_url",
+
+                    ),
+
+                    primary_color=request.data.get(
+
+                        "primary_color",
+
+                        "#2563EB",
+
+                    ),
+
+                    secondary_color=request.data.get(
+
+                        "secondary_color",
+
+                        "#FFFFFF",
+
+                    ),
+
+                    parent_android_version=request.data.get(
+
+                        "parent_android_version",
+
+                    ),
+
+                    parent_android_force_update=request.data.get(
+
+                        "parent_android_force_update",
+
+                        False,
+
+                    ),
+
+                    parent_playstore_url=request.data.get(
+
+                        "parent_playstore_url",
+
+                    ),
+
+                    parent_ios_version=request.data.get(
+
+                        "parent_ios_version",
+
+                    ),
+
+                    parent_ios_force_update=request.data.get(
+
+                        "parent_ios_force_update",
+
+                        False,
+
+                    ),
+
+                    parent_appstore_url=request.data.get(
+
+                        "parent_appstore_url",
+
+                    ),
+
+                    admin_android_version=request.data.get(
+
+                        "admin_android_version",
+
+                    ),
+
+                    admin_android_force_update=request.data.get(
+
+                        "admin_android_force_update",
+
+                        False,
+
+                    ),
+
+                    admin_playstore_url=request.data.get(
+
+                        "admin_playstore_url",
+
+                    ),
+
+                    admin_ios_version=request.data.get(
+
+                        "admin_ios_version",
+
+                    ),
+
+                    admin_ios_force_update=request.data.get(
+
+                        "admin_ios_force_update",
+
+                        False,
+
+                    ),
+
+                    admin_appstore_url=request.data.get(
+
+                        "admin_appstore_url",
+
+                    ),
+
+                    support_email=request.data.get(
+
+                        "support_email",
+
+                    ),
+
+                    support_mobile=request.data.get(
+
+                        "support_mobile",
+
+                    ),
+
+                )
+
+                school_clients = []
+
+                for client in clients:
+
+                    school_clients.append(
+                        SchoolClient(
+                            school=school,
+                            client_type=client.get(
+                                "client_type",
+                            ),
+                            identifier=client.get(
+                                "identifier",
+
+                            ),
+
+                        )
+
+                    )
+
+                if school_clients:
+                    SchoolClient.objects.bulk_create(
+                        school_clients,
+
+                    )
+
+        except Exception as e:
+            return CustomResponse.errorResponse(
+                description=str(e),
+            )
+
+        return CustomResponse.successResponse(
+
+            description="School configuration created successfully.",
+
+            data={
+                "configuration_id": str(
+                    configuration.id,
+                ),
+                "clients_created": len(
+                    school_clients,
+                ),
+
+            },
+
+        )
+
+class GetSchoolConfigurationAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "school.configuration.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        if school is None:
+
+            return CustomResponse.errorResponse(
+                description="School not found.",
+            )
+
+        configuration = (
+            SchoolConfiguration.objects.filter(
+                school=school,
+            )
+            .first()
+        )
+
+        if configuration is None:
+
+            return CustomResponse.errorResponse(
+                description="School configuration not found.",
+            )
+
+        clients = SchoolClient.objects.filter(
+            school=school,
+            is_active=True,
+        ).values(
+            "id",
+            "client_type",
+            "identifier",
+        )
+
+        return CustomResponse.successResponse(
+
+            description="School configuration fetched successfully.",
+
+            data={
+
+                "configuration": {
+
+                    "id": str(configuration.id),
+
+                    "website_url": configuration.website_url,
+
+                    "backoffice_url": configuration.backoffice_url,
+
+                    "api_base_url": configuration.api_base_url,
+
+                    "logo_url": configuration.logo_url,
+
+                    "favicon_url": configuration.favicon_url,
+
+                    "primary_color": configuration.primary_color,
+
+                    "secondary_color": configuration.secondary_color,
+
+                    "parent_android_version": configuration.parent_android_version,
+
+                    "parent_android_force_update": configuration.parent_android_force_update,
+
+                    "parent_playstore_url": configuration.parent_playstore_url,
+
+                    "parent_ios_version": configuration.parent_ios_version,
+
+                    "parent_ios_force_update": configuration.parent_ios_force_update,
+
+                    "parent_appstore_url": configuration.parent_appstore_url,
+
+                    "admin_android_version": configuration.admin_android_version,
+
+                    "admin_android_force_update": configuration.admin_android_force_update,
+
+                    "admin_playstore_url": configuration.admin_playstore_url,
+
+                    "admin_ios_version": configuration.admin_ios_version,
+
+                    "admin_ios_force_update": configuration.admin_ios_force_update,
+
+                    "admin_appstore_url": configuration.admin_appstore_url,
+
+                    "support_email": configuration.support_email,
+
+                    "support_mobile": configuration.support_mobile,
+
+                },
+
+                "clients": [
+
+                    {
+                        "id": str(client["id"]),
+                        "client_type": client["client_type"],
+                        "identifier": client["identifier"],
+                    }
+
+                    for client in clients
+
+                ],
+
+            },
+
+        )
+
+class UpdateSchoolConfigurationAPIView(APIView):
+
+    permission_classes = [IsAuthenticated,HasPermission,]
+
+    required_permission = "school.configuration.update"
+
+    def put(self, request):
+
+        school = request.school
+
+        if school is None:
+
+            return CustomResponse.errorResponse(description="School not found.",)
+
+        configuration = SchoolConfiguration.objects.filter(school=school,).first()
+
+        if configuration is None:
+
+            return CustomResponse.errorResponse(description="School configuration not found.",)
+
+        clients = request.data.get("clients",[],)
+
+        if not isinstance(clients, list):
+
+            return CustomResponse.errorResponse(description="clients must be a list.",)
+
+        client_types = []
+
+        for client in clients:
+
+            client_type = client.get("client_type",)
+
+            identifier = client.get("identifier",)
+
+            if not client_type:
+
+                return CustomResponse.errorResponse(description="client_type is required.", )
+
+            if client_type not in SchoolClient.ClientType.values:
+
+                return CustomResponse.errorResponse(
+
+                    description=f"Invalid client_type '{client_type}'.",
+
+                )
+
+            if not identifier:
+
+                return CustomResponse.errorResponse(
+
+                    description=f"Identifier is required for '{client_type}'.",
+
+                )
+
+            if client_type in client_types:
+
+                return CustomResponse.errorResponse(
+
+                    description=f"Duplicate client_type '{client_type}'.",
+
+                )
+
+            client_types.append(
+
+                client_type,
+
+            )
+
+        try:
+
+            with transaction.atomic():
+
+                restricted_fields = ["id","school","created_at","updated_at","deleted_at",]
+
+                for field, value in request.data.items():
+
+                    if field in restricted_fields:
+
+                        continue
+
+                    if field == "clients":
+
+                        continue
+
+                    if hasattr(
+
+                        configuration,
+
+                        field,
+
+                    ):
+
+                        setattr(
+
+                            configuration,
+
+                            field,
+
+                            value,
+
+                        )
+
+                configuration.save()
+
+                for client in clients:
+
+                    SchoolClient.objects.update_or_create(school=school,
+
+                        client_type=client.get(
+
+                            "client_type",
+
+                        ),
+
+                        defaults={
+
+                            "identifier": client.get(
+
+                                "identifier",
+
+                            ),
+
+                            "is_active": True,
+
+                        },
+
+                    )
+
+        except Exception as e:
+
+            return CustomResponse.errorResponse(
+
+                description=str(e),
+
+            )
+
+        return CustomResponse.successResponse(
+
+            description="School configuration updated successfully.",
+
+        )
+class GetSchoolClientInfoAPIView(APIView):
+
+    permission_classes = [AllowAny]
+
+    authentication_classes = []
+
+    def post(self, request):
+
+        identifier = request.data.get(
+            "identifier",
+        )
+
+        if not identifier:
+
+            return CustomResponse.errorResponse(
+                description="Identifier is required.",
+            )
+
+        client = (
+            SchoolClient.objects.select_related(
+                "school__configuration",
+            )
+            .filter(
+                identifier=identifier.strip(),
+                is_active=True,
+            )
+            .first()
+        )
+
+        if client is None:
+
+            return CustomResponse.errorResponse(
+                description="Invalid client identifier.",
+            )
+
+        configuration = getattr(
+            client.school,
+            "configuration",
+            None,
+        )
+
+        if configuration is None:
+
+            return CustomResponse.errorResponse(
+                description="School configuration not found.",
+            )
+
+        return CustomResponse.successResponse(
+
+            description="School configuration fetched successfully.",
+
+            data={
+
+                "school": {
+
+                    "id": str(client.school.id),
+
+                    "name": client.school.name,
+
+                },
+
+                "client_type": client.client_type,
+
+                "configuration": {
+
+                    "website_url": configuration.website_url,
+
+                    "backoffice_url": configuration.backoffice_url,
+
+                    "api_base_url": configuration.api_base_url,
+
+                    "logo_url": configuration.logo_url,
+
+                    "favicon_url": configuration.favicon_url,
+
+                    "primary_color": configuration.primary_color,
+
+                    "secondary_color": configuration.secondary_color,
+
+                    "support_email": configuration.support_email,
+
+                    "support_mobile": configuration.support_mobile,
+
+                    "parent_app": {
+
+                        "android_version": configuration.parent_android_version,
+
+                        "android_force_update": configuration.parent_android_force_update,
+
+                        "playstore_url": configuration.parent_playstore_url,
+
+                        "ios_version": configuration.parent_ios_version,
+
+                        "ios_force_update": configuration.parent_ios_force_update,
+
+                        "appstore_url": configuration.parent_appstore_url,
+
+                    },
+
+                    "admin_app": {
+
+                        "android_version": configuration.admin_android_version,
+
+                        "android_force_update": configuration.admin_android_force_update,
+
+                        "playstore_url": configuration.admin_playstore_url,
+
+                        "ios_version": configuration.admin_ios_version,
+
+                        "ios_force_update": configuration.admin_ios_force_update,
+
+                        "appstore_url": configuration.admin_appstore_url,
+
+                    },
+
+                },
+
+            },
+
+        )
