@@ -6,7 +6,7 @@ from django.db.models import Q
 from apps.core.models import Roles, UserMaster, UserRoles
 from apps.fee.models import FeeTemplate, StudentFeeAssignment, FeeConcession
 from apps.school.models import School
-from apps.school.models.school import AcademicYear, Grade, Section, Student, StudentDocument
+from apps.school.models.school import AcademicYear, Grade, Section, Student, StudentDocument, Staff
 from shared.enums.roles import RolesEnum
 from shared.helpers.rbac import check_permission
 from shared.helpers.student import get_or_create_parent
@@ -2063,4 +2063,140 @@ class UpdateStudentDocumentAPIView(APIView):
 
         return CustomResponse.successResponse(
             description="Student document updated successfully.",
+        )
+
+class CreateStaffAPIView(APIView):
+
+    permission_classes = [IsAuthenticated,HasPermission,]
+
+    required_permission = "staff.create"
+
+    def post(self,request):
+
+        school = request.school
+
+        if school is None:
+            return CustomResponse.errorResponse(description="School not found.")
+
+        required_fields = [
+            "employee_id",
+            "staff_type",
+            "name",
+            "gender",
+            "mobile",
+            "joining_date",
+        ]
+
+        for field in required_fields:
+            if request.data.get(field) in [None,""]:
+                return CustomResponse.errorResponse(description=f"{field} is required.")
+
+        staff_type = request.data.get("staff_type")
+
+        if staff_type not in Staff.StaffType.values:
+            return CustomResponse.errorResponse(description="Invalid staff type.")
+
+        if request.data.get("gender") not in Staff.Gender.values:
+            return CustomResponse.errorResponse(description="Invalid gender.")
+
+        mobile = str(request.data.get("mobile"))
+
+        if not mobile.isdigit() or len(mobile) != 10:
+            return CustomResponse.errorResponse(description="Enter valid mobile number.")
+
+        if Staff.objects.filter(school=school,employee_id=request.data.get("employee_id")).exists():
+            return CustomResponse.errorResponse(description="Employee ID already exists.")
+
+        if Staff.objects.filter(school=school,mobile=mobile).exists():
+            return CustomResponse.errorResponse(description="Mobile number already exists.")
+
+        email = request.data.get("email")
+
+        if email and Staff.objects.filter(school=school,email=email).exists():
+            return CustomResponse.errorResponse(description="Email already exists.")
+
+        role = Roles.objects.filter(role_name=staff_type).first()
+
+        if role is None:
+            return CustomResponse.errorResponse(description=f"{staff_type.title()} role not configured.")
+
+        try:
+
+            with transaction.atomic():
+
+                user = UserMaster.objects.create(
+
+                    school=school,
+
+                    name=request.data.get("name").strip(),
+
+                    mobile=mobile,
+
+                    email=email,
+
+                    is_active=True,
+
+                )
+
+                staff = Staff.objects.create(
+
+                    school=school,
+
+                    employee_id=request.data.get("employee_id").strip(),
+
+                    staff_type=staff_type,
+
+                    name=request.data.get("name").strip(),
+
+                    gender=request.data.get("gender"),
+
+                    date_of_birth=request.data.get("date_of_birth"),
+
+                    mobile=mobile,
+
+                    email=email,
+
+                    qualification=request.data.get("qualification"),
+
+                    experience=request.data.get("experience",0),
+
+                    joining_date=request.data.get("joining_date"),
+
+                    status=request.data.get("status",Staff.Status.ACTIVE),
+
+                    profile_image=request.data.get("profile_image"),
+
+                    address=request.data.get("address"),
+
+                    emergency_contact_name=request.data.get("emergency_contact_name"),
+
+                    emergency_contact_mobile=request.data.get("emergency_contact_mobile"),
+
+                )
+
+                UserRoles.objects.create(
+
+                    user=user,
+
+                    role=role,
+
+                    assigned_by=request.user,
+
+                )
+
+        except Exception as e:
+
+            return CustomResponse.errorResponse(description=str(e))
+
+        return CustomResponse.successResponse(
+
+            description="Staff created successfully.",
+
+            data={
+                "id":str(staff.id),
+                "employee_id":staff.employee_id,
+                "name":staff.name,
+                "role":role.role_name,
+            },
+
         )

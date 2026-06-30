@@ -1,5 +1,7 @@
 import random
 import secrets
+import traceback
+
 from django.db.models import Q
 from datetime import timedelta
 
@@ -282,170 +284,146 @@ class FileUploadView(APIView):
 
 
 class SendOTPAPIView(APIView):
-
     permission_classes = [AllowAny]
-
     authentication_classes = []
 
     def post(self, request):
-
         try:
+            print("\n========== SEND OTP API START ==========")
+
             mobile = request.data.get("mobile")
+            print(f"[STEP 1] Mobile Received: {mobile}")
+
             auth_logger.info(
                 "otp_send_requested",
                 mobile=mobile,
             )
+
             if not mobile:
+                print("[ERROR] Mobile number is required")
+
                 auth_logger.warning(
                     "otp_send_failed",
                     reason="mobile_required",
                 )
 
                 return CustomResponse.errorResponse(
-
                     description="Mobile number is required.",
-
                 )
 
-            if not str(mobile).isdigit() or len(str(mobile)) != 10:
+            mobile = str(mobile).strip()
+
+            if not mobile.isdigit() or len(mobile) != 10:
+                print(f"[ERROR] Invalid mobile number: {mobile}")
 
                 auth_logger.warning(
-
                     "otp_send_failed",
-
                     mobile=mobile,
-
                     reason="invalid_mobile",
-
                 )
 
                 return CustomResponse.errorResponse(
-
                     description="Enter valid mobile number.",
-
                 )
 
-            UserOTP.objects.filter(
+            print("[STEP 2] Invalidating previous unused OTPs")
 
+            invalidated_count = UserOTP.objects.filter(
                 mobile=mobile,
-
                 is_used=False,
-
             ).update(
-
                 is_used=True,
-
             )
 
+            print(f"[STEP 2] Invalidated OTP Count: {invalidated_count}")
+
             auth_logger.info(
-
                 "previous_otps_invalidated",
-
                 mobile=mobile,
-
             )
 
             otp = generate_otp()
 
+            print(f"[STEP 3] OTP Generated: {otp}")
+
             auth_logger.info(
-
                 "otp_generated",
-
                 mobile=mobile,
-
                 expires_in_minutes=10,
-
             )
 
             user = UserMaster.objects.filter(
-
                 mobile=mobile,
-
             ).first()
 
-            UserOTP.objects.create(
+            print(f"[STEP 4] User Exists: {user is not None}")
 
+            otp_obj = UserOTP.objects.create(
                 user=user,
-
                 mobile=mobile,
-
                 otp=otp,
-
                 expires_at=timezone.now() + timedelta(minutes=10),
-
                 is_used=False,
-
             )
+
+            print(f"[STEP 5] OTP Saved Successfully")
+            print(f"[STEP 5] OTP Record ID: {otp_obj.id}")
 
             auth_logger.info(
-
                 "otp_saved",
-
                 mobile=mobile,
-
                 user_exists=user is not None,
-
             )
+
+            print(f"[STEP 6] Sending OTP to Mobile: {mobile}")
 
             sms_status = send_otp_to_mobile(
-
                 otp=otp,
-
-                mobile=str(mobile),
-
+                mobile=mobile,
             )
 
+            print(f"[STEP 7] SMS Status: {sms_status}")
+
             if not sms_status:
+                print("[ERROR] SMS Sending Failed")
 
                 auth_logger.error(
-
                     "otp_sms_send_failed",
-
                     mobile=mobile,
-
                     provider="full2ads",
-
                 )
 
                 return CustomResponse.errorResponse(
-
                     description="Unable to send OTP.",
-
                 )
 
+            print("[SUCCESS] OTP Sent Successfully")
+            print("========== SEND OTP API END ==========\n")
+
             auth_logger.info(
-
                 "otp_sent",
-
                 mobile=mobile,
-
                 provider="full2ads",
-
             )
 
             return CustomResponse.successResponse(
-
                 description="OTP sent successfully.",
-
             )
 
-        except Exception:
+        except Exception as e:
+            print("\n========== SEND OTP API FAILED ==========")
+            print(f"[EXCEPTION] {str(e)}")
+            traceback.print_exc()
+            print("=========================================\n")
 
             auth_logger.exception(
-
                 "send_otp_api_failed",
-
                 mobile=request.data.get("mobile"),
-
             )
 
             return CustomResponse.errorResponse(
-
                 description="Something went wrong while sending OTP.",
-
             )
-
-
 class VerifyOTPAPIView(APIView):
 
     permission_classes = [AllowAny,]
