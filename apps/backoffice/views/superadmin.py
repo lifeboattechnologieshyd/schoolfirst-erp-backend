@@ -22,6 +22,7 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 
 from shared.permissions import HasPermission
+from shared.utils.otp import generate_otp, send_otp_to_mobile
 
 
 class CreateSuperAdminAPIView(APIView):
@@ -108,18 +109,18 @@ class SuperAdminRequestOTPAPIView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        phone_number = normalize_mobile(
+        mobile = normalize_mobile(
             request.data.get("phone_number")
         )
 
-        if not phone_number:
+        if not mobile:
             return CustomResponse.errorResponse(
                 description="mobile is required.",
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         user = UserMaster.objects.filter(
-            mobile=phone_number,
+            mobile=mobile,
             is_active=True,
         ).first()
 
@@ -149,12 +150,13 @@ class SuperAdminRequestOTPAPIView(APIView):
                 description="Only SUPERADMIN can login here.",
                 status=status.HTTP_403_FORBIDDEN,
             )
-        otp = 1234
+        # otp = 1234
 
-        # otp = generate_otp()
+        otp = generate_otp()
+        send_otp_to_mobile(otp, mobile)
 
         UserOTP.objects.create(
-            mobile=int(phone_number),
+            mobile=int(mobile),
             otp=otp,
             expires_at=timezone.now() + timedelta(minutes=15),
             is_used=False,

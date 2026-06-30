@@ -28,7 +28,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from django.conf import settings
 
 from shared.utils.logger import auth_logger
-from shared.utils.otp import send_otp_to_mobile
+from shared.utils.otp import send_otp_to_mobile, generate_otp
 from shared.utils.s3 import add_unique_suffix_to_filename, sanitize_filename
 
 def normalize_email(value):
@@ -51,9 +51,7 @@ def normalize_mobile(value):
 
     return value or None
 
-def generate_otp():
 
-    return str(random.randint(1000, 9999))
 
 class ADMINSendOTPAPIView(APIView):
 

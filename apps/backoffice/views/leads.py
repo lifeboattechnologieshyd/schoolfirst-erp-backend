@@ -18,7 +18,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.school.models import SchoolLead, School
 from apps.core.models import UserMaster, UserOTP, Roles, UserRoles
 from shared.mixins import CustomResponse
-from shared.utils.otp import generate_school_code
+from shared.utils.otp import generate_school_code, generate_otp
+
 
 def normalize_email(value):
 
@@ -39,8 +40,7 @@ def normalize_mobile(value):
     value = str(value).strip()
 
     return value or None
-def generate_otp():
-    return f"{secrets.randbelow(1000000):06d}"
+
 
 
 
