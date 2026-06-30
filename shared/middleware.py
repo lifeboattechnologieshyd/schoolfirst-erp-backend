@@ -61,7 +61,7 @@ class SchoolMiddleware:
             "/backoffice/permissions",
             "/backoffice/roles",
             "/backoffice/user-roles/assign",
-            "backoffice/create/super-admin"
+            "/backoffice/create/super-admin"
         )
 
     def __call__(self, request):
