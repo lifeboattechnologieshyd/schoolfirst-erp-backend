@@ -519,7 +519,7 @@ class Section(AuditModel):
 
     name = models.CharField(max_length=30,)
 
-    # class_teacher = models.ForeignKey("staff.Staff", on_delete=models.SET_NULL,null=True,blank=True,related_name="class_teacher_sections",)
+    class_teacher = models.ForeignKey("Staff", on_delete=models.SET_NULL,null=True,blank=True,related_name="class_teacher_sections",)
 
     capacity = models.PositiveIntegerField(default=40,)
 

@@ -441,10 +441,24 @@ class CreateSectionAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Section already exists.",
             )
+        class_teacher = request.data.get("class_teacher_id")
+
+        if class_teacher:
+            class_teacher = Staff.objects.filter(
+                id=class_teacher,
+                school=school,
+                staff_type=Staff.StaffType.TEACHER,
+            ).first()
+
+
+
+            if class_teacher is None:
+                return CustomResponse.errorResponse(description="Invalid class teacher.")
 
         section = Section.objects.create(
             grade=grade,
             name=request.data.get("name"),
+            class_teacher=class_teacher,
             capacity=request.data.get(
                 "capacity",
                 40,
@@ -525,46 +539,61 @@ class SectionListAPIView(APIView):
         )
 class UpdateSectionAPIView(APIView):
 
-    permission_classes = [
-        IsAuthenticated,
-        HasPermission,
-    ]
+    permission_classes = [IsAuthenticated,HasPermission,]
 
     required_permission = "section.update"
 
-    def put(
-        self,
-        request,
-        section_id,
-    ):
+    def put(self,request,section_id):
 
         school = request.school
 
-        section = Section.objects.filter(
-            id=section_id,
-            grade__school=school,
-        ).first()
+        if school is None:
+            return CustomResponse.errorResponse(description="School not found.")
+
+        section = Section.objects.filter(id=section_id,grade__school=school).first()
 
         if section is None:
+            return CustomResponse.errorResponse(description="Section not found.")
 
-            return CustomResponse.errorResponse(
-                description="Section not found.",
-            )
+        name = request.data.get("name",section.name)
 
-        section.name = request.data.get(
-            "name",
-            section.name,
-        )
+        if Section.objects.filter(grade=section.grade,name=name).exclude(id=section.id).exists():
+            return CustomResponse.errorResponse(description="Section already exists.")
 
-        section.capacity = request.data.get(
-            "capacity",
-            section.capacity,
-        )
+        capacity = request.data.get("capacity",section.capacity)
 
-        section.status = request.data.get(
-            "status",
-            section.status,
-        )
+        if int(capacity) <= 0:
+            return CustomResponse.errorResponse(description="Capacity must be greater than zero.")
+
+        status = request.data.get("status",section.status)
+
+        if status not in Section.Status.values:
+            return CustomResponse.errorResponse(description="Invalid status.")
+
+        section.name = name
+        section.capacity = capacity
+        section.status = status
+
+        if "class_teacher_id" in request.data:
+
+            class_teacher_id = request.data.get("class_teacher_id")
+
+            if class_teacher_id:
+
+                class_teacher = Staff.objects.filter(
+                    id=class_teacher_id,
+                    school=school,
+                    staff_type=Staff.StaffType.TEACHER,
+                ).first()
+
+                if class_teacher is None:
+                    return CustomResponse.errorResponse(description="Invalid class teacher.")
+
+                section.class_teacher = class_teacher
+
+            else:
+
+                section.class_teacher = None
 
         section.save()
 
@@ -2191,6 +2220,176 @@ class CreateStaffAPIView(APIView):
         return CustomResponse.successResponse(
 
             description="Staff created successfully.",
+
+            data={
+                "id":str(staff.id),
+                "employee_id":staff.employee_id,
+                "name":staff.name,
+                "role":role.role_name,
+            },
+
+        )
+
+class GetStaffAPIView(APIView):
+
+    permission_classes = [IsAuthenticated,HasPermission,]
+
+    required_permission = "staff.view"
+
+    def get(self,request):
+
+        school = request.school
+
+        if school is None:
+            return CustomResponse.errorResponse(description="School not found.")
+
+        staffs = Staff.objects.filter(school=school).select_related("user").order_by("name")
+
+        data = []
+
+        for staff in staffs:
+
+            role = UserRoles.objects.filter(user=staff.user,school=school).select_related("role").first()
+
+            data.append({
+
+                "id":str(staff.id),
+
+                "employee_id":staff.employee_id,
+
+                "staff_type":staff.staff_type,
+
+                "role":role.role.role_name if role else None,
+
+                "name":staff.name,
+
+                "gender":staff.gender,
+
+                "date_of_birth":staff.date_of_birth,
+
+                "mobile":staff.mobile,
+
+                "email":staff.email,
+
+                "qualification":staff.qualification,
+
+                "experience":staff.experience,
+
+                "joining_date":staff.joining_date,
+
+                "status":staff.status,
+
+                "profile_image":staff.profile_image,
+
+                "address":staff.address,
+
+                "emergency_contact_name":staff.emergency_contact_name,
+
+                "emergency_contact_mobile":staff.emergency_contact_mobile,
+
+                "created_at":staff.created_at,
+
+            })
+
+        return CustomResponse.successResponse(
+
+            description="Staff fetched successfully.",
+
+            data=data,
+
+        )
+
+class UpdateStaffAPIView(APIView):
+
+    permission_classes = [IsAuthenticated,HasPermission,]
+
+    required_permission = "staff.update"
+
+    def put(self,request,staff_id):
+
+        school = request.school
+
+        if school is None:
+            return CustomResponse.errorResponse(description="School not found.")
+
+        staff = Staff.objects.select_related("user").filter(id=staff_id,school=school).first()
+
+        if staff is None:
+            return CustomResponse.errorResponse(description="Staff not found.")
+
+        employee_id = request.data.get("employee_id",staff.employee_id)
+
+        if Staff.objects.filter(school=school,employee_id=employee_id).exclude(id=staff.id).exists():
+            return CustomResponse.errorResponse(description="Employee ID already exists.")
+
+        mobile = str(request.data.get("mobile",staff.mobile))
+
+        if not mobile.isdigit() or len(mobile) != 10:
+            return CustomResponse.errorResponse(description="Enter valid mobile number.")
+
+        if Staff.objects.filter(school=school,mobile=mobile).exclude(id=staff.id).exists():
+            return CustomResponse.errorResponse(description="Mobile number already exists.")
+
+        email = request.data.get("email",staff.email)
+
+        if email and Staff.objects.filter(school=school,email=email).exclude(id=staff.id).exists():
+            return CustomResponse.errorResponse(description="Email already exists.")
+
+        staff_type = request.data.get("staff_type",staff.staff_type)
+
+        if staff_type not in Staff.StaffType.values:
+            return CustomResponse.errorResponse(description="Invalid staff type.")
+
+        gender = request.data.get("gender",staff.gender)
+
+        if gender not in Staff.Gender.values:
+            return CustomResponse.errorResponse(description="Invalid gender.")
+
+        role = Roles.objects.filter(role_name=staff_type).first()
+
+        if role is None:
+            return CustomResponse.errorResponse(description=f"{staff_type.title()} role not configured.")
+
+        try:
+
+            with transaction.atomic():
+
+                user = staff.user
+
+                user.first_name = request.data.get("name",staff.name)
+                user.mobile = mobile
+                user.email = email
+                user.gender = gender
+                user.date_of_birth = request.data.get("date_of_birth",staff.date_of_birth)
+                user.profile_image = request.data.get("profile_image",staff.profile_image)
+                user.save()
+
+                staff.employee_id = employee_id
+                staff.staff_type = staff_type
+                staff.name = request.data.get("name",staff.name)
+                staff.gender = gender
+                staff.date_of_birth = request.data.get("date_of_birth",staff.date_of_birth)
+                staff.mobile = mobile
+                staff.email = email
+                staff.qualification = request.data.get("qualification",staff.qualification)
+                staff.experience = request.data.get("experience",staff.experience)
+                staff.joining_date = request.data.get("joining_date",staff.joining_date)
+                staff.status = request.data.get("status",staff.status)
+                staff.profile_image = request.data.get("profile_image",staff.profile_image)
+                staff.address = request.data.get("address",staff.address)
+                staff.emergency_contact_name = request.data.get("emergency_contact_name",staff.emergency_contact_name)
+                staff.emergency_contact_mobile = request.data.get("emergency_contact_mobile",staff.emergency_contact_mobile)
+                staff.save()
+
+                UserRoles.objects.filter(user=user,school=school).update(role=role)
+
+        except Exception as e:
+
+            return CustomResponse.errorResponse(description=str(e))
+
+        return CustomResponse.successResponse(
+
+            description="Staff updated successfully.",
 
             data={
                 "id":str(staff.id),
