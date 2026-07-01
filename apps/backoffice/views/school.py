@@ -2238,18 +2238,38 @@ class GetStaffAPIView(APIView):
 
     def get(self,request):
 
+        print("=" * 100)
+        print("GetStaffAPIView Called")
+
         school = request.school
 
+        print("School :", school)
+
         if school is None:
+            print("School not found.")
+            print("=" * 100)
             return CustomResponse.errorResponse(description="School not found.")
 
         staffs = Staff.objects.filter(school=school).select_related("user").order_by("name")
+
+        print("Total Staff :", staffs.count())
 
         data = []
 
         for staff in staffs:
 
-            role = UserRoles.objects.filter(user=staff.user,school=school).select_related("role").first()
+            print("-" * 80)
+            print("Staff ID :", staff.id)
+            print("Employee ID :", staff.employee_id)
+            print("Staff Type :", staff.staff_type)
+            print("Name :", staff.name)
+
+            role = UserRoles.objects.filter(
+                user=staff.user,
+                school=school,
+            ).select_related("role").first()
+
+            print("Role :", role.role.role_name if role else None)
 
             data.append({
 
@@ -2290,6 +2310,10 @@ class GetStaffAPIView(APIView):
                 "created_at":staff.created_at,
 
             })
+
+        print("Response Count :", len(data))
+        print("GetStaffAPIView Completed")
+        print("=" * 100)
 
         return CustomResponse.successResponse(
 
