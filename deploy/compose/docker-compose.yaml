@@ -98,6 +98,9 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    volumes:
+
+      - ../../logs:/logs
     ports:
       - "${HTTP_PORT:-8000}:8000"
     networks:
@@ -108,10 +111,60 @@ services:
       timeout: 5s
       retries: 5
 
+
+  loki:
+    image: grafana/loki:3.5.3
+    container_name: schoolfirst-erp-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ../observability/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - schoolfirst-erp-network
+
+  grafana:
+    image: grafana/grafana:12.0.2
+    container_name: schoolfirst-erp-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      loki:
+        condition: service_started
+    networks:
+      - schoolfirst-erp-network
+
+  alloy:
+    image: grafana/alloy:v1.10.2
+    container_name: schoolfirst-erp-alloy
+    restart: unless-stopped
+    command:
+      - run
+      - /etc/alloy/alloy.river
+    volumes:
+      - ../observability/alloy.river:/etc/alloy/alloy.river:ro
+      - ../../logs:/logs:ro
+    depends_on:
+      loki:
+        condition: service_started
+
+    networks:
+      - schoolfirst-erp-network
+
 volumes:
   pg_data:
   minio_data:
   mailpit_data:
+  loki_data:
+  grafana_data:
 
 networks:
   schoolfirst-erp-network:

@@ -99,92 +99,143 @@ LOGGING = {
         },
     },
     "handlers": {
+
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "default",
         },
+
         "null": {
             "class": "logging.NullHandler",
         },
-        "file_write": {
+
+        "application_file": {
             "class": "logging.handlers.TimedRotatingFileHandler",
-            "filename": os.path.join(LOGGING_DIR, "django.log"),
+            "filename": os.path.join(LOGGING_DIR,"application.log"),
             "when": "midnight",
             "interval": 1,
-            "backupCount": 100,
+            "backupCount": 30,
             "formatter": "json",
         },
+
+        "auth_file": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": os.path.join(LOGGING_DIR,"auth.log"),
+            "when": "midnight",
+            "interval": 1,
+            "backupCount": 30,
+            "formatter": "json",
+        },
+
+        "payment_file": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": os.path.join(LOGGING_DIR,"payment.log"),
+            "when": "midnight",
+            "interval": 1,
+            "backupCount": 30,
+            "formatter": "json",
+        },
+
+        "audit_file": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": os.path.join(LOGGING_DIR,"audit.log"),
+            "when": "midnight",
+            "interval": 1,
+            "backupCount": 30,
+            "formatter": "json",
+        },
+
+        "scheduler_file": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": os.path.join(LOGGING_DIR,"scheduler.log"),
+            "when": "midnight",
+            "interval": 1,
+            "backupCount": 30,
+            "formatter": "json",
+        },
+
+        "request_file": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": os.path.join(LOGGING_DIR,"request.log"),
+            "when": "midnight",
+            "interval": 1,
+            "backupCount": 30,
+            "formatter": "json",
+        },
+
+        "django_file": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": os.path.join(LOGGING_DIR,"django.log"),
+            "when": "midnight",
+            "interval": 1,
+            "backupCount": 30,
+            "formatter": "json",
+        },
+
     },
         "loggers": {
 
-        "default": {
-            "handlers": ["file_write", "console"],
-            "level": DEFAULT_LOG_LEVEL,
-            "propagate": False,
+            "default": {
+                "handlers": ["application_file","console"],
+                "level": DEFAULT_LOG_LEVEL,
+                "propagate": False,
+            },
 
-        },
-        "application": {
-            "handlers": ["file_write", "console"],
-            "level": DEFAULT_LOG_LEVEL,
-            "propagate": False,
+            "application": {
+                "handlers": ["application_file","console"],
+                "level": DEFAULT_LOG_LEVEL,
+                "propagate": False,
+            },
 
-        },
+            "auth": {
+                "handlers": ["auth_file","console"],
+                "level": DEFAULT_LOG_LEVEL,
+                "propagate": False,
+            },
 
-        "payment": {
-            "handlers": ["file_write", "console"],
-            "level": DEFAULT_LOG_LEVEL,
-            "propagate": False,
+            "payment": {
+                "handlers": ["payment_file","console"],
+                "level": DEFAULT_LOG_LEVEL,
+                "propagate": False,
+            },
 
-        },
+            "audit": {
+                "handlers": ["audit_file","console"],
+                "level": DEFAULT_LOG_LEVEL,
+                "propagate": False,
+            },
 
-        "auth": {
-            "handlers": ["file_write", "console"],
-            "level": DEFAULT_LOG_LEVEL,
-            "propagate": False,
+            "scheduler": {
+                "handlers": ["scheduler_file","console"],
+                "level": DEFAULT_LOG_LEVEL,
+                "propagate": False,
+            },
 
-        },
+            "request": {
+                "handlers": ["request_file","console"],
+                "level": DEFAULT_LOG_LEVEL,
+                "propagate": False,
+            },
 
-        "audit": {
-            "handlers": ["file_write", "console"],
-            "level": DEFAULT_LOG_LEVEL,
-            "propagate": False,
+            "django": {
+                "handlers": ["django_file","console"],
+                "level": "INFO",
+                "propagate": False,
+            },
 
-        },
+            "django.request": {
+                "handlers": ["django_file","console"],
+                "level": "WARNING",
+                "propagate": False,
+            },
 
-        "scheduler": {
-            "handlers": ["file_write", "console"],
-            "level": DEFAULT_LOG_LEVEL,
-            "propagate": False,
+            "django_structlog.middlewares.request": {
+                "handlers": ["null"],
+                "level": "ERROR",
+                "propagate": False,
+            },
 
-        },
-        "request": {
-            "handlers": ["file_write", "console"],
-            "level": DEFAULT_LOG_LEVEL,
-            "propagate": False,
-        },
-
-        "django": {
-            "handlers": ["console"],
-            "level": "INFO",
-            "propagate": False,
-
-        },
-
-        "django.request": {
-            "handlers": ["file_write", "console"],
-            "level": "WARNING",
-            "propagate": False,
-
-        },
-
-        "django_structlog.middlewares.request": {
-            "handlers": ["null"],
-            "level": "ERROR",
-            "propagate": False,
-
-        },
-
-    },
+},
 }
 
 
