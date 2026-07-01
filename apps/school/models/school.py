@@ -1061,6 +1061,8 @@ class Staff(AuditModel):
 
     school = models.ForeignKey(School,on_delete=models.CASCADE,related_name="staffs",)
 
+    user = models.OneToOneField(UserMaster,on_delete=models.CASCADE,related_name="staff",)
+
     employee_id = models.CharField(max_length=50,)
 
     staff_type = models.CharField(max_length=30,choices=StaffType.choices,)

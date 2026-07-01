@@ -2125,6 +2125,8 @@ class CreateStaffAPIView(APIView):
         if staff_type not in Staff.StaffType.values:
             return CustomResponse.errorResponse(description="Invalid staff type.")
 
+
+
         if request.data.get("gender") not in Staff.Gender.values:
             return CustomResponse.errorResponse(description="Invalid gender.")
 
@@ -2132,6 +2134,9 @@ class CreateStaffAPIView(APIView):
 
         if not mobile.isdigit() or len(mobile) != 10:
             return CustomResponse.errorResponse(description="Enter valid mobile number.")
+
+        if UserMaster.objects.filter(username=mobile).exists():
+            return CustomResponse.errorResponse(description="User already exists.")
 
         if Staff.objects.filter(school=school,employee_id=request.data.get("employee_id")).exists():
             return CustomResponse.errorResponse(description="Employee ID already exists.")
@@ -2154,19 +2159,26 @@ class CreateStaffAPIView(APIView):
             with transaction.atomic():
 
                 user = UserMaster.objects.create(
+                    username=mobile,
 
+                    first_name=request.data.get("name").strip(),
 
-                    username=request.data.get("name").strip(),
+                    email=email,
 
                     mobile=mobile,
 
-                    email=email,
+                    gender=request.data.get("gender"),
+
+                    date_of_birth=request.data.get("date_of_birth"),
+
+                    profile_image=request.data.get("profile_image"),
 
                     is_active=True,
 
                 )
 
                 staff = Staff.objects.create(
+                    user=user,
 
                     school=school,
 
