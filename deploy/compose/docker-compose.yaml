@@ -100,7 +100,7 @@ services:
         condition: service_healthy
     volumes:
 
-      - ../../logs:/logs
+      - ../../logs:/project/logs
     ports:
       - "${HTTP_PORT:-8000}:8000"
     networks:
@@ -151,7 +151,7 @@ services:
       - /etc/alloy/alloy.river
     volumes:
       - ../observability/alloy.river:/etc/alloy/alloy.river:ro
-      - ../../logs:/logs:ro
+      - ../../logs:/project/logs:ro
     depends_on:
       loki:
         condition: service_started
