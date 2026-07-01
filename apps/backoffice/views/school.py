@@ -2210,7 +2210,6 @@ class CreateStaffAPIView(APIView):
 
                     role=role,
 
-                    assigned_by=request.user,
 
                 )
 
