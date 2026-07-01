@@ -2157,7 +2157,7 @@ class CreateStaffAPIView(APIView):
 
                     school=school,
 
-                    name=request.data.get("name").strip(),
+                    username=request.data.get("name").strip(),
 
                     mobile=mobile,
 
