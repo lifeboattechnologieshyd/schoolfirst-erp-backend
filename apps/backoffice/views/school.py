@@ -2155,7 +2155,6 @@ class CreateStaffAPIView(APIView):
 
                 user = UserMaster.objects.create(
 
-                    school=school,
 
                     username=request.data.get("name").strip(),
 
@@ -2206,6 +2205,8 @@ class CreateStaffAPIView(APIView):
                 UserRoles.objects.create(
 
                     user=user,
+
+                    school = school,
 
                     role=role,
 
