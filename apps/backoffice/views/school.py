@@ -6,7 +6,7 @@ from django.db.models import Q
 from apps.core.models import Roles, UserMaster, UserRoles
 from apps.fee.models import FeeTemplate, StudentFeeAssignment, FeeConcession
 from apps.school.models import School
-from apps.school.models.school import AcademicYear, Grade, Section, Student, StudentDocument, Staff
+from apps.school.models.school import AcademicYear, Grade, Section, Student, StudentDocument, Staff, StaffDocument
 from shared.enums.roles import RolesEnum
 from shared.helpers.rbac import check_permission
 from shared.helpers.student import get_or_create_parent
@@ -2434,4 +2434,265 @@ class UpdateStaffAPIView(APIView):
                 "role":role.role_name,
             },
 
+        )
+
+class CreateStaffDocumentAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = "staff.document.create"
+
+    def post(self, request):
+
+        school = request.school
+
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        required_fields = [
+            "staff_id",
+            "document_type",
+            "document_name",
+            "document_url",
+        ]
+
+        for field in required_fields:
+            if request.data.get(field) in [None, ""]:
+                return CustomResponse.errorResponse(
+                    description=f"{field} is required."
+                )
+
+        try:
+            staff = Staff.objects.get(
+                id=request.data.get("staff_id"),
+                school=school,
+            )
+        except Staff.DoesNotExist:
+            return CustomResponse.errorResponse(
+                description="Staff not found."
+            )
+
+        document_type = request.data.get("document_type")
+
+        if document_type not in StaffDocument.DocumentType.values:
+            return CustomResponse.errorResponse(
+                description="Invalid document type."
+            )
+
+        if StaffDocument.objects.filter(
+            staff=staff,
+            document_type=document_type,
+        ).exists():
+            return CustomResponse.errorResponse(
+                description=f"{document_type.replace('_', ' ').title()} already exists."
+            )
+
+        try:
+
+            with transaction.atomic():
+
+                document = StaffDocument.objects.create(
+
+                    staff=staff,
+
+                    document_type=document_type,
+
+                    document_name=request.data.get("document_name").strip(),
+
+                    document_number=request.data.get("document_number"),
+
+                    document_url=request.data.get("document_url"),
+
+                    issue_date=request.data.get("issue_date"),
+
+                    expiry_date=request.data.get("expiry_date"),
+
+                    is_verified=request.data.get("is_verified", False),
+
+                    remarks=request.data.get("remarks"),
+
+                )
+
+        except Exception as e:
+            return CustomResponse.errorResponse(
+                description=str(e)
+            )
+
+        return CustomResponse.successResponse(
+
+            description="Document uploaded successfully.",
+
+            data={
+                "id": str(document.id),
+                "staff_id": str(staff.id),
+                "document_type": document.document_type,
+                "document_name": document.document_name,
+                "document_url": document.document_url,
+                "is_verified": document.is_verified,
+            },
+        )
+
+class StaffDocumentListAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = "staff.document.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        staff_id = request.GET.get("staff_id")
+
+        if not staff_id:
+            return CustomResponse.errorResponse(
+                description="staff_id is required."
+            )
+
+        try:
+            staff = Staff.objects.get(
+                id=staff_id,
+                school=school,
+            )
+        except Staff.DoesNotExist:
+            return CustomResponse.errorResponse(
+                description="Staff not found."
+            )
+
+        documents = StaffDocument.objects.filter(
+            staff=staff
+        ).order_by("document_type")
+
+        data = []
+
+        for document in documents:
+            data.append({
+                "id": str(document.id),
+                "document_type": document.document_type,
+                "document_type_display": document.get_document_type_display(),
+                "document_name": document.document_name,
+                "document_number": document.document_number,
+                "document_url": document.document_url,
+                "issue_date": document.issue_date,
+                "expiry_date": document.expiry_date,
+                "is_verified": document.is_verified,
+                "remarks": document.remarks,
+                "created_at": document.created_at,
+                "updated_at": document.updated_at,
+            })
+
+        return CustomResponse.successResponse(
+            description="Staff documents fetched successfully.",
+            data={
+                "staff_id": str(staff.id),
+                "staff_name": staff.name,
+                "documents": data,
+            },
+        )
+
+class UpdateStaffDocumentAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = "staff.document.update"
+
+    def put(self, request, document_id):
+
+        school = request.school
+
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        try:
+
+            document = StaffDocument.objects.select_related(
+                "staff"
+            ).get(
+                id=document_id,
+                staff__school=school,
+            )
+
+        except StaffDocument.DoesNotExist:
+            return CustomResponse.errorResponse(
+                description="Document not found."
+            )
+
+        document_type = request.data.get("document_type")
+
+        if document_type:
+
+            if document_type not in StaffDocument.DocumentType.values:
+                return CustomResponse.errorResponse(
+                    description="Invalid document type."
+                )
+
+            if StaffDocument.objects.filter(
+                staff=document.staff,
+                document_type=document_type,
+            ).exclude(id=document.id).exists():
+
+                return CustomResponse.errorResponse(
+                    description=f"{document_type.replace('_', ' ').title()} already exists."
+                )
+
+            document.document_type = document_type
+
+        if request.data.get("document_name") not in [None, ""]:
+            document.document_name = request.data.get("document_name").strip()
+
+        if "document_number" in request.data:
+            document.document_number = request.data.get("document_number")
+
+        if request.data.get("document_url") not in [None, ""]:
+            document.document_url = request.data.get("document_url")
+
+        if "issue_date" in request.data:
+            document.issue_date = request.data.get("issue_date") or None
+
+        if "expiry_date" in request.data:
+            document.expiry_date = request.data.get("expiry_date") or None
+
+        if "is_verified" in request.data:
+            document.is_verified = request.data.get("is_verified")
+
+        if "remarks" in request.data:
+            document.remarks = request.data.get("remarks")
+
+        try:
+
+            with transaction.atomic():
+
+                document.save()
+
+        except Exception as e:
+
+            return CustomResponse.errorResponse(
+                description=str(e)
+            )
+
+        return CustomResponse.successResponse(
+
+            description="Document updated successfully.",
+
+            data={
+                "id": str(document.id),
+                "staff_id": str(document.staff.id),
+                "document_type": document.document_type,
+                "document_name": document.document_name,
+                "document_number": document.document_number,
+                "document_url": document.document_url,
+                "issue_date": document.issue_date,
+                "expiry_date": document.expiry_date,
+                "is_verified": document.is_verified,
+                "remarks": document.remarks,
+            },
         )

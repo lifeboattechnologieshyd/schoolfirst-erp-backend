@@ -1113,3 +1113,58 @@ class Staff(AuditModel):
             models.Index(fields=["status"]),
             models.Index(fields=["mobile"]),
         ]
+
+class StaffDocument(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    class DocumentType(models.TextChoices):
+        AADHAAR = "AADHAAR","Aadhaar"
+        PAN = "PAN","PAN"
+        DRIVING_LICENSE = "DRIVING_LICENSE","Driving License"
+        PASSPORT = "PASSPORT","Passport"
+        PHOTO = "PHOTO","Photo"
+        RESUME = "RESUME","Resume"
+        QUALIFICATION_CERTIFICATE = "QUALIFICATION_CERTIFICATE","Qualification Certificate"
+        EXPERIENCE_CERTIFICATE = "EXPERIENCE_CERTIFICATE","Experience Certificate"
+        MEDICAL_CERTIFICATE = "MEDICAL_CERTIFICATE","Medical Certificate"
+        POLICE_VERIFICATION = "POLICE_VERIFICATION","Police Verification"
+        CONTRACT = "CONTRACT","Contract"
+        OTHER = "OTHER","Other"
+
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False,)
+
+    staff = models.ForeignKey(Staff,on_delete=models.CASCADE,related_name="documents",)
+
+    document_type = models.CharField(max_length=50,choices=DocumentType.choices,)
+
+    document_name = models.CharField(max_length=255,)
+
+    document_number = models.CharField(max_length=100,null=True,blank=True,)
+
+    document_url = models.URLField(max_length=500,)
+
+    issue_date = models.DateField(null=True,blank=True,)
+
+    expiry_date = models.DateField(null=True,blank=True,)
+
+    is_verified = models.BooleanField(default=False,)
+
+    remarks = models.TextField(null=True,blank=True,)
+
+    class Meta:
+
+        db_table = "staff_documents"
+
+        constraints = [
+            models.UniqueConstraint(fields=["staff","document_type"],name="unique_staff_document_type",),
+        ]
+
+        indexes = [
+            models.Index(fields=["staff"]),
+            models.Index(fields=["document_type"]),
+            models.Index(fields=["expiry_date"]),
+        ]
+
+    def __str__(self):
+        return f"{self.staff.name} - {self.document_type}"

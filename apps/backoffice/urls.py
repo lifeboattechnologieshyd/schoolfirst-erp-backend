@@ -20,7 +20,8 @@ from apps.backoffice.views.school import AcademicYearListAPIView, CreateAcademic
     CreateGradeAPIView, GradeListAPIView, UpdateGradeAPIView, CreateSectionAPIView, SectionListAPIView, \
     UpdateSectionAPIView, CreateStudentAPIView, BulkUploadStudentAPIView, StudentListAPIView, \
     CreateStudentDocumentAPIView, StudentDocumentListAPIView, UpdateStudentDocumentAPIView, \
-    DownloadStudentTemplateAPIView, CreateStaffAPIView, GetStaffAPIView, UpdateStaffAPIView
+    DownloadStudentTemplateAPIView, CreateStaffAPIView, GetStaffAPIView, UpdateStaffAPIView, CreateStaffDocumentAPIView, \
+    StaffDocumentListAPIView, UpdateStaffDocumentAPIView
 from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdminRequestOTPAPIView, \
     SuperAdminVerifyOTPAPIView, SchoolLeadUpdateAPIView, OrganizationListAPIView, CreateOrganizationAPIView, \
     UpdateOrganizationAPIView, SchoolListAPIView, CreateSchoolAPIView, UpdateSchoolAPIView, CreateBranchAPIView, \
@@ -243,6 +244,12 @@ urlpatterns = [
     path("staff",GetStaffAPIView.as_view(),),
 
     path("staff/<uuid:staff_id>",UpdateStaffAPIView.as_view(),),
+
+    path("staff/documents/create",CreateStaffDocumentAPIView.as_view(),),
+
+    path("staff/documents",StaffDocumentListAPIView.as_view(),),
+
+    path("staff/documents/<uuid:document_id>",UpdateStaffDocumentAPIView.as_view(),),
 
 
 
