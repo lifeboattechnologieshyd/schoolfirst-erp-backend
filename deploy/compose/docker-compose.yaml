@@ -130,8 +130,8 @@ services:
     container_name: schoolfirst-erp-grafana
     restart: unless-stopped
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
     ports:
       - "3000:3000"
     volumes:
