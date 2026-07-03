@@ -6,7 +6,8 @@ from django.db.models import Q
 from apps.core.models import Roles, UserMaster, UserRoles
 from apps.fee.models import FeeTemplate, StudentFeeAssignment, FeeConcession
 from apps.school.models import School
-from apps.school.models.school import AcademicYear, Grade, Section, Student, StudentDocument, Staff, StaffDocument
+from apps.school.models.school import AcademicYear, Grade, Section, Student, StudentDocument, Staff, StaffDocument, \
+    Branch
 from shared.enums.roles import RolesEnum
 from shared.helpers.rbac import check_permission
 from shared.helpers.student import get_or_create_parent
@@ -432,31 +433,56 @@ class CreateSectionAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Grade not found.",
             )
+        branch = None
+
+        branch_id = request.data.get("branch_id")
+
+        if branch_id:
+
+            branch = Branch.objects.filter(
+                id=branch_id,
+                school=school,
+            ).first()
+
+            if branch is None:
+                return CustomResponse.errorResponse(
+                    description="Branch not found."
+                )
 
         if Section.objects.filter(
             grade=grade,
+            branch=branch,
             name=request.data.get("name"),
         ).exists():
 
             return CustomResponse.errorResponse(
                 description="Section already exists.",
             )
-        class_teacher = request.data.get("class_teacher_id")
+        class_teacher = None
 
-        if class_teacher:
+        class_teacher_id = request.data.get("class_teacher_id")
+
+        if class_teacher_id:
+
             class_teacher = Staff.objects.filter(
-                id=class_teacher,
+                id=class_teacher_id,
                 school=school,
+                branch=branch,
                 staff_type=Staff.StaffType.TEACHER,
             ).first()
 
-
-
             if class_teacher is None:
-                return CustomResponse.errorResponse(description="Invalid class teacher.")
+                return CustomResponse.errorResponse(
+                    description="Invalid class teacher."
+                )
+
+
+
+
 
         section = Section.objects.create(
             grade=grade,
+            branch=branch,
             name=request.data.get("name"),
             class_teacher=class_teacher,
             capacity=request.data.get(
@@ -498,12 +524,13 @@ class SectionListAPIView(APIView):
 
         school = request.school
 
-        sections = Section.objects.select_related(
-            "grade",
-            "grade__school",
-        ).filter(
-            grade__school=school,
-        )
+        sections = Section.objects.select_related("grade","grade__school","branch",).filter(grade__school=school,)
+        branch_id = request.query_params.get("branch_id")
+
+        if branch_id:
+            sections = sections.filter(
+                branch_id=branch_id,
+            )
 
         print("Total Sections Found :", sections.count())
 
@@ -523,6 +550,9 @@ class SectionListAPIView(APIView):
                 {
                     "id": str(section.id),
                     "school": section.grade.school.name,
+                    "branch": {"id": str(section.branch.id),
+                               "name": section.branch.name,
+                    } if section.branch else None,
                     "grade": section.grade.name,
                     "name": section.name,
                     "capacity": section.capacity,
@@ -539,55 +569,122 @@ class SectionListAPIView(APIView):
         )
 class UpdateSectionAPIView(APIView):
 
-    permission_classes = [IsAuthenticated,HasPermission,]
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
 
     required_permission = "section.update"
 
-    def put(self,request,section_id):
+    def put(self, request, section_id):
 
         school = request.school
 
         if school is None:
-            return CustomResponse.errorResponse(description="School not found.")
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
 
-        section = Section.objects.filter(id=section_id,grade__school=school).first()
+        section = Section.objects.select_related(
+            "grade",
+            "branch",
+            "class_teacher",
+        ).filter(
+            id=section_id,
+            grade__school=school,
+        ).first()
 
         if section is None:
-            return CustomResponse.errorResponse(description="Section not found.")
+            return CustomResponse.errorResponse(
+                description="Section not found."
+            )
 
-        name = request.data.get("name",section.name)
+        branch = section.branch
 
-        if Section.objects.filter(grade=section.grade,name=name).exclude(id=section.id).exists():
-            return CustomResponse.errorResponse(description="Section already exists.")
+        if "branch_id" in request.data:
 
-        capacity = request.data.get("capacity",section.capacity)
+            branch_id = request.data.get("branch_id")
 
-        if int(capacity) <= 0:
-            return CustomResponse.errorResponse(description="Capacity must be greater than zero.")
+            if branch_id in [None, ""]:
 
-        status = request.data.get("status",section.status)
+                branch = None
+
+            else:
+
+                branch = Branch.objects.filter(
+                    id=branch_id,
+                    school=school,
+                ).first()
+
+                if branch is None:
+                    return CustomResponse.errorResponse(
+                        description="Branch not found."
+                    )
+
+        name = request.data.get(
+            "name",
+            section.name,
+        )
+
+        if Section.objects.filter(
+            grade=section.grade,
+            branch=branch,
+            name=name,
+        ).exclude(
+            id=section.id,
+        ).exists():
+
+            return CustomResponse.errorResponse(
+                description="Section already exists."
+            )
+
+        capacity = request.data.get(
+            "capacity",
+            section.capacity,
+        )
+
+        try:
+            capacity = int(capacity)
+
+        except (TypeError, ValueError):
+            return CustomResponse.errorResponse(
+                description="Invalid capacity."
+            )
+
+        if capacity <= 0:
+            return CustomResponse.errorResponse(
+                description="Capacity must be greater than zero."
+            )
+
+        status = request.data.get(
+            "status",
+            section.status,
+        )
 
         if status not in Section.Status.values:
-            return CustomResponse.errorResponse(description="Invalid status.")
-
-        section.name = name
-        section.capacity = capacity
-        section.status = status
+            return CustomResponse.errorResponse(
+                description="Invalid status."
+            )
 
         if "class_teacher_id" in request.data:
 
-            class_teacher_id = request.data.get("class_teacher_id")
+            class_teacher_id = request.data.get(
+                "class_teacher_id"
+            )
 
             if class_teacher_id:
 
                 class_teacher = Staff.objects.filter(
                     id=class_teacher_id,
                     school=school,
+                    branch=branch,
                     staff_type=Staff.StaffType.TEACHER,
                 ).first()
 
                 if class_teacher is None:
-                    return CustomResponse.errorResponse(description="Invalid class teacher.")
+                    return CustomResponse.errorResponse(
+                        description="Invalid class teacher."
+                    )
 
                 section.class_teacher = class_teacher
 
@@ -595,18 +692,36 @@ class UpdateSectionAPIView(APIView):
 
                 section.class_teacher = None
 
+        elif section.class_teacher:
+
+            teacher_branch_id = (
+                section.class_teacher.branch_id
+            )
+
+            new_branch_id = (
+                branch.id
+                if branch
+                else None
+            )
+
+            if teacher_branch_id != new_branch_id:
+                section.class_teacher = None
+
+        section.branch = branch
+        section.name = name
+        section.capacity = capacity
+        section.status = status
+
         section.save()
 
         return CustomResponse.successResponse(
             description="Section updated successfully.",
         )
 
+
 class CreateStudentAPIView(APIView):
 
-    permission_classes = [
-        IsAuthenticated,
-        HasPermission,
-    ]
+    permission_classes = [IsAuthenticated,HasPermission,]
 
     required_permission = "student.create"
 
@@ -649,6 +764,21 @@ class CreateStudentAPIView(APIView):
                 return CustomResponse.errorResponse(
                     description=f"{field} is required.",
                 )
+        branch = None
+
+        branch_id = request.data.get("branch_id")
+
+        if branch_id:
+
+            branch = Branch.objects.filter(
+                id=branch_id,
+                school=school,
+            ).first()
+
+            if branch is None:
+                return CustomResponse.errorResponse(
+                    description="Branch not found."
+                )
 
         academic_year = AcademicYear.objects.filter(
             id=request.data.get(
@@ -681,6 +811,7 @@ class CreateStudentAPIView(APIView):
                 "section_id",
             ),
             grade=grade,
+            branch=branch,
         ).first()
 
         if section is None:
@@ -793,6 +924,8 @@ class CreateStudentAPIView(APIView):
                 student = Student.objects.create(
 
                     school=school,
+
+                    branch=branch,
 
                     board=board,
 
@@ -1084,13 +1217,24 @@ class BulkUploadStudentAPIView(APIView):
                     raise Exception(
                         "Grade not found.",
                     )
-                section = Section.objects.filter(
-                    school=school,
-                    grade=grade,
-                    name=data.get(
-                        "Section",
-                    ),
-                ).first()
+                branch = None
+
+                branch_name = str(
+                    data.get("Branch") or ""
+                ).strip()
+
+                if branch_name:
+
+                    branch = Branch.objects.filter(
+                        school=school,
+                        name__iexact=branch_name,
+                    ).first()
+
+                    if branch is None:
+                        raise Exception(
+                            f"Branch '{branch_name}' not found."
+                        )
+                section = Section.objects.filter(grade=grade,branch=branch,name__iexact=str(data.get("Section")).strip(),).first()
                 if section is None:
                     raise Exception(
                         "Section not found.",
@@ -1150,6 +1294,7 @@ class BulkUploadStudentAPIView(APIView):
                 with transaction.atomic():
                     student = Student.objects.create(
                         school=school,
+                        branch=branch,
                         board=board,
                         academic_year=academic_year,
                         grade=grade,
@@ -1329,6 +1474,8 @@ class DownloadStudentTemplateAPIView(APIView):
 
             "Academic Year",
 
+            "Branch",
+
             "Grade",
 
             "Section",
@@ -1425,6 +1572,8 @@ class DownloadStudentTemplateAPIView(APIView):
         sample_row = [
 
             "2025-2026",
+
+            "Main Branch",
 
             "Grade 1",
 
@@ -1565,63 +1714,23 @@ class StudentListAPIView(APIView):
 
         school = request.school
 
-        students = Student.objects.select_related(
+        students = Student.objects.select_related("school","branch","academic_year","grade","section",).filter(school=school,)
 
-            "school",
+        academic_year_id = request.query_params.get("academic_year_id", )
 
-            "academic_year",
+        branch_id = request.query_params.get("branch_id")
 
-            "grade",
+        grade_id = request.query_params.get( "grade_id",)
 
-            "section",
+        section_id = request.query_params.get("section_id",)
 
-        ).filter(
+        board = request.query_params.get("board",)
 
-            school=school,
+        hostel_type = request.query_params.get("hostel_type",)
 
-        )
+        status = request.query_params.get("status",)
 
-        academic_year_id = request.query_params.get(
-
-            "academic_year_id",
-
-        )
-
-        grade_id = request.query_params.get(
-
-            "grade_id",
-
-        )
-
-        section_id = request.query_params.get(
-
-            "section_id",
-
-        )
-
-        board = request.query_params.get(
-
-            "board",
-
-        )
-
-        hostel_type = request.query_params.get(
-
-            "hostel_type",
-
-        )
-
-        status = request.query_params.get(
-
-            "status",
-
-        )
-
-        search = request.query_params.get(
-
-            "search",
-
-        )
+        search = request.query_params.get("search",)
 
         if academic_year_id:
 
@@ -1629,6 +1738,11 @@ class StudentListAPIView(APIView):
 
                 academic_year_id=academic_year_id,
 
+            )
+        if branch_id:
+
+            students = students.filter(
+                branch_id=branch_id,
             )
 
         if grade_id:
@@ -1752,6 +1866,10 @@ class StudentListAPIView(APIView):
                         "name": student.academic_year.name,
 
                     },
+                    "branch": {
+                        "id": str(student.branch.id),
+                        "name": student.branch.name,
+                    } if student.branch else None,
 
                     "grade": {
 
@@ -2134,6 +2252,15 @@ class CreateStaffAPIView(APIView):
 
         if not mobile.isdigit() or len(mobile) != 10:
             return CustomResponse.errorResponse(description="Enter valid mobile number.")
+        branch = None
+
+        branch_id = request.data.get("branch_id")
+
+        if branch_id:
+            branch = Branch.objects.filter(id=branch_id,school=school,).first()
+
+            if branch is None:
+                return CustomResponse.errorResponse(description="Invalid branch.")
 
         if UserMaster.objects.filter(username=mobile).exists():
             return CustomResponse.errorResponse(description="User already exists.")
@@ -2181,6 +2308,8 @@ class CreateStaffAPIView(APIView):
                     user=user,
 
                     school=school,
+
+                    branch=branch,
 
                     employee_id=request.data.get("employee_id").strip(),
 
@@ -2337,54 +2466,134 @@ class GetStaffAPIView(APIView):
 
 class UpdateStaffAPIView(APIView):
 
-    permission_classes = [IsAuthenticated,HasPermission,]
+    permission_classes = [IsAuthenticated, HasPermission]
 
     required_permission = "staff.update"
 
-    def put(self,request,staff_id):
+    def put(self, request, staff_id):
 
         school = request.school
 
         if school is None:
-            return CustomResponse.errorResponse(description="School not found.")
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
 
-        staff = Staff.objects.select_related("user").filter(id=staff_id,school=school).first()
+        staff = Staff.objects.select_related(
+            "user",
+            "branch",
+        ).filter(
+            id=staff_id,
+            school=school,
+        ).first()
 
         if staff is None:
-            return CustomResponse.errorResponse(description="Staff not found.")
+            return CustomResponse.errorResponse(
+                description="Staff not found."
+            )
 
-        employee_id = request.data.get("employee_id",staff.employee_id)
+        branch = staff.branch
 
-        if Staff.objects.filter(school=school,employee_id=employee_id).exclude(id=staff.id).exists():
-            return CustomResponse.errorResponse(description="Employee ID already exists.")
+        if "branch_id" in request.data:
 
-        mobile = str(request.data.get("mobile",staff.mobile))
+            branch_id = request.data.get("branch_id")
+
+            if branch_id in [None, ""]:
+
+                branch = None
+
+            else:
+
+                branch = Branch.objects.filter(
+                    id=branch_id,
+                    school=school,
+                ).first()
+
+                if branch is None:
+                    return CustomResponse.errorResponse(
+                        description="Invalid branch."
+                    )
+
+        employee_id = request.data.get(
+            "employee_id",
+            staff.employee_id,
+        )
+
+        if Staff.objects.filter(
+            school=school,
+            employee_id=employee_id,
+        ).exclude(
+            id=staff.id,
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="Employee ID already exists."
+            )
+
+        mobile = str(
+            request.data.get(
+                "mobile",
+                staff.mobile,
+            )
+        )
 
         if not mobile.isdigit() or len(mobile) != 10:
-            return CustomResponse.errorResponse(description="Enter valid mobile number.")
+            return CustomResponse.errorResponse(
+                description="Enter valid mobile number."
+            )
 
-        if Staff.objects.filter(school=school,mobile=mobile).exclude(id=staff.id).exists():
-            return CustomResponse.errorResponse(description="Mobile number already exists.")
+        if Staff.objects.filter(
+            school=school,
+            mobile=mobile,
+        ).exclude(
+            id=staff.id,
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="Mobile number already exists."
+            )
 
-        email = request.data.get("email",staff.email)
+        email = request.data.get(
+            "email",
+            staff.email,
+        )
 
-        if email and Staff.objects.filter(school=school,email=email).exclude(id=staff.id).exists():
-            return CustomResponse.errorResponse(description="Email already exists.")
+        if email and Staff.objects.filter(
+            school=school,
+            email=email,
+        ).exclude(
+            id=staff.id,
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="Email already exists."
+            )
 
-        staff_type = request.data.get("staff_type",staff.staff_type)
+        staff_type = request.data.get(
+            "staff_type",
+            staff.staff_type,
+        )
 
         if staff_type not in Staff.StaffType.values:
-            return CustomResponse.errorResponse(description="Invalid staff type.")
+            return CustomResponse.errorResponse(
+                description="Invalid staff type."
+            )
 
-        gender = request.data.get("gender",staff.gender)
+        gender = request.data.get(
+            "gender",
+            staff.gender,
+        )
 
         if gender not in Staff.Gender.values:
-            return CustomResponse.errorResponse(description="Invalid gender.")
+            return CustomResponse.errorResponse(
+                description="Invalid gender."
+            )
 
-        role = Roles.objects.filter(role_name=staff_type).first()
+        role = Roles.objects.filter(
+            role_name=staff_type
+        ).first()
 
         if role is None:
-            return CustomResponse.errorResponse(description=f"{staff_type.title()} role not configured.")
+            return CustomResponse.errorResponse(
+                description=f"{staff_type.title()} role not configured."
+            )
 
         try:
 
@@ -2392,48 +2601,112 @@ class UpdateStaffAPIView(APIView):
 
                 user = staff.user
 
-                user.first_name = request.data.get("name",staff.name)
+                user.first_name = request.data.get(
+                    "name",
+                    staff.name,
+                )
+
                 user.mobile = mobile
                 user.email = email
                 user.gender = gender
-                user.date_of_birth = request.data.get("date_of_birth",staff.date_of_birth)
-                user.profile_image = request.data.get("profile_image",staff.profile_image)
+
+                user.date_of_birth = request.data.get(
+                    "date_of_birth",
+                    staff.date_of_birth,
+                )
+
+                user.profile_image = request.data.get(
+                    "profile_image",
+                    staff.profile_image,
+                )
+
                 user.save()
+
+                staff.branch = branch
 
                 staff.employee_id = employee_id
                 staff.staff_type = staff_type
-                staff.name = request.data.get("name",staff.name)
+
+                staff.name = request.data.get(
+                    "name",
+                    staff.name,
+                )
+
                 staff.gender = gender
-                staff.date_of_birth = request.data.get("date_of_birth",staff.date_of_birth)
+
+                staff.date_of_birth = request.data.get(
+                    "date_of_birth",
+                    staff.date_of_birth,
+                )
+
                 staff.mobile = mobile
                 staff.email = email
-                staff.qualification = request.data.get("qualification",staff.qualification)
-                staff.experience = request.data.get("experience",staff.experience)
-                staff.joining_date = request.data.get("joining_date",staff.joining_date)
-                staff.status = request.data.get("status",staff.status)
-                staff.profile_image = request.data.get("profile_image",staff.profile_image)
-                staff.address = request.data.get("address",staff.address)
-                staff.emergency_contact_name = request.data.get("emergency_contact_name",staff.emergency_contact_name)
-                staff.emergency_contact_mobile = request.data.get("emergency_contact_mobile",staff.emergency_contact_mobile)
+
+                staff.qualification = request.data.get(
+                    "qualification",
+                    staff.qualification,
+                )
+
+                staff.experience = request.data.get(
+                    "experience",
+                    staff.experience,
+                )
+
+                staff.joining_date = request.data.get(
+                    "joining_date",
+                    staff.joining_date,
+                )
+
+                staff.status = request.data.get(
+                    "status",
+                    staff.status,
+                )
+
+                staff.profile_image = request.data.get(
+                    "profile_image",
+                    staff.profile_image,
+                )
+
+                staff.address = request.data.get(
+                    "address",
+                    staff.address,
+                )
+
+                staff.emergency_contact_name = request.data.get(
+                    "emergency_contact_name",
+                    staff.emergency_contact_name,
+                )
+
+                staff.emergency_contact_mobile = request.data.get(
+                    "emergency_contact_mobile",
+                    staff.emergency_contact_mobile,
+                )
+
                 staff.save()
 
-                UserRoles.objects.filter(user=user,school=school).update(role=role)
+                UserRoles.objects.filter(
+                    user=user,
+                    school=school,
+                ).update(
+                    role=role
+                )
 
         except Exception as e:
 
-            return CustomResponse.errorResponse(description=str(e))
+            return CustomResponse.errorResponse(
+                description=str(e)
+            )
 
         return CustomResponse.successResponse(
 
             description="Staff updated successfully.",
 
             data={
-                "id":str(staff.id),
-                "employee_id":staff.employee_id,
-                "name":staff.name,
-                "role":role.role_name,
+                "id": str(staff.id),
+                "employee_id": staff.employee_id,
+                "name": staff.name,
+                "role": role.role_name
             },
-
         )
 
 class CreateStaffDocumentAPIView(APIView):
