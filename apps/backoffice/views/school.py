@@ -302,7 +302,7 @@ class GradeListAPIView(APIView):
         grades = Grade.objects.select_related(
             "school",
             "academic_year",
-        ).filter(school=school)
+        ).filter(school=school).order_by("display_order")
 
         print("Total Grades Found :", grades.count())
 

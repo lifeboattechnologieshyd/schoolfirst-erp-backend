@@ -626,17 +626,36 @@ class SchoolListAPIView(APIView):
             school_id,
         )
 
-        queryset = School.objects.select_related("organization",).all()
+        queryset = School.objects.select_related(
+            "organization",
+        ).prefetch_related(
+            "branches",
+        ).all()
 
         data = []
 
         for obj in queryset:
 
+            branches = []
+
+            for branch in obj.branches.all():
+
+                branches.append({
+                    "id": str(branch.id),
+                    "name": branch.name,
+                    "code": branch.code,
+                    "status": branch.status,
+                })
+
             data.append({
-                "id": obj.id,
+                "id": str(obj.id),
                 "name": obj.name,
                 "code": obj.code,
-                "organization_name": obj.organization.name if obj.organization else None,
+                "organization_name": (
+                    obj.organization.name
+                    if obj.organization
+                    else None
+                ),
                 "address": obj.address,
                 "logo": obj.logo,
                 "city": obj.city,
@@ -656,6 +675,7 @@ class SchoolListAPIView(APIView):
                 "is_phone_verified": obj.is_phone_verified,
                 "status": obj.status,
 
+                "branches": branches,
             })
 
         return CustomResponse.successResponse(
