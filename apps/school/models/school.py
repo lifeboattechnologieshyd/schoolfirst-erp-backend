@@ -517,6 +517,8 @@ class Section(AuditModel):
 
     grade = models.ForeignKey(Grade,on_delete=models.CASCADE,related_name="sections",)
 
+    branch = models.ForeignKey(Branch,on_delete=models.SET_NULL,null=True,blank=True,related_name="sections",)
+
     name = models.CharField(max_length=30,)
 
     class_teacher = models.ForeignKey("Staff", on_delete=models.SET_NULL,null=True,blank=True,related_name="class_teacher_sections",)
@@ -530,16 +532,17 @@ class Section(AuditModel):
         db_table = "sections"
 
         constraints = [
-
             models.UniqueConstraint(
-
-                fields=["grade","name",],
-
-                name="unique_section_per_grade",
-
-            )
-
-        ]
+                fields=["grade", "branch", "name"],
+                condition=models.Q(branch__isnull=False),
+                name="unique_section_per_grade_branch",
+            ),
+            models.UniqueConstraint(
+                fields=["grade", "name"],
+                condition=models.Q(branch__isnull=True),
+                name="unique_section_per_grade_without_branch",
+            ),
+]
 
     def __str__(self):
 
@@ -608,6 +611,13 @@ class Student(AuditModel):
         on_delete=models.CASCADE,
         related_name="students",
     )
+    branch = models.ForeignKey(
+    Branch,
+    on_delete=models.SET_NULL,
+    null=True,
+    blank=True,
+    related_name="students",
+)
 
     academic_year = models.ForeignKey(
         AcademicYear,
@@ -1060,6 +1070,8 @@ class Staff(AuditModel):
     id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False,)
 
     school = models.ForeignKey(School,on_delete=models.CASCADE,related_name="staffs",)
+
+    branch = models.ForeignKey(Branch,on_delete=models.SET_NULL,null=True,blank=True,related_name="staffs",)
 
     user = models.OneToOneField(UserMaster,on_delete=models.CASCADE,related_name="staff",)
 
