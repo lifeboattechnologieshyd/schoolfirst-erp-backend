@@ -257,7 +257,7 @@ urlpatterns = [
     #  ptm APIs
     # ====================================
 
-    path("ptm/creation",CreateParentTeacherMeetingAPIView.as_view(),),
+    path("ptm/create",CreateParentTeacherMeetingAPIView.as_view(),),
 
     path("ptm",ParentTeacherMeetingListAPIView.as_view(),),
 
