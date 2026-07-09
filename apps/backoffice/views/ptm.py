@@ -424,6 +424,7 @@ class ParentTeacherMeetingListAPIView(APIView):
         return CustomResponse.successResponse(
             description="Parent teacher meetings fetched successfully.",
             data=data,
+            total_count=len(data),
         )
 
 
