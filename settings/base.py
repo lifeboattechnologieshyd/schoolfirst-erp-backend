@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "apps.backoffice",
     "apps.fee",
     "apps.payment",
+    "apps.ptm",
     # Third Party
     "rest_framework",
     "rest_framework.authtoken",
