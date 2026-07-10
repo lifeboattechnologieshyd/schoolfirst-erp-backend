@@ -24,19 +24,19 @@ class StudentPTMListAPIView(APIView):
             student_id=str(student_id) if student_id else None,
         )
 
-        if not student_id:
-
-            application_logger.warning(
-                "student_ptm_list_validation_failed",
-                user_id=str(user.id),
-                reason="student_id_required",
-            )
-
-            return CustomResponse.errorResponse(
-                description="student_id is required."
-            )
-
         try:
+
+            if not student_id:
+
+                application_logger.warning(
+                    "student_ptm_list_failed",
+                    user_id=str(user.id),
+                    reason="student_id_required",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="student_id is required."
+                )
 
             student = Student.objects.select_related(
                 "school",
@@ -46,33 +46,16 @@ class StudentPTMListAPIView(APIView):
                 "section",
             ).filter(
                 id=student_id,
-                student_parents__parent__user=user,
                 status=Student.Status.ACTIVE,
             ).first()
 
             if student is None:
 
-                student_exists = Student.objects.filter(
-                    id=student_id,
-                ).exists()
-
-                active_student_exists = Student.objects.filter(
-                    id=student_id,
-                    status=Student.Status.ACTIVE,
-                ).exists()
-
-                parent_access_exists = Student.objects.filter(
-                    id=student_id,
-                    student_parents__parent__user=user,
-                ).exists()
-
                 application_logger.warning(
-                    "student_ptm_list_access_failed",
+                    "student_ptm_list_failed",
                     user_id=str(user.id),
                     student_id=str(student_id),
-                    student_exists=student_exists,
-                    active_student_exists=active_student_exists,
-                    parent_access_exists=parent_access_exists,
+                    reason="student_not_found",
                 )
 
                 return CustomResponse.errorResponse(
@@ -80,15 +63,11 @@ class StudentPTMListAPIView(APIView):
                 )
 
             application_logger.info(
-                "student_ptm_student_found",
+                "student_ptm_list_student_found",
                 user_id=str(user.id),
                 student_id=str(student.id),
                 school_id=str(student.school_id),
-                branch_id=(
-                    str(student.branch_id)
-                    if student.branch_id
-                    else None
-                ),
+                branch_id=str(student.branch_id) if student.branch_id else None,
                 academic_year_id=str(student.academic_year_id),
                 grade_id=str(student.grade_id),
                 section_id=str(student.section_id),
@@ -101,41 +80,40 @@ class StudentPTMListAPIView(APIView):
             ).prefetch_related(
                 "meeting_sections__section",
             ).filter(
-                school=student.school,
-                branch=student.branch,
-                academic_year=student.academic_year,
-                grade=student.grade,
-                meeting_sections__section=student.section,
-            ).exclude(
+                school_id=student.school_id,
+                academic_year_id=student.academic_year_id,
+                grade_id=student.grade_id,
+                meeting_sections__section_id=student.section_id,
+            )
+
+            if student.branch_id:
+
+                meetings = meetings.filter(
+                    branch_id=student.branch_id,
+                )
+
+            else:
+
+                meetings = meetings.filter(
+                    branch__isnull=True,
+                )
+
+            meetings = meetings.exclude(
                 status=ParentTeacherMeeting.Status.DRAFT,
             ).distinct().order_by(
                 "-meeting_date",
                 "-start_time",
             )
 
-            application_logger.info(
-                "student_ptm_meetings_found",
-                user_id=str(user.id),
-                student_id=str(student.id),
-                total_count=meetings.count(),
-            )
-
             responses = ParentTeacherMeetingResponse.objects.filter(
                 meeting__in=meetings,
-                student=student,
+                student_id=student.id,
             )
 
             response_map = {
                 response.meeting_id: response
                 for response in responses
             }
-
-            application_logger.info(
-                "student_ptm_responses_found",
-                user_id=str(user.id),
-                student_id=str(student.id),
-                total_count=len(response_map),
-            )
 
             data = []
 
@@ -191,7 +169,7 @@ class StudentPTMListAPIView(APIView):
                 })
 
             application_logger.info(
-                "student_ptm_list_completed",
+                "student_ptm_list_fetched",
                 user_id=str(user.id),
                 student_id=str(student.id),
                 total_count=len(data),
@@ -209,19 +187,17 @@ class StudentPTMListAPIView(APIView):
                 },
             )
 
-        except Exception as e:
+        except Exception:
 
             application_logger.exception(
                 "student_ptm_list_failed",
                 user_id=str(user.id),
-                student_id=str(student_id),
-                error=str(e),
+                student_id=str(student_id) if student_id else None,
             )
 
             return CustomResponse.errorResponse(
-                description="Unable to fetch parent teacher meetings."
+                description="Something went wrong while fetching parent teacher meetings."
             )
-
 
 
 class StudentPTMResponseAPIView(APIView):
@@ -240,85 +216,126 @@ class StudentPTMResponseAPIView(APIView):
             user_id=str(user.id),
             student_id=str(student_id) if student_id else None,
             meeting_id=str(meeting_id),
+            response_status=response_status,
         )
 
-        if not student_id:
-            return CustomResponse.errorResponse(
-                description="student_id is required."
-            )
-
-        allowed_responses = [
-            ParentTeacherMeetingResponse.ResponseStatus.ATTENDING,
-            ParentTeacherMeetingResponse.ResponseStatus.NOT_ATTENDING,
-        ]
-
-        if response_status not in allowed_responses:
-
-            application_logger.warning(
-                "student_ptm_response_failed",
-                reason="invalid_response_status",
-                user_id=str(user.id),
-                meeting_id=str(meeting_id),
-                student_id=str(student_id),
-            )
-
-            return CustomResponse.errorResponse(
-                description="Invalid response status."
-            )
-
-        student = Student.objects.select_related(
-            "school",
-            "academic_year",
-            "grade",
-            "section",
-        ).filter(
-            id=student_id,
-            student_parents__parent__user=user,
-            status=Student.Status.ACTIVE,
-        ).first()
-
-        if student is None:
-
-            application_logger.warning(
-                "student_ptm_response_failed",
-                reason="student_not_found_or_access_denied",
-                user_id=str(user.id),
-                student_id=str(student_id),
-            )
-
-            return CustomResponse.errorResponse(
-                description="Student not found."
-            )
-
-        meeting = ParentTeacherMeeting.objects.filter(
-            id=meeting_id,
-            school=student.school,
-            academic_year=student.academic_year,
-            grade=student.grade,
-            meeting_sections__section=student.section,
-        ).exclude(
-            status__in=[
-                ParentTeacherMeeting.Status.DRAFT,
-                ParentTeacherMeeting.Status.COMPLETED,
-                ParentTeacherMeeting.Status.CANCELLED,
-            ],
-        ).distinct().first()
-
-        if meeting is None:
-
-            application_logger.warning(
-                "student_ptm_response_failed",
-                reason="meeting_not_found_or_student_not_eligible",
-                user_id=str(user.id),
-                meeting_id=str(meeting_id),
-                student_id=str(student.id),
-            )
-
-            return CustomResponse.errorResponse(
-                description="Parent teacher meeting not found."
-            )
-
         try:
+
+            if not student_id:
+
+                application_logger.warning(
+                    "student_ptm_response_failed",
+                    reason="student_id_required",
+                    user_id=str(user.id),
+                    meeting_id=str(meeting_id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="student_id is required."
+                )
+
+            allowed_responses = [
+                ParentTeacherMeetingResponse.ResponseStatus.ATTENDING,
+                ParentTeacherMeetingResponse.ResponseStatus.NOT_ATTENDING,
+            ]
+
+            if response_status not in allowed_responses:
+
+                application_logger.warning(
+                    "student_ptm_response_failed",
+                    reason="invalid_response_status",
+                    user_id=str(user.id),
+                    meeting_id=str(meeting_id),
+                    student_id=str(student_id),
+                    response_status=response_status,
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Invalid response status."
+                )
+
+            student = Student.objects.select_related(
+                "school",
+                "branch",
+                "academic_year",
+                "grade",
+                "section",
+            ).filter(
+                id=student_id,
+                status=Student.Status.ACTIVE,
+            ).first()
+
+            if student is None:
+
+                application_logger.warning(
+                    "student_ptm_response_failed",
+                    reason="student_not_found",
+                    user_id=str(user.id),
+                    student_id=str(student_id),
+                    meeting_id=str(meeting_id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Student not found."
+                )
+
+            application_logger.info(
+                "student_ptm_response_student_found",
+                user_id=str(user.id),
+                student_id=str(student.id),
+                meeting_id=str(meeting_id),
+                school_id=str(student.school_id),
+                branch_id=str(student.branch_id) if student.branch_id else None,
+                academic_year_id=str(student.academic_year_id),
+                grade_id=str(student.grade_id),
+                section_id=str(student.section_id),
+            )
+
+            meetings = ParentTeacherMeeting.objects.filter(
+                id=meeting_id,
+                school_id=student.school_id,
+                academic_year_id=student.academic_year_id,
+                grade_id=student.grade_id,
+                meeting_sections__section_id=student.section_id,
+            )
+
+            if student.branch_id:
+
+                meetings = meetings.filter(
+                    branch_id=student.branch_id,
+                )
+
+            else:
+
+                meetings = meetings.filter(
+                    branch__isnull=True,
+                )
+
+            meeting = meetings.exclude(
+                status__in=[
+                    ParentTeacherMeeting.Status.DRAFT,
+                    ParentTeacherMeeting.Status.COMPLETED,
+                    ParentTeacherMeeting.Status.CANCELLED,
+                ],
+            ).distinct().first()
+
+            if meeting is None:
+
+                application_logger.warning(
+                    "student_ptm_response_failed",
+                    reason="meeting_not_found_or_student_not_eligible",
+                    user_id=str(user.id),
+                    meeting_id=str(meeting_id),
+                    student_id=str(student.id),
+                    school_id=str(student.school_id),
+                    branch_id=str(student.branch_id) if student.branch_id else None,
+                    grade_id=str(student.grade_id),
+                    section_id=str(student.section_id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Parent teacher meeting not found."
+                )
 
             with transaction.atomic():
 
@@ -332,41 +349,38 @@ class StudentPTMResponseAPIView(APIView):
                     },
                 )
 
+            application_logger.info(
+                "student_ptm_response_submitted",
+                user_id=str(user.id),
+                meeting_id=str(meeting.id),
+                student_id=str(student.id),
+                response_id=str(response.id),
+                response_status=response.response_status,
+                created=created,
+            )
+
+            return CustomResponse.successResponse(
+                description="Parent teacher meeting response submitted successfully.",
+                data={
+                    "id": str(response.id),
+                    "meeting_id": str(meeting.id),
+                    "student_id": str(student.id),
+                    "response_status": response.response_status,
+                    "responded_at": response.responded_at,
+                    "remarks": response.remarks,
+                },
+            )
+
         except Exception as e:
 
             application_logger.exception(
                 "student_ptm_response_failed",
                 user_id=str(user.id),
-                meeting_id=str(meeting.id),
-                student_id=str(student.id),
+                meeting_id=str(meeting_id),
+                student_id=str(student_id) if student_id else None,
                 error=str(e),
             )
 
             return CustomResponse.errorResponse(
-                description=str(e)
+                description="Something went wrong while submitting the response."
             )
-
-        application_logger.info(
-            "student_ptm_response_submitted",
-            user_id=str(user.id),
-            meeting_id=str(meeting.id),
-            student_id=str(student.id),
-            response_status=response.response_status,
-            created=created,
-        )
-
-        return CustomResponse.successResponse(
-            description=(
-                "Response submitted successfully."
-                if created
-                else "Response updated successfully."
-            ),
-            data={
-                "id": str(response.id),
-                "meeting_id": str(meeting.id),
-                "student_id": str(student.id),
-                "response_status": response.response_status,
-                "responded_at": response.responded_at,
-                "remarks": response.remarks,
-            },
-        )
