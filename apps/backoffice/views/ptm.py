@@ -734,6 +734,15 @@ class BulkPTMAttendanceAPIView(APIView):
     def put(self, request, meeting_id):
 
         school = request.school
+
+        application_logger.info(
+            "bulk_ptm_attendance_request_received",
+            user_id=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            meeting_id=str(meeting_id),
+            content_type=request.content_type,
+            content_length=request.META.get("CONTENT_LENGTH"),
+        )
         absent_student_ids = request.data.get(
             "absent_student_ids",
             [],
