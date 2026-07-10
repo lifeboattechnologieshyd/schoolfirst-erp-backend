@@ -719,6 +719,9 @@ class UpdateParentTeacherMeetingAPIView(APIView):
         )
 
 
+
+
+
 class BulkPTMAttendanceAPIView(APIView):
 
     permission_classes = [
@@ -731,14 +734,17 @@ class BulkPTMAttendanceAPIView(APIView):
     def put(self, request, meeting_id):
 
         school = request.school
-        absent_student_ids = request.data.get("absent_student_ids", [])
+        absent_student_ids = request.data.get(
+            "absent_student_ids",
+            [],
+        )
 
         application_logger.info(
             "bulk_ptm_attendance_started",
             user_id=str(request.user.id),
             school_id=str(school.id) if school else None,
             meeting_id=str(meeting_id),
-            absent_count=len(absent_student_ids) if isinstance(absent_student_ids, list) else None,
+            request_data=request.data,
         )
 
         if school is None:
@@ -761,11 +767,35 @@ class BulkPTMAttendanceAPIView(APIView):
                 user_id=str(request.user.id),
                 school_id=str(school.id),
                 meeting_id=str(meeting_id),
-                reason="absent_student_ids_not_list",
+                reason="absent_student_ids_must_be_list",
+                received_type=type(absent_student_ids).__name__,
             )
 
             return CustomResponse.errorResponse(
                 description="absent_student_ids must be a list."
+            )
+
+        try:
+
+            absent_ids = {
+                UUID(str(student_id))
+                for student_id in absent_student_ids
+            }
+
+        except (ValueError, TypeError, AttributeError) as e:
+
+            application_logger.warning(
+                "bulk_ptm_attendance_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                meeting_id=str(meeting_id),
+                reason="invalid_student_id_format",
+                absent_student_ids=absent_student_ids,
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="One or more student IDs are invalid."
             )
 
         meeting = ParentTeacherMeeting.objects.select_related(
@@ -775,11 +805,6 @@ class BulkPTMAttendanceAPIView(APIView):
         ).filter(
             id=meeting_id,
             school=school,
-        ).exclude(
-            status__in=[
-                ParentTeacherMeeting.Status.DRAFT,
-                ParentTeacherMeeting.Status.CANCELLED,
-            ]
         ).first()
 
         if meeting is None:
@@ -796,13 +821,40 @@ class BulkPTMAttendanceAPIView(APIView):
                 description="Parent teacher meeting not found."
             )
 
+        if meeting.status in [
+            ParentTeacherMeeting.Status.DRAFT,
+            ParentTeacherMeeting.Status.CANCELLED,
+        ]:
+
+            application_logger.warning(
+                "bulk_ptm_attendance_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                meeting_id=str(meeting.id),
+                meeting_status=meeting.status,
+                reason="attendance_not_allowed_for_meeting_status",
+            )
+
+            return CustomResponse.errorResponse(
+                description="Attendance cannot be marked for this meeting."
+            )
+
         section_ids = list(
             ParentTeacherMeetingSection.objects.filter(
-                meeting=meeting
+                meeting=meeting,
             ).values_list(
                 "section_id",
                 flat=True,
             )
+        )
+
+        application_logger.info(
+            "bulk_ptm_attendance_sections_fetched",
+            meeting_id=str(meeting.id),
+            section_ids=[
+                str(section_id)
+                for section_id in section_ids
+            ],
         )
 
         if not section_ids:
@@ -828,8 +880,9 @@ class BulkPTMAttendanceAPIView(APIView):
         )
 
         if meeting.branch_id:
+
             students = students.filter(
-                branch_id=meeting.branch_id
+                branch_id=meeting.branch_id,
             )
 
         eligible_student_ids = set(
@@ -837,6 +890,34 @@ class BulkPTMAttendanceAPIView(APIView):
                 "id",
                 flat=True,
             )
+        )
+
+        application_logger.info(
+            "bulk_ptm_attendance_eligibility_checked",
+            meeting_id=str(meeting.id),
+            meeting_branch_id=(
+                str(meeting.branch_id)
+                if meeting.branch_id
+                else None
+            ),
+            meeting_academic_year_id=str(
+                meeting.academic_year_id
+            ),
+            meeting_grade_id=str(
+                meeting.grade_id
+            ),
+            section_ids=[
+                str(section_id)
+                for section_id in section_ids
+            ],
+            eligible_student_ids=[
+                str(student_id)
+                for student_id in eligible_student_ids
+            ],
+            absent_student_ids=[
+                str(student_id)
+                for student_id in absent_ids
+            ],
         )
 
         if not eligible_student_ids:
@@ -853,28 +934,9 @@ class BulkPTMAttendanceAPIView(APIView):
                 description="No eligible students found for this meeting."
             )
 
-        try:
-
-            absent_ids = {
-                UUID(str(student_id))
-                for student_id in absent_student_ids
-            }
-
-        except (ValueError, TypeError, AttributeError):
-
-            application_logger.warning(
-                "bulk_ptm_attendance_failed",
-                user_id=str(request.user.id),
-                school_id=str(school.id),
-                meeting_id=str(meeting.id),
-                reason="invalid_student_id_format",
-            )
-
-            return CustomResponse.errorResponse(
-                description="Invalid student ID."
-            )
-
-        invalid_student_ids = absent_ids - eligible_student_ids
+        invalid_student_ids = (
+            absent_ids - eligible_student_ids
+        )
 
         if invalid_student_ids:
 
@@ -891,10 +953,15 @@ class BulkPTMAttendanceAPIView(APIView):
             )
 
             return CustomResponse.errorResponse(
-                description="Some students do not belong to this meeting."
+                description=(
+                    "Some absent students do not belong "
+                    "to this meeting."
+                )
             )
 
-        present_student_ids = eligible_student_ids - absent_ids
+        present_student_ids = (
+            eligible_student_ids - absent_ids
+        )
 
         attendance_marked_at = timezone.now()
 
@@ -902,9 +969,12 @@ class BulkPTMAttendanceAPIView(APIView):
 
             with transaction.atomic():
 
-                existing_responses = ParentTeacherMeetingResponse.objects.filter(
-                    meeting=meeting,
-                    student_id__in=eligible_student_ids,
+                existing_responses = (
+                    ParentTeacherMeetingResponse.objects
+                    .filter(
+                        meeting=meeting,
+                        student_id__in=eligible_student_ids,
+                    )
                 )
 
                 response_map = {
@@ -917,10 +987,16 @@ class BulkPTMAttendanceAPIView(APIView):
 
                 for student_id in eligible_student_ids:
 
+                    response = response_map.get(
+                        student_id
+                    )
+
                     if student_id in absent_ids:
 
                         attendance_status = (
-                            ParentTeacherMeetingResponse.AttendanceStatus.ABSENT
+                            ParentTeacherMeetingResponse
+                            .AttendanceStatus
+                            .ABSENT
                         )
 
                         attended_at = None
@@ -928,19 +1004,26 @@ class BulkPTMAttendanceAPIView(APIView):
                     else:
 
                         attendance_status = (
-                            ParentTeacherMeetingResponse.AttendanceStatus.PRESENT
+                            ParentTeacherMeetingResponse
+                            .AttendanceStatus
+                            .PRESENT
                         )
 
                         attended_at = attendance_marked_at
 
-                    response = response_map.get(student_id)
-
                     if response:
 
-                        response.attendance_status = attendance_status
-                        response.attended_at = attended_at
+                        response.attendance_status = (
+                            attendance_status
+                        )
 
-                        responses_to_update.append(response)
+                        response.attended_at = (
+                            attended_at
+                        )
+
+                        responses_to_update.append(
+                            response
+                        )
 
                     else:
 
@@ -948,8 +1031,14 @@ class BulkPTMAttendanceAPIView(APIView):
                             ParentTeacherMeetingResponse(
                                 meeting=meeting,
                                 student_id=student_id,
-                                response_status=ParentTeacherMeetingResponse.ResponseStatus.PENDING,
-                                attendance_status=attendance_status,
+                                response_status=(
+                                    ParentTeacherMeetingResponse
+                                    .ResponseStatus
+                                    .PENDING
+                                ),
+                                attendance_status=(
+                                    attendance_status
+                                ),
                                 attended_at=attended_at,
                             )
                         )
@@ -977,6 +1066,7 @@ class BulkPTMAttendanceAPIView(APIView):
                 user_id=str(request.user.id),
                 school_id=str(school.id),
                 meeting_id=str(meeting.id),
+                reason="database_error",
                 error=str(e),
             )
 
@@ -989,19 +1079,41 @@ class BulkPTMAttendanceAPIView(APIView):
             user_id=str(request.user.id),
             school_id=str(school.id),
             meeting_id=str(meeting.id),
-            total_students=len(eligible_student_ids),
-            present_count=len(present_student_ids),
-            absent_count=len(absent_ids),
-            created_count=len(responses_to_create),
-            updated_count=len(responses_to_update),
+            total_students=len(
+                eligible_student_ids
+            ),
+            present_count=len(
+                present_student_ids
+            ),
+            absent_count=len(
+                absent_ids
+            ),
+            created_count=len(
+                responses_to_create
+            ),
+            updated_count=len(
+                responses_to_update
+            ),
         )
 
         return CustomResponse.successResponse(
             description="PTM attendance marked successfully.",
             data={
                 "meeting_id": str(meeting.id),
-                "total_students": len(eligible_student_ids),
-                "present_count": len(present_student_ids),
-                "absent_count": len(absent_ids),
+                "total_students": len(
+                    eligible_student_ids
+                ),
+                "present_count": len(
+                    present_student_ids
+                ),
+                "absent_count": len(
+                    absent_ids
+                ),
+                "created_count": len(
+                    responses_to_create
+                ),
+                "updated_count": len(
+                    responses_to_update
+                ),
             },
         )
