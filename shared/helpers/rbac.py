@@ -7,6 +7,7 @@ from apps.core.models import (
     UserRoles,
 )
 from shared.enums.roles import RolesEnum
+from shared.utils.logger import auth_logger
 
 CACHE_TIMEOUT = 300
 
@@ -15,24 +16,41 @@ def get_user_roles(user, school_id=None):
 
     cache_key = f"user_roles:{user.id}:{school_id}"
 
-    roles = cache.get(cache_key)
+    auth_logger.info(
+        "user_roles_fetch_started",
+        user_id=str(user.id),
+        school_id=str(school_id) if school_id else None,
+    )
 
-    if roles is None:
+    try:
 
-        queryset = UserRoles.objects.filter(
-            user=user,
+        roles = cache.get(cache_key)
+
+        if roles is not None:
+
+            auth_logger.info(
+                "user_roles_cache_hit",
+                user_id=str(user.id),
+                school_id=str(school_id) if school_id else None,
+                role_count=len(roles),
+            )
+
+            return roles
+
+        auth_logger.info(
+            "user_roles_cache_miss",
+            user_id=str(user.id),
+            school_id=str(school_id) if school_id else None,
         )
+
+        queryset = UserRoles.objects.filter(user=user)
 
         if school_id:
 
-            # Return Global + Selected School roles
             queryset = queryset.filter(
                 Q(school_id=school_id)
                 | Q(school__isnull=True)
             )
-
-        # If school_id is None, DO NOT filter.
-        # Return all roles assigned to the user.
 
         roles = list(
             queryset.values_list(
@@ -47,40 +65,114 @@ def get_user_roles(user, school_id=None):
             CACHE_TIMEOUT,
         )
 
-    return roles
+        auth_logger.info(
+            "user_roles_fetched",
+            user_id=str(user.id),
+            school_id=str(school_id) if school_id else None,
+            role_count=len(roles),
+            roles=roles,
+        )
+
+        return roles
+
+    except Exception as e:
+
+        auth_logger.exception(
+            "user_roles_fetch_failed",
+            user_id=str(user.id),
+            school_id=str(school_id) if school_id else None,
+            error=str(e),
+        )
+
+        raise
 
 
+def has_role(user, role_name, school_id=None):
 
-def has_role(
-    user,
-    role_name,
-    school_id=None,
-):
-
-    return role_name in get_user_roles(
-        user=user,
-        school_id=school_id,
+    auth_logger.info(
+        "role_check_started",
+        user_id=str(user.id),
+        school_id=str(school_id) if school_id else None,
+        required_role=str(role_name),
     )
 
+    try:
 
-def get_user_permissions(
-    user,
-    school_id=None,
-):
+        roles = get_user_roles(
+            user=user,
+            school_id=school_id,
+        )
+
+        result = role_name in roles
+
+        if result:
+
+            auth_logger.info(
+                "role_check_allowed",
+                user_id=str(user.id),
+                school_id=str(school_id) if school_id else None,
+                required_role=str(role_name),
+            )
+
+        else:
+
+            auth_logger.warning(
+                "role_check_denied",
+                user_id=str(user.id),
+                school_id=str(school_id) if school_id else None,
+                required_role=str(role_name),
+                user_roles=roles,
+            )
+
+        return result
+
+    except Exception as e:
+
+        auth_logger.exception(
+            "role_check_failed",
+            user_id=str(user.id),
+            school_id=str(school_id) if school_id else None,
+            required_role=str(role_name),
+            error=str(e),
+        )
+
+        raise
+
+
+def get_user_permissions(user, school_id=None):
 
     cache_key = f"user_permissions:{user.id}:{school_id}"
 
-    permissions = cache.get(cache_key)
+    auth_logger.info(
+        "user_permissions_fetch_started",
+        user_id=str(user.id),
+        school_id=str(school_id) if school_id else None,
+    )
 
-    if permissions is None:
+    try:
 
-        role_queryset = UserRoles.objects.filter(
-            user=user
+        permissions = cache.get(cache_key)
+
+        if permissions is not None:
+
+            auth_logger.info(
+                "user_permissions_cache_hit",
+                user_id=str(user.id),
+                school_id=str(school_id) if school_id else None,
+                permission_count=len(permissions),
+            )
+
+            return permissions
+
+        auth_logger.info(
+            "user_permissions_cache_miss",
+            user_id=str(user.id),
+            school_id=str(school_id) if school_id else None,
         )
 
-        direct_queryset = UserPermissions.objects.filter(
-            user=user
-        )
+        role_queryset = UserRoles.objects.filter(user=user)
+
+        direct_queryset = UserPermissions.objects.filter(user=user)
 
         if school_id:
 
@@ -117,67 +209,188 @@ def get_user_permissions(
             CACHE_TIMEOUT,
         )
 
-    return permissions
-
-
-def has_permission(
-    user,
-    permission_name,
-    school_id=None,
-):
-
-    # SUPERADMIN bypass
-    if has_role(
-        user=user,
-        role_name=RolesEnum.SUPERADMIN,
-    ):
-        return True
-
-    permissions = get_user_permissions(
-        user=user,
-        school_id=school_id,
-    )
-
-    return permission_name in permissions
-
-
-def check_permission(
-    request,
-    permission_name,
-    school_id=None,
-):
-    """
-    Raise PermissionDenied if permission is missing.
-    """
-
-    if not has_permission(
-        request.user,
-        permission_name,
-        school_id,
-    ):
-        raise PermissionDenied(
-            detail="You don't have permission to perform this action."
+        auth_logger.info(
+            "user_permissions_fetched",
+            user_id=str(user.id),
+            school_id=str(school_id) if school_id else None,
+            permission_count=len(permissions),
         )
 
+        return permissions
 
-def clear_user_access_cache(
-    user,
-    school_id=None,
-):
-    """
-    Clear RBAC cache.
+    except Exception as e:
 
-    Call after:
-    - Role assignment
-    - Role removal
-    - Permission assignment
-    - Permission removal
-    """
+        auth_logger.exception(
+            "user_permissions_fetch_failed",
+            user_id=str(user.id),
+            school_id=str(school_id) if school_id else None,
+            error=str(e),
+        )
 
-    cache.delete(
-        f"user_roles:{user.id}:{school_id}"
+        raise
+
+
+def has_permission(user, permission_name, school_id=None):
+
+    auth_logger.info(
+        "user_permission_check_started",
+        user_id=str(user.id),
+        school_id=str(school_id) if school_id else None,
+        required_permission=permission_name,
     )
 
-    cache.delete(
-        f"user_permissions:{user.id}:{school_id}"
+    try:
+
+        is_superadmin = has_role(
+            user=user,
+            role_name=RolesEnum.SUPERADMIN,
+        )
+
+        if is_superadmin:
+
+            auth_logger.info(
+                "user_permission_check_allowed",
+                user_id=str(user.id),
+                school_id=str(school_id) if school_id else None,
+                required_permission=permission_name,
+                reason="superadmin_bypass",
+            )
+
+            return True
+
+        permissions = get_user_permissions(
+            user=user,
+            school_id=school_id,
+        )
+
+        result = permission_name in permissions
+
+        if result:
+
+            auth_logger.info(
+                "user_permission_check_allowed",
+                user_id=str(user.id),
+                school_id=str(school_id) if school_id else None,
+                required_permission=permission_name,
+                reason="permission_assigned",
+            )
+
+        else:
+
+            auth_logger.warning(
+                "user_permission_check_denied",
+                user_id=str(user.id),
+                school_id=str(school_id) if school_id else None,
+                required_permission=permission_name,
+                permission_count=len(permissions),
+                reason="permission_not_assigned",
+            )
+
+        return result
+
+    except Exception as e:
+
+        auth_logger.exception(
+            "user_permission_check_failed",
+            user_id=str(user.id),
+            school_id=str(school_id) if school_id else None,
+            required_permission=permission_name,
+            error=str(e),
+        )
+
+        raise
+
+
+def check_permission(request, permission_name, school_id=None):
+
+    auth_logger.info(
+        "explicit_permission_check_started",
+        user_id=str(request.user.id),
+        school_id=str(school_id) if school_id else None,
+        required_permission=permission_name,
+        request_method=request.method,
+        request_path=request.path,
     )
+
+    try:
+
+        result = has_permission(
+            user=request.user,
+            permission_name=permission_name,
+            school_id=school_id,
+        )
+
+        if not result:
+
+            auth_logger.warning(
+                "explicit_permission_check_denied",
+                user_id=str(request.user.id),
+                school_id=str(school_id) if school_id else None,
+                required_permission=permission_name,
+                request_method=request.method,
+                request_path=request.path,
+            )
+
+            raise PermissionDenied(
+                detail="You don't have permission to perform this action."
+            )
+
+        auth_logger.info(
+            "explicit_permission_check_allowed",
+            user_id=str(request.user.id),
+            school_id=str(school_id) if school_id else None,
+            required_permission=permission_name,
+        )
+
+        return True
+
+    except PermissionDenied:
+        raise
+
+    except Exception as e:
+
+        auth_logger.exception(
+            "explicit_permission_check_failed",
+            user_id=str(request.user.id),
+            school_id=str(school_id) if school_id else None,
+            required_permission=permission_name,
+            error=str(e),
+        )
+
+        raise
+
+
+def clear_user_access_cache(user, school_id=None):
+
+    role_cache_key = f"user_roles:{user.id}:{school_id}"
+    permission_cache_key = f"user_permissions:{user.id}:{school_id}"
+
+    auth_logger.info(
+        "user_access_cache_clear_started",
+        user_id=str(user.id),
+        school_id=str(school_id) if school_id else None,
+    )
+
+    try:
+
+        cache.delete_many([
+            role_cache_key,
+            permission_cache_key,
+        ])
+
+        auth_logger.info(
+            "user_access_cache_cleared",
+            user_id=str(user.id),
+            school_id=str(school_id) if school_id else None,
+        )
+
+    except Exception as e:
+
+        auth_logger.exception(
+            "user_access_cache_clear_failed",
+            user_id=str(user.id),
+            school_id=str(school_id) if school_id else None,
+            error=str(e),
+        )
+
+        raise
