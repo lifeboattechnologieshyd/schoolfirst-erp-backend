@@ -82,6 +82,8 @@ if "apps.fee" in settings.INSTALLED_APPS:
     urlpatterns.append(path("fee/", include("apps.fee.urls")))
 if "apps.payment" in settings.INSTALLED_APPS:
     urlpatterns.append(path("payment/", include("apps.payment.urls")))
+if "apps.ptm" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("ptm/", include("apps.ptm.urls")))
 
 
 ####################################
