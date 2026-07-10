@@ -1,8 +1,11 @@
+from uuid import UUID
+
+from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.ptm.models import ParentTeacherMeeting, ParentTeacherMeetingSection
-from apps.school.models.school import AcademicYear, Branch, Grade, Section
+from apps.ptm.models import ParentTeacherMeeting, ParentTeacherMeetingSection, ParentTeacherMeetingResponse
+from apps.school.models.school import AcademicYear, Branch, Grade, Section, Student
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
@@ -712,5 +715,293 @@ class UpdateParentTeacherMeetingAPIView(APIView):
             data={
                 "id": str(meeting.id),
                 "title": meeting.title,
+            },
+        )
+
+
+class BulkPTMAttendanceAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "ptm.attendance"
+
+    def put(self, request, meeting_id):
+
+        school = request.school
+        absent_student_ids = request.data.get("absent_student_ids", [])
+
+        application_logger.info(
+            "bulk_ptm_attendance_started",
+            user_id=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            meeting_id=str(meeting_id),
+            absent_count=len(absent_student_ids) if isinstance(absent_student_ids, list) else None,
+        )
+
+        if school is None:
+
+            application_logger.warning(
+                "bulk_ptm_attendance_failed",
+                user_id=str(request.user.id),
+                meeting_id=str(meeting_id),
+                reason="school_not_found",
+            )
+
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        if not isinstance(absent_student_ids, list):
+
+            application_logger.warning(
+                "bulk_ptm_attendance_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                meeting_id=str(meeting_id),
+                reason="absent_student_ids_not_list",
+            )
+
+            return CustomResponse.errorResponse(
+                description="absent_student_ids must be a list."
+            )
+
+        meeting = ParentTeacherMeeting.objects.select_related(
+            "academic_year",
+            "branch",
+            "grade",
+        ).filter(
+            id=meeting_id,
+            school=school,
+        ).exclude(
+            status__in=[
+                ParentTeacherMeeting.Status.DRAFT,
+                ParentTeacherMeeting.Status.CANCELLED,
+            ]
+        ).first()
+
+        if meeting is None:
+
+            application_logger.warning(
+                "bulk_ptm_attendance_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                meeting_id=str(meeting_id),
+                reason="meeting_not_found",
+            )
+
+            return CustomResponse.errorResponse(
+                description="Parent teacher meeting not found."
+            )
+
+        section_ids = list(
+            ParentTeacherMeetingSection.objects.filter(
+                meeting=meeting
+            ).values_list(
+                "section_id",
+                flat=True,
+            )
+        )
+
+        if not section_ids:
+
+            application_logger.warning(
+                "bulk_ptm_attendance_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                meeting_id=str(meeting.id),
+                reason="meeting_sections_not_found",
+            )
+
+            return CustomResponse.errorResponse(
+                description="No sections configured for this meeting."
+            )
+
+        students = Student.objects.filter(
+            school=school,
+            academic_year=meeting.academic_year,
+            grade=meeting.grade,
+            section_id__in=section_ids,
+            status=Student.Status.ACTIVE,
+        )
+
+        if meeting.branch_id:
+            students = students.filter(
+                branch_id=meeting.branch_id
+            )
+
+        eligible_student_ids = set(
+            students.values_list(
+                "id",
+                flat=True,
+            )
+        )
+
+        if not eligible_student_ids:
+
+            application_logger.warning(
+                "bulk_ptm_attendance_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                meeting_id=str(meeting.id),
+                reason="eligible_students_not_found",
+            )
+
+            return CustomResponse.errorResponse(
+                description="No eligible students found for this meeting."
+            )
+
+        try:
+
+            absent_ids = {
+                UUID(str(student_id))
+                for student_id in absent_student_ids
+            }
+
+        except (ValueError, TypeError, AttributeError):
+
+            application_logger.warning(
+                "bulk_ptm_attendance_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                meeting_id=str(meeting.id),
+                reason="invalid_student_id_format",
+            )
+
+            return CustomResponse.errorResponse(
+                description="Invalid student ID."
+            )
+
+        invalid_student_ids = absent_ids - eligible_student_ids
+
+        if invalid_student_ids:
+
+            application_logger.warning(
+                "bulk_ptm_attendance_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                meeting_id=str(meeting.id),
+                reason="students_not_eligible",
+                invalid_student_ids=[
+                    str(student_id)
+                    for student_id in invalid_student_ids
+                ],
+            )
+
+            return CustomResponse.errorResponse(
+                description="Some students do not belong to this meeting."
+            )
+
+        present_student_ids = eligible_student_ids - absent_ids
+
+        attendance_marked_at = timezone.now()
+
+        try:
+
+            with transaction.atomic():
+
+                existing_responses = ParentTeacherMeetingResponse.objects.filter(
+                    meeting=meeting,
+                    student_id__in=eligible_student_ids,
+                )
+
+                response_map = {
+                    response.student_id: response
+                    for response in existing_responses
+                }
+
+                responses_to_create = []
+                responses_to_update = []
+
+                for student_id in eligible_student_ids:
+
+                    if student_id in absent_ids:
+
+                        attendance_status = (
+                            ParentTeacherMeetingResponse.AttendanceStatus.ABSENT
+                        )
+
+                        attended_at = None
+
+                    else:
+
+                        attendance_status = (
+                            ParentTeacherMeetingResponse.AttendanceStatus.PRESENT
+                        )
+
+                        attended_at = attendance_marked_at
+
+                    response = response_map.get(student_id)
+
+                    if response:
+
+                        response.attendance_status = attendance_status
+                        response.attended_at = attended_at
+
+                        responses_to_update.append(response)
+
+                    else:
+
+                        responses_to_create.append(
+                            ParentTeacherMeetingResponse(
+                                meeting=meeting,
+                                student_id=student_id,
+                                response_status=ParentTeacherMeetingResponse.ResponseStatus.PENDING,
+                                attendance_status=attendance_status,
+                                attended_at=attended_at,
+                            )
+                        )
+
+                if responses_to_create:
+
+                    ParentTeacherMeetingResponse.objects.bulk_create(
+                        responses_to_create
+                    )
+
+                if responses_to_update:
+
+                    ParentTeacherMeetingResponse.objects.bulk_update(
+                        responses_to_update,
+                        [
+                            "attendance_status",
+                            "attended_at",
+                        ],
+                    )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "bulk_ptm_attendance_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                meeting_id=str(meeting.id),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(e)
+            )
+
+        application_logger.info(
+            "bulk_ptm_attendance_completed",
+            user_id=str(request.user.id),
+            school_id=str(school.id),
+            meeting_id=str(meeting.id),
+            total_students=len(eligible_student_ids),
+            present_count=len(present_student_ids),
+            absent_count=len(absent_ids),
+            created_count=len(responses_to_create),
+            updated_count=len(responses_to_update),
+        )
+
+        return CustomResponse.successResponse(
+            description="PTM attendance marked successfully.",
+            data={
+                "meeting_id": str(meeting.id),
+                "total_students": len(eligible_student_ids),
+                "present_count": len(present_student_ids),
+                "absent_count": len(absent_ids),
             },
         )

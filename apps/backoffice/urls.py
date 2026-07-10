@@ -14,7 +14,7 @@ from apps.backoffice.views.fee import CreateFeeTypeAPIView, FeeTypeListAPIView, 
 from apps.backoffice.views.leads import \
     SchoolLeadRequestOTPAPIView, SchoolLeadListAPIView, SchoolLeadVerifyOTPAPIView
 from apps.backoffice.views.ptm import CreateParentTeacherMeetingAPIView, ParentTeacherMeetingListAPIView, \
-    UpdateParentTeacherMeetingAPIView
+    UpdateParentTeacherMeetingAPIView, BulkPTMAttendanceAPIView
 from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCreateAPIView, RoleListCreateAPIView, \
     AssignPermissionsToRoleAPIView, AssignRoleToUserAPIView, RBACDashboardAPIView, UserAccessAPIView, ModulesAPIView, \
     ModulePermissionsAPIView, RolesAPIView, RoleAccessAPIView
@@ -262,6 +262,8 @@ urlpatterns = [
     path("ptm",ParentTeacherMeetingListAPIView.as_view(),),
 
     path("ptm/<uuid:meeting_id>",UpdateParentTeacherMeetingAPIView.as_view(),),
+
+    path("ptm/attendance",BulkPTMAttendanceAPIView.as_view(),),
 
 
 
