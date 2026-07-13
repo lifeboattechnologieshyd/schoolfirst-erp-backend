@@ -44,6 +44,7 @@ class StudentPTMListAPIView(APIView):
                 "academic_year",
                 "grade",
                 "section",
+                "section__class_teacher",
             ).filter(
                 id=student_id,
                 status=Student.Status.ACTIVE,
@@ -182,6 +183,15 @@ class StudentPTMListAPIView(APIView):
                         "id": str(student.id),
                         "name": student.name,
                         "admission_number": student.admission_number,
+                        "class_teacher": (
+                            {
+                                "id": str(student.section.class_teacher.id),
+                                "name": student.section.class_teacher.name,
+                            }
+                            if student.section.class_teacher
+                            else None
+
+                        ),
                     },
                     "meetings": data,
                 },
