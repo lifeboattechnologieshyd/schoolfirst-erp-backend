@@ -18,7 +18,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.core.models import UserOTP, UserMaster, UserRoles, UserDeviceSession
+from apps.core.models import UserOTP, UserMaster, UserRoles, UserDeviceSession, Roles
 from django.db import transaction
 
 from apps.school.models.school import Student
@@ -715,6 +715,15 @@ class VerifyOTPAPIView(APIView):
                     | Q(mother_mobile=mobile)
                     | Q(guardian_mobile=mobile)
                 )
+                if students.exists():
+                    role = Roles.objects.filter(
+                        role_name=RolesEnum.PARENT,
+                    ).first()
+                    UserRoles.objects.get_or_create(
+                        user=user,
+                        role=role,
+                        school=None,
+                    )
 
                 student_count = students.count()
 
@@ -723,6 +732,7 @@ class VerifyOTPAPIView(APIView):
                     user_id=str(user.id),
                     mobile=mobile,
                     student_count=student_count,
+                    user_role = role
                 )
 
                 refresh = RefreshToken.for_user(user)
