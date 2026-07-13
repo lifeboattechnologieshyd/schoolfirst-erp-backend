@@ -709,6 +709,7 @@ class VerifyOTPAPIView(APIView):
                     "grade",
                     "section",
                     "academic_year",
+                    "school"
                 ).filter(
                     Q(father_mobile=mobile)
                     | Q(mother_mobile=mobile)
@@ -774,6 +775,10 @@ class VerifyOTPAPIView(APIView):
                         "photo_url": student.photo_url,
                         "gender": student.gender,
                         "date_of_birth": student.date_of_birth,
+                        "school":{
+                            "id": str(student.school.id),
+                            "name": student.school.name,
+                        },
                         "grade": {
                             "id": str(student.grade.id),
                             "name": student.grade.name,
