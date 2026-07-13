@@ -1,5 +1,7 @@
 from django.urls import path
 
+from apps.backoffice.views.events import CreateCalendarEventAPIView, CalendarEventListAPIView, \
+    UpdateCalendarEventAPIView
 from apps.backoffice.views.fee import CreateFeeTypeAPIView, FeeTypeListAPIView, UpdateFeeTypeAPIView, \
     DeleteFeeTypeAPIView, CreateFeeTemplateAPIView, FeeTemplateListAPIView, FeeTemplateDetailAPIView, \
     UpdateFeeTemplateAPIView, DeleteFeeTemplateAPIView, CreateFeeTemplateItemAPIView, FeeTemplateItemListAPIView, \
@@ -264,6 +266,18 @@ urlpatterns = [
     path("ptm/<uuid:meeting_id>",UpdateParentTeacherMeetingAPIView.as_view(),),
 
     path("ptm/attendance",BulkPTMAttendanceAPIView.as_view(),),
+
+    # ====================================
+    #  calendar APIs
+    # ====================================
+
+    path("event/create",CreateCalendarEventAPIView.as_view(),),
+
+    path("event",CalendarEventListAPIView.as_view(),),
+
+    path("event/<uuid:event_id>",UpdateCalendarEventAPIView.as_view(),),
+
+
 
 
 

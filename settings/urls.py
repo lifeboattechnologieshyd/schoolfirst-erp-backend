@@ -84,6 +84,8 @@ if "apps.payment" in settings.INSTALLED_APPS:
     urlpatterns.append(path("payment/", include("apps.payment.urls")))
 if "apps.ptm" in settings.INSTALLED_APPS:
     urlpatterns.append(path("ptm/", include("apps.ptm.urls")))
+if "apps.calendar" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("calendar/", include("apps.calendar.urls")))
 
 
 ####################################
