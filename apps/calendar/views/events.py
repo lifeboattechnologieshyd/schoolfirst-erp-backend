@@ -2,7 +2,7 @@ from django.db.models import Prefetch, Q
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.calendar.models import CalendarEventTarget
+from apps.calendar.models import CalendarEventTarget, CalendarEvent
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
