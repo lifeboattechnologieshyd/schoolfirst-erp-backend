@@ -1,12 +1,14 @@
 import uuid
 from uuid import UUID
+from django.db.models import Prefetch
 
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.ptm.models import ParentTeacherMeeting, ParentTeacherMeetingSection, ParentTeacherMeetingResponse
-from apps.school.models.school import AcademicYear, Branch, Grade, Section, Student
+from apps.ptm.models import ParentTeacherMeeting, ParentTeacherMeetingSection, ParentTeacherMeetingResponse, \
+    ParentTeacherMeetingStaff
+from apps.school.models.school import AcademicYear, Branch, Grade, Section, Student, Staff
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
@@ -157,6 +159,65 @@ class CreateParentTeacherMeetingAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="One or more sections are invalid."
             )
+        staffs_payload = request.data.get("staffs", [])
+
+        if not isinstance(staffs_payload, list):
+            return CustomResponse.errorResponse(
+                description="staffs must be a list."
+            )
+
+        host_count = 0
+        meeting_staffs = []
+
+        for item in staffs_payload:
+
+            if not isinstance(item, dict):
+                return CustomResponse.errorResponse(
+                    description="Invalid staff payload."
+                )
+
+            staff_id = item.get("staff_id")
+
+            if not staff_id:
+                return CustomResponse.errorResponse(
+                    description="staff_id is required."
+                )
+
+            responsibility = item.get(
+                "responsibility",
+                ParentTeacherMeetingStaff.Responsibility.PARTICIPANT,
+            )
+
+            if responsibility not in ParentTeacherMeetingStaff.Responsibility.values:
+                return CustomResponse.errorResponse(
+                    description=f"Invalid responsibility '{responsibility}'."
+                )
+
+            if responsibility == ParentTeacherMeetingStaff.Responsibility.HOST:
+                host_count += 1
+
+            staff = Staff.objects.filter(
+                id=staff_id,
+                school=school,
+                status=Staff.Status.ACTIVE,
+            ).first()
+
+            if staff is None:
+                return CustomResponse.errorResponse(
+                    description=f"Invalid staff '{staff_id}'."
+                )
+
+            meeting_staffs.append(
+                {
+                    "staff": staff,
+                    "responsibility": responsibility,
+                }
+            )
+
+        if host_count != 1:
+            return CustomResponse.errorResponse(
+                description="Exactly one host is required."
+            )
 
         meeting_type = request.data.get("meeting_type")
 
@@ -245,6 +306,16 @@ class CreateParentTeacherMeetingAPIView(APIView):
                         for section in sections
                     ]
                 )
+                ParentTeacherMeetingStaff.objects.bulk_create(
+                    [
+                        ParentTeacherMeetingStaff(
+                            meeting=meeting,
+                            staff=item["staff"],
+                            responsibility=item["responsibility"],
+                        )
+                        for item in meeting_staffs
+                    ]
+                )
 
         except Exception as e:
 
@@ -317,7 +388,14 @@ class ParentTeacherMeetingListAPIView(APIView):
             "branch",
             "grade",
         ).prefetch_related(
-            "meeting_sections__section",
+            Prefetch(
+                "meeting_sections",
+                queryset=ParentTeacherMeetingSection.objects.select_related("section"),
+            ),
+            Prefetch(
+                "meeting_staffs",
+                queryset=ParentTeacherMeetingStaff.objects.select_related("staff"),
+            ),
         ).filter(
             school=school,
         )
@@ -416,6 +494,19 @@ class ParentTeacherMeetingListAPIView(APIView):
                     }
                     for item in meeting.meeting_sections.all()
                 ],
+                "staffs": [
+                    {
+                        "id": str(item.staff.id),
+                        "employee_id": item.staff.employee_id,
+                        "name": item.staff.name,
+                        "staff_type": item.staff.staff_type,
+                        "responsibility": item.responsibility,
+                        "mobile": item.staff.mobile,
+                        "profile_image": item.staff.profile_image,
+                    }
+                    for item in meeting.meeting_staffs.all()
+                ],
+                "created_at": meeting.created_at,
             })
 
         application_logger.info(
@@ -581,6 +672,66 @@ class UpdateParentTeacherMeetingAPIView(APIView):
                     )
                 )
 
+        staffs_payload = request.data.get("staffs")
+
+        meeting_staffs = None
+
+        if staffs_payload is not None:
+
+            if not isinstance(staffs_payload, list):
+                return CustomResponse.errorResponse(
+                    description="staffs must be a list."
+                )
+
+            host_count = 0
+            meeting_staffs = []
+
+            for item in staffs_payload:
+
+                staff_id = item.get("staff_id")
+
+                if not staff_id:
+                    return CustomResponse.errorResponse(
+                        description="staff_id is required."
+                    )
+
+                responsibility = item.get(
+                    "responsibility",
+                    ParentTeacherMeetingStaff.Responsibility.PARTICIPANT,
+                )
+
+                if responsibility not in ParentTeacherMeetingStaff.Responsibility.values:
+                    return CustomResponse.errorResponse(
+                        description="Invalid responsibility."
+                    )
+
+                if responsibility == ParentTeacherMeetingStaff.Responsibility.HOST:
+                    host_count += 1
+
+                staff = Staff.objects.filter(
+                    id=staff_id,
+                    school=school,
+                    status=Staff.Status.ACTIVE,
+                ).first()
+
+                if staff is None:
+                    return CustomResponse.errorResponse(
+                        description="Invalid staff."
+                    )
+
+                meeting_staffs.append(
+                    ParentTeacherMeetingStaff(
+                        meeting=meeting,
+                        staff=staff,
+                        responsibility=responsibility,
+                    )
+                )
+
+            if host_count != 1:
+                return CustomResponse.errorResponse(
+                    description="Exactly one host is required."
+                )
+
         meeting_type = request.data.get(
             "meeting_type",
             meeting.meeting_type,
@@ -670,6 +821,14 @@ class UpdateParentTeacherMeetingAPIView(APIView):
                 meeting.location = location
                 meeting.meeting_link = meeting_link
                 meeting.status = meeting_status
+                if meeting_staffs is not None:
+                    ParentTeacherMeetingStaff.objects.filter(
+                        meeting=meeting,
+                    ).delete()
+
+                    ParentTeacherMeetingStaff.objects.bulk_create(
+                        meeting_staffs,
+                    )
 
                 meeting.save()
 

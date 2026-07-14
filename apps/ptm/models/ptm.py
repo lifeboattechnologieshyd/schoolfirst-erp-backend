@@ -2,6 +2,7 @@ import uuid
 
 from django.db import models
 
+from apps.school.models.school import Staff
 from shared.managers import SoftDeleteManager
 from shared.mixins import AuditModel
 
@@ -126,6 +127,51 @@ class ParentTeacherMeeting(AuditModel):
         ordering = [
             "-meeting_date",
             "-start_time",
+        ]
+
+class ParentTeacherMeetingStaff(AuditModel):
+
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    class Responsibility(models.TextChoices):
+        HOST = "HOST", "Host"
+        PARTICIPANT = "PARTICIPANT", "Participant"
+        OBSERVER = "OBSERVER", "Observer"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    meeting = models.ForeignKey(
+        ParentTeacherMeeting,
+        on_delete=models.CASCADE,
+        related_name="meeting_staffs",
+    )
+
+    staff = models.ForeignKey(
+        Staff,
+        on_delete=models.CASCADE,
+        related_name="ptm_meetings",
+    )
+
+    responsibility = models.CharField(
+        max_length=20,
+        choices=Responsibility.choices,
+        default=Responsibility.PARTICIPANT,
+    )
+
+    class Meta:
+
+        db_table = "parent_teacher_meeting_staffs"
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["meeting", "staff"],
+                name="unique_staff_per_ptm",
+            )
         ]
 
 

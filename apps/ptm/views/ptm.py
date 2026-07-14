@@ -1,9 +1,11 @@
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.ptm.models import ParentTeacherMeeting, ParentTeacherMeetingResponse
+from apps.ptm.models import ParentTeacherMeeting, ParentTeacherMeetingResponse, ParentTeacherMeetingSection, \
+    ParentTeacherMeetingStaff
 from apps.school.models.school import Student
 from shared.mixins import CustomResponse
 from shared.utils.logger import application_logger
@@ -79,7 +81,18 @@ class StudentPTMListAPIView(APIView):
                 "branch",
                 "grade",
             ).prefetch_related(
-                "meeting_sections__section",
+                Prefetch(
+                    "meeting_sections",
+                    queryset=ParentTeacherMeetingSection.objects.select_related(
+                        "section",
+                    ),
+                ),
+                Prefetch(
+                    "meeting_staffs",
+                    queryset=ParentTeacherMeetingStaff.objects.select_related(
+                        "staff",
+                    ),
+                ),
             ).filter(
                 school_id=student.school_id,
                 academic_year_id=student.academic_year_id,
@@ -150,6 +163,19 @@ class StudentPTMListAPIView(APIView):
                         "id": str(student.section.id),
                         "name": student.section.name,
                     },
+                    "staffs": [
+                        {
+                            "id": str(item.staff.id),
+                            "name": item.staff.name,
+                            "staff_type": item.staff.get_staff_type_display(),
+                            "profile_image": item.staff.profile_image,
+                            "is_host": (
+                                    item.responsibility ==
+                                    ParentTeacherMeetingStaff.Responsibility.HOST
+                            ),
+                        }
+                        for item in meeting.meeting_staffs.all()
+                    ],
                     "response": {
                         "response_status": (
                             response.response_status
