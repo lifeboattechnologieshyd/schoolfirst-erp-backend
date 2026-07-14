@@ -86,6 +86,8 @@ if "apps.ptm" in settings.INSTALLED_APPS:
     urlpatterns.append(path("ptm/", include("apps.ptm.urls")))
 if "apps.calendar" in settings.INSTALLED_APPS:
     urlpatterns.append(path("calendar/", include("apps.calendar.urls")))
+if "apps.homework" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("homework/", include("apps.homework.urls")))
 
 
 ####################################

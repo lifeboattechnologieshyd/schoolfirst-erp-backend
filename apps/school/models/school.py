@@ -1180,3 +1180,69 @@ class StaffDocument(AuditModel):
 
     def __str__(self):
         return f"{self.staff.name} - {self.document_type}"
+
+
+class Subject(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE", "Active"
+        INACTIVE = "INACTIVE", "Inactive"
+
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
+    school = models.ForeignKey( School,on_delete=models.CASCADE,related_name="subjects",)
+    branch = models.ForeignKey(Branch,on_delete=models.SET_NULL,null=True,blank=True,related_name="subjects",)
+    academic_year = models.ForeignKey(AcademicYear,on_delete=models.CASCADE,related_name="subjects",)
+    name = models.CharField(max_length=100,)
+    description = models.TextField(null=True,blank=True,)
+    status = models.CharField(max_length=20,choices=Status.choices,default=Status.ACTIVE,)
+
+    class Meta:
+
+        db_table = "subjects"
+        ordering = ["name",]
+        constraints = [models.UniqueConstraint(
+                fields=[
+                    "school",
+                    "academic_year",
+                    "name",
+                ],
+                name="unique_subject_per_school",
+            ),
+        ]
+
+        indexes = [models.Index(fields=["school"],),
+                   models.Index(fields=["academic_year"],),
+                   models.Index(fields=["branch"],),
+                   models.Index(fields=["status"],),
+                   models.Index(fields=["school","academic_year",],),
+                   models.Index(fields=["school","branch",
+                ],
+            ),
+        ]
+
+    def __str__(self):
+
+        return self.name
+
+class SubjectGrade(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False,)
+    subject = models.ForeignKey(Subject,on_delete=models.CASCADE,related_name="subject_grades",)
+    grade = models.ForeignKey(Grade,on_delete=models.CASCADE,related_name="grade_subjects",)
+
+    class Meta:
+        db_table = "subject_grades"
+        constraints = [
+            models.UniqueConstraint(fields=["subject","grade",
+                ],
+                name="unique_subject_grade",
+            )
+        ]
+
+        indexes = [models.Index(fields=["subject"],),
+                   models.Index(fields=["grade"],),
+        ]
