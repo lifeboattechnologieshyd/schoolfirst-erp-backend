@@ -7,7 +7,7 @@ from apps.core.models import Roles, UserMaster, UserRoles
 from apps.fee.models import FeeTemplate, StudentFeeAssignment, FeeConcession
 from apps.school.models import School
 from apps.school.models.school import AcademicYear, Grade, Section, Student, StudentDocument, Staff, StaffDocument, \
-    Branch
+    Branch, Subject
 from shared.enums.roles import RolesEnum
 from shared.helpers.rbac import check_permission
 from shared.helpers.student import get_or_create_parent
@@ -2926,3 +2926,399 @@ class UpdateStaffDocumentAPIView(APIView):
                 "remarks": document.remarks,
             },
         )
+
+class CreateSubjectAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = "subject.create"
+
+    def post(self, request):
+
+        school = request.school
+
+        application_logger.info(
+            "subject_create_started",
+            user_id=str(request.user.id),
+            school_id=str(school.id) if school else None,
+        )
+
+        try:
+
+            if school is None:
+
+                application_logger.warning(
+                    "subject_create_failed",
+                    reason="school_not_found",
+                    user_id=str(request.user.id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="School not found."
+                )
+
+            academic_year_id = request.data.get("academic_year_id")
+            name = request.data.get("name")
+
+            if not academic_year_id:
+
+                return CustomResponse.errorResponse(
+                    description="academic_year_id is required."
+                )
+
+            if not name:
+
+                return CustomResponse.errorResponse(
+                    description="name is required."
+                )
+
+            academic_year = AcademicYear.objects.filter(
+                id=academic_year_id,
+                school=school,
+            ).first()
+
+            if academic_year is None:
+
+                application_logger.warning(
+                    "subject_create_failed",
+                    school_id=str(school.id),
+                    academic_year_id=str(academic_year_id),
+                    reason="academic_year_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Academic year not found."
+                )
+
+            if Subject.objects.filter(
+                school=school,
+                academic_year=academic_year,
+                name__iexact=name.strip(),
+            ).exists():
+
+                application_logger.warning(
+                    "subject_create_failed",
+                    school_id=str(school.id),
+                    academic_year_id=str(academic_year.id),
+                    subject_name=name,
+                    reason="subject_already_exists",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Subject already exists."
+                )
+
+            with transaction.atomic():
+
+                subject = Subject.objects.create(
+                    school=school,
+                    academic_year=academic_year,
+                    name=name.strip(),
+                    description=request.data.get("description"),
+                    status=request.data.get(
+                        "status",
+                        Subject.Status.ACTIVE,
+                    ),
+                )
+
+            application_logger.info(
+                "subject_created",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                academic_year_id=str(academic_year.id),
+                subject_id=str(subject.id),
+            )
+
+            return CustomResponse.successResponse(
+                description="Subject created successfully.",
+                data={
+                    "id": str(subject.id),
+                    "name": subject.name,
+                    "description": subject.description,
+                    "status": subject.status,
+                    "academic_year": {
+                        "id": str(academic_year.id),
+                        "name": academic_year.name,
+                    },
+                },
+            )
+
+        except Exception:
+
+            application_logger.exception(
+                "subject_create_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id) if school else None,
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while creating subject."
+            )
+
+
+
+
+class SubjectListAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = "subject.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        application_logger.info(
+            "subject_list_started",
+            user_id=str(request.user.id),
+            school_id=str(school.id) if school else None,
+        )
+
+        try:
+
+            if school is None:
+
+                application_logger.warning(
+                    "subject_list_failed",
+                    reason="school_not_found",
+                    user_id=str(request.user.id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="School not found."
+                )
+
+            subjects = Subject.objects.select_related(
+                "academic_year",
+            ).filter(
+                school=school,
+            )
+
+            academic_year_id = request.query_params.get(
+                "academic_year_id"
+            )
+
+            status = request.query_params.get(
+                "status"
+            )
+
+            search = request.query_params.get(
+                "search"
+            )
+
+            if academic_year_id:
+
+                subjects = subjects.filter(
+                    academic_year_id=academic_year_id,
+                )
+
+            if status:
+
+                subjects = subjects.filter(
+                    status=status,
+                )
+
+            if search:
+
+                subjects = subjects.filter(
+                    name__icontains=search.strip(),
+                )
+
+            subjects = subjects.order_by(
+                "name",
+            )
+
+            data = []
+
+            for subject in subjects:
+
+                data.append({
+                    "id": str(subject.id),
+                    "name": subject.name,
+                    "description": subject.description,
+                    "status": subject.status,
+                    "academic_year": {
+                        "id": str(subject.academic_year.id),
+                        "name": subject.academic_year.name,
+                    },
+                })
+
+            application_logger.info(
+                "subject_list_fetched",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                total_count=len(data),
+            )
+
+            return CustomResponse.successResponse(
+                description="Subjects fetched successfully.",
+                data=data,
+                total_count=len(data),
+            )
+
+        except Exception:
+
+            application_logger.exception(
+                "subject_list_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id) if school else None,
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while fetching subjects."
+            )
+
+class SubjectUpdateAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = "subject.update"
+
+    def put(self, request, subject_id):
+
+        school = request.school
+
+        application_logger.info(
+            "subject_update_started",
+            user_id=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            subject_id=str(subject_id),
+        )
+
+        try:
+
+            if school is None:
+
+                application_logger.warning(
+                    "subject_update_failed",
+                    reason="school_not_found",
+                    user_id=str(request.user.id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="School not found."
+                )
+
+            subject = Subject.objects.select_related(
+                "academic_year",
+            ).filter(
+                id=subject_id,
+                school=school,
+            ).first()
+
+            if subject is None:
+
+                application_logger.warning(
+                    "subject_update_failed",
+                    reason="subject_not_found",
+                    school_id=str(school.id),
+                    subject_id=str(subject_id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Subject not found."
+                )
+
+            academic_year_id = request.data.get("academic_year_id")
+            name = request.data.get("name")
+
+            if not academic_year_id:
+
+                return CustomResponse.errorResponse(
+                    description="academic_year_id is required."
+                )
+
+            if not name:
+
+                return CustomResponse.errorResponse(
+                    description="name is required."
+                )
+
+            academic_year = AcademicYear.objects.filter(
+                id=academic_year_id,
+                school=school,
+            ).first()
+
+            if academic_year is None:
+
+                application_logger.warning(
+                    "subject_update_failed",
+                    reason="academic_year_not_found",
+                    academic_year_id=str(academic_year_id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Academic year not found."
+                )
+
+            if Subject.objects.filter(
+                school=school,
+                academic_year=academic_year,
+                name__iexact=name.strip(),
+            ).exclude(
+                id=subject.id,
+            ).exists():
+
+                application_logger.warning(
+                    "subject_update_failed",
+                    reason="subject_already_exists",
+                    subject_name=name,
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Subject already exists."
+                )
+
+            status = request.data.get(
+                "status",
+                subject.status,
+            )
+
+            if status not in Subject.Status.values:
+
+                return CustomResponse.errorResponse(
+                    description="Invalid status."
+                )
+
+            with transaction.atomic():
+
+                subject.academic_year = academic_year
+                subject.name = name.strip()
+                subject.description = request.data.get("description")
+                subject.status = status
+
+                subject.save()
+
+            application_logger.info(
+                "subject_updated",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                subject_id=str(subject.id),
+            )
+
+            return CustomResponse.successResponse(
+                description="Subject updated successfully.",
+                data={
+                    "id": str(subject.id),
+                    "name": subject.name,
+                    "description": subject.description,
+                    "status": subject.status,
+                    "academic_year": {
+                        "id": str(subject.academic_year.id),
+                        "name": subject.academic_year.name,
+                    },
+                },
+            )
+
+        except Exception:
+
+            application_logger.exception(
+                "subject_update_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id) if school else None,
+                subject_id=str(subject_id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while updating subject."
+            )

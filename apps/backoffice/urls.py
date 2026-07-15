@@ -25,7 +25,7 @@ from apps.backoffice.views.school import AcademicYearListAPIView, CreateAcademic
     UpdateSectionAPIView, CreateStudentAPIView, BulkUploadStudentAPIView, StudentListAPIView, \
     CreateStudentDocumentAPIView, StudentDocumentListAPIView, UpdateStudentDocumentAPIView, \
     DownloadStudentTemplateAPIView, CreateStaffAPIView, GetStaffAPIView, UpdateStaffAPIView, CreateStaffDocumentAPIView, \
-    StaffDocumentListAPIView, UpdateStaffDocumentAPIView
+    StaffDocumentListAPIView, UpdateStaffDocumentAPIView, CreateSubjectAPIView, SubjectListAPIView, SubjectUpdateAPIView
 from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdminRequestOTPAPIView, \
     SuperAdminVerifyOTPAPIView, SchoolLeadUpdateAPIView, OrganizationListAPIView, CreateOrganizationAPIView, \
     UpdateOrganizationAPIView, SchoolListAPIView, CreateSchoolAPIView, UpdateSchoolAPIView, CreateBranchAPIView, \
@@ -276,6 +276,18 @@ urlpatterns = [
     path("event",CalendarEventListAPIView.as_view(),),
 
     path("event/<uuid:event_id>",UpdateCalendarEventAPIView.as_view(),),
+
+    # ====================================
+    #  subject  APIs
+    # ====================================
+
+    path("subject/create",CreateSubjectAPIView.as_view(),),
+
+    path("subject",SubjectListAPIView.as_view(),),
+
+    path("subject/<uuid:subject_id>",SubjectUpdateAPIView.as_view(),),
+
+
 
 
 
