@@ -1,5 +1,7 @@
 from django.urls import path
 
+from apps.backoffice.views.assignment import CreateAssignmentAPIView, AssignmentListAPIView, AssignmentUpdateAPIView, \
+    TeacherAssignmentSubmissionListAPIView, TeacherCheckAssignmentAPIView
 from apps.backoffice.views.events import CreateCalendarEventAPIView, CalendarEventListAPIView, \
     UpdateCalendarEventAPIView
 from apps.backoffice.views.fee import CreateFeeTypeAPIView, FeeTypeListAPIView, UpdateFeeTypeAPIView, \
@@ -13,6 +15,8 @@ from apps.backoffice.views.fee import CreateFeeTypeAPIView, FeeTypeListAPIView, 
     LateFeeRuleDetailAPIView, UpdateLateFeeRuleAPIView, CreateFeeConcessionAPIView, FeeConcessionListAPIView, \
     UpdateFeeConcessionAPIView, CreateStudentFeeAssignmentAPIView, StudentFeeAssignmentListAPIView, \
     StudentFeeListAPIView, StudentFeeDetailAPIView, GenerateStudentFeesAPIView
+from apps.backoffice.views.homework import CreateHomeworkAPIView, HomeworkListAPIView, HomeworkUpdateAPIView, \
+    TeacherHomeworkSubmissionListAPIView, TeacherCheckHomeworkAPIView
 from apps.backoffice.views.leads import \
     SchoolLeadRequestOTPAPIView, SchoolLeadListAPIView, SchoolLeadVerifyOTPAPIView
 from apps.backoffice.views.ptm import CreateParentTeacherMeetingAPIView, ParentTeacherMeetingListAPIView, \
@@ -286,6 +290,35 @@ urlpatterns = [
     path("subject",SubjectListAPIView.as_view(),),
 
     path("subject/<uuid:subject_id>",SubjectUpdateAPIView.as_view(),),
+
+    # ====================================
+    #  Homework   APIs
+    # ====================================
+
+    path("homework/create",CreateHomeworkAPIView.as_view(),),
+
+    path("homework",HomeworkListAPIView.as_view(),),
+
+    path("homework/<uuid:homework_id>",HomeworkUpdateAPIView.as_view(),),
+
+    path("homework/submissions",TeacherHomeworkSubmissionListAPIView.as_view(),),
+
+    path("homework/check",TeacherCheckHomeworkAPIView.as_view(),),
+
+    # ====================================
+    #  Assignment   APIs
+    # ====================================
+
+
+    path("assignment/create",CreateAssignmentAPIView.as_view(),),
+
+    path("assignment",AssignmentListAPIView.as_view(),),
+
+    path("assignment/<uuid:assignment_id>",AssignmentUpdateAPIView.as_view(),),
+
+    path("assignment/submissions",TeacherAssignmentSubmissionListAPIView.as_view(),),
+
+    path("assignment/check",TeacherCheckAssignmentAPIView.as_view(),),
 
 
 

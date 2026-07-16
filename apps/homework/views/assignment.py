@@ -1,13 +1,16 @@
+from datetime import timezone
+
+from django.db import transaction
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.homework.models import HomeworkSubmission, Homework, HomeworkSubmissionAttachment
+from apps.homework.models import Assignment, AssignmentSubmission, AssignmentSubmissionAttachment
 from apps.school.models.school import Student
 from shared.mixins import CustomResponse
 from shared.utils.logger import application_logger
 
 
-class StudentHomeworkListAPIView(APIView):
+class StudentAssignmentListAPIView(APIView):
 
     permission_classes = [IsAuthenticated]
 
@@ -17,7 +20,7 @@ class StudentHomeworkListAPIView(APIView):
         student_id = request.query_params.get("student_id")
 
         application_logger.info(
-            "student_homework_list_started",
+            "student_assignment_list_started",
             user_id=str(user.id),
             student_id=str(student_id) if student_id else None,
         )
@@ -44,7 +47,7 @@ class StudentHomeworkListAPIView(APIView):
             if student is None:
 
                 application_logger.warning(
-                    "student_homework_list_failed",
+                    "student_assignment_list_failed",
                     user_id=str(user.id),
                     student_id=str(student_id),
                     reason="student_not_found",
@@ -54,81 +57,87 @@ class StudentHomeworkListAPIView(APIView):
                     description="Student not found."
                 )
 
-            homeworks = Homework.objects.select_related(
+            assignments = Assignment.objects.select_related(
                 "academic_year",
                 "branch",
                 "grade",
                 "subject",
                 "teacher",
             ).prefetch_related(
-                "homework_sections__section",
+                "assignment_sections__section",
             ).filter(
                 school_id=student.school_id,
                 academic_year_id=student.academic_year_id,
                 grade_id=student.grade_id,
-                homework_sections__section_id=student.section_id,
+                assignment_sections__section_id=student.section_id,
             )
 
             if student.branch_id:
 
-                homeworks = homeworks.filter(
+                assignments = assignments.filter(
                     branch_id=student.branch_id,
                 )
 
             else:
 
-                homeworks = homeworks.filter(
+                assignments = assignments.filter(
                     branch__isnull=True,
                 )
 
-            homeworks = homeworks.exclude(
-                status=Homework.Status.DRAFT,
+            assignments = assignments.exclude(
+                status=Assignment.Status.DRAFT,
             ).distinct().order_by(
                 "-assigned_date",
                 "-created_at",
             )
 
-            submissions = HomeworkSubmission.objects.filter(
-                homework__in=homeworks,
+            submissions = AssignmentSubmission.objects.filter(
+                assignment__in=assignments,
                 student_id=student.id,
             )
 
             submission_map = {
-                submission.homework_id: submission
+                submission.assignment_id: submission
                 for submission in submissions
             }
 
             data = []
 
-            for homework in homeworks:
+            for assignment in assignments:
 
                 submission = submission_map.get(
-                    homework.id,
+                    assignment.id,
                 )
 
                 data.append({
-                    "id": str(homework.id),
-                    "title": homework.title,
-                    "description": homework.description,
-                    "assigned_date": homework.assigned_date,
-                    "due_date": homework.due_date,
-                    "status": homework.status,
+                    "id": str(assignment.id),
+                    "title": assignment.title,
+                    "description": assignment.description,
+                    "assigned_date": assignment.assigned_date,
+                    "due_date": assignment.due_date,
+                    "total_marks": assignment.total_marks,
+                    "status": assignment.status,
                     "subject": {
-                        "id": str(homework.subject.id),
-                        "name": homework.subject.name,
+                        "id": str(assignment.subject.id),
+                        "name": assignment.subject.name,
                     },
                     "teacher": {
-                        "id": str(homework.teacher.id),
-                        "name": homework.teacher.name,
+                        "id": str(assignment.teacher.id),
+                        "name": assignment.teacher.name,
                     },
                     "submission": {
                         "status": (
                             submission.status
                             if submission
-                            else HomeworkSubmission.Status.PENDING
+                            else AssignmentSubmission.Status.PENDING
                         ),
                         "submitted_at": (
                             submission.submitted_at
+                            if submission
+                            else None
+                        ),
+                        "marks_obtained": (
+                            submission.marks_obtained
                             if submission
                             else None
                         ),
@@ -141,54 +150,52 @@ class StudentHomeworkListAPIView(APIView):
                 })
 
             application_logger.info(
-                "student_homework_list_fetched",
+                "student_assignment_list_fetched",
                 user_id=str(user.id),
                 student_id=str(student.id),
                 total_count=len(data),
             )
 
             return CustomResponse.successResponse(
-                description="Homeworks fetched successfully.",
+                description="Assignments fetched successfully.",
                 data={
                     "student": {
                         "id": str(student.id),
                         "name": student.name,
                         "admission_number": student.admission_number,
                     },
-                    "homeworks": data,
+                    "assignments": data,
                 },
             )
 
         except Exception:
 
             application_logger.exception(
-                "student_homework_list_failed",
+                "student_assignment_list_failed",
                 user_id=str(user.id),
                 student_id=str(student_id) if student_id else None,
             )
 
             return CustomResponse.errorResponse(
-                description="Something went wrong while fetching homeworks."
+                description="Something went wrong while fetching assignments."
             )
 
-
-class StudentHomeworkSubmissionAPIView(APIView):
+class StudentAssignmentSubmissionAPIView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def post(self, request, homework_id):
+    def post(self, request, assignment_id):
 
         user = request.user
 
         student_id = request.data.get("student_id")
-        remarks = request.data.get("remarks")
         attachments = request.data.get("attachments", [])
 
         application_logger.info(
-            "student_homework_submission_started",
+            "student_assignment_submission_started",
             user_id=str(user.id),
             student_id=str(student_id) if student_id else None,
-            homework_id=str(homework_id),
+            assignment_id=str(assignment_id),
         )
 
         try:
@@ -213,7 +220,7 @@ class StudentHomeworkSubmissionAPIView(APIView):
             if student is None:
 
                 application_logger.warning(
-                    "student_homework_submission_failed",
+                    "student_assignment_submission_failed",
                     reason="student_not_found",
                     student_id=str(student_id),
                 )
@@ -222,25 +229,25 @@ class StudentHomeworkSubmissionAPIView(APIView):
                     description="Student not found."
                 )
 
-            homework = Homework.objects.filter(
-                id=homework_id,
+            assignment = Assignment.objects.filter(
+                id=assignment_id,
                 school_id=student.school_id,
                 academic_year_id=student.academic_year_id,
                 grade_id=student.grade_id,
-                homework_sections__section_id=student.section_id,
-                status=Homework.Status.PUBLISHED,
+                assignment_sections__section_id=student.section_id,
+                status=Assignment.Status.PUBLISHED,
             ).distinct().first()
 
-            if homework is None:
+            if assignment is None:
 
                 application_logger.warning(
-                    "student_homework_submission_failed",
-                    reason="homework_not_found",
-                    homework_id=str(homework_id),
+                    "student_assignment_submission_failed",
+                    reason="assignment_not_found",
+                    assignment_id=str(assignment_id),
                 )
 
                 return CustomResponse.errorResponse(
-                    description="Homework not found."
+                    description="Assignment not found."
                 )
 
             if not isinstance(attachments, list):
@@ -249,26 +256,31 @@ class StudentHomeworkSubmissionAPIView(APIView):
                     description="attachments must be a list."
                 )
 
+            submission_status = (
+                AssignmentSubmission.Status.LATE
+                if timezone.now().date() > assignment.due_date
+                else AssignmentSubmission.Status.SUBMITTED
+            )
+
             with transaction.atomic():
 
-                submission, created = HomeworkSubmission.objects.update_or_create(
-                    homework=homework,
+                submission, created = AssignmentSubmission.objects.update_or_create(
+                    assignment=assignment,
                     student=student,
                     defaults={
                         "submitted_at": timezone.now(),
-                        "remarks": remarks,
-                        "status": HomeworkSubmission.Status.SUBMITTED,
+                        "status": submission_status,
                     },
                 )
 
-                HomeworkSubmissionAttachment.objects.filter(
-                    homework_submission=submission,
+                AssignmentSubmissionAttachment.objects.filter(
+                    assignment_submission=submission,
                 ).delete()
 
-                HomeworkSubmissionAttachment.objects.bulk_create(
+                AssignmentSubmissionAttachment.objects.bulk_create(
                     [
-                        HomeworkSubmissionAttachment(
-                            homework_submission=submission,
+                        AssignmentSubmissionAttachment(
+                            assignment_submission=submission,
                             file_name=item.get("file_name"),
                             file_url=item.get("file_url"),
                         )
@@ -277,17 +289,17 @@ class StudentHomeworkSubmissionAPIView(APIView):
                 )
 
             application_logger.info(
-                "student_homework_submission_completed",
+                "student_assignment_submission_completed",
                 user_id=str(user.id),
                 student_id=str(student.id),
-                homework_id=str(homework.id),
+                assignment_id=str(assignment.id),
                 submission_id=str(submission.id),
                 created=created,
                 attachment_count=len(attachments),
             )
 
             return CustomResponse.successResponse(
-                description="Homework submitted successfully.",
+                description="Assignment submitted successfully.",
                 data={
                     "submission_id": str(submission.id),
                     "submitted_at": submission.submitted_at,
@@ -298,12 +310,12 @@ class StudentHomeworkSubmissionAPIView(APIView):
         except Exception:
 
             application_logger.exception(
-                "student_homework_submission_failed",
+                "student_assignment_submission_failed",
                 user_id=str(user.id),
                 student_id=str(student_id) if student_id else None,
-                homework_id=str(homework_id),
+                assignment_id=str(assignment_id),
             )
 
             return CustomResponse.errorResponse(
-                description="Something went wrong while submitting homework."
+                description="Something went wrong while submitting assignment."
             )

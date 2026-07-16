@@ -3,7 +3,7 @@ from django.db.models import Q
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.homework.models import Assignment, AssignmentSection
+from apps.homework.models import Assignment, AssignmentSection, AssignmentSubmission
 from apps.school.models.school import AcademicYear, Grade, Subject, Staff, Branch, Section
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
@@ -764,4 +764,230 @@ class AssignmentUpdateAPIView(APIView):
 
             return CustomResponse.errorResponse(
                 description="Something went wrong while updating assignment."
+            )
+
+class TeacherAssignmentSubmissionListAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "assignment.view"
+
+    def get(self, request, assignment_id):
+
+        user = request.user
+
+        application_logger.info(
+            "teacher_assignment_submission_list_started",
+            user_id=str(user.id),
+            assignment_id=str(assignment_id),
+        )
+
+        try:
+
+            assignment = Assignment.objects.select_related(
+                "school",
+                "subject",
+                "teacher",
+            ).filter(
+                id=assignment_id,
+            ).first()
+
+            if assignment is None:
+
+                application_logger.warning(
+                    "teacher_assignment_submission_list_failed",
+                    reason="assignment_not_found",
+                    assignment_id=str(assignment_id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Assignment not found."
+                )
+
+            submissions = AssignmentSubmission.objects.select_related(
+                "student",
+            ).prefetch_related(
+                "attachments",
+            ).filter(
+                assignment=assignment,
+            ).order_by(
+                "-submitted_at",
+            )
+
+            data = []
+
+            for submission in submissions:
+
+                data.append({
+                    "submission_id": str(submission.id),
+                    "student": {
+                        "id": str(submission.student.id),
+                        "name": submission.student.name,
+                        "admission_number": submission.student.admission_number,
+                    },
+                    "submitted_at": submission.submitted_at,
+                    "status": submission.status,
+                    "marks": submission.marks,
+                    "feedback": submission.feedback,
+                    "attachments": [
+                        {
+                            "id": str(attachment.id),
+                            "file_name": attachment.file_name,
+                            "file_url": attachment.file_url,
+                        }
+                        for attachment in submission.attachments.all()
+                    ],
+                })
+
+            application_logger.info(
+                "teacher_assignment_submission_list_fetched",
+                user_id=str(user.id),
+                assignment_id=str(assignment.id),
+                total_count=len(data),
+            )
+
+            return CustomResponse.successResponse(
+                description="Assignment submissions fetched successfully.",
+                data={
+                    "assignment": {
+                        "id": str(assignment.id),
+                        "title": assignment.title,
+                        "subject": assignment.subject.name,
+                        "teacher": assignment.teacher.name,
+                        "total_marks": assignment.total_marks,
+                    },
+                    "submissions": data,
+                },
+            )
+
+        except Exception:
+
+            application_logger.exception(
+                "teacher_assignment_submission_list_failed",
+                user_id=str(user.id),
+                assignment_id=str(assignment_id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while fetching assignment submissions."
+            )
+
+
+class TeacherCheckAssignmentAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "assignment.update"
+
+    def post(self, request, submission_id):
+
+        user = request.user
+
+        marks = request.data.get("marks")
+        feedback = request.data.get("feedback")
+
+        application_logger.info(
+            "teacher_assignment_check_started",
+            user_id=str(user.id),
+            submission_id=str(submission_id),
+        )
+
+        try:
+
+            submission = AssignmentSubmission.objects.select_related(
+                "assignment",
+                "student",
+            ).filter(
+                id=submission_id,
+            ).first()
+
+            if submission is None:
+
+                application_logger.warning(
+                    "teacher_assignment_check_failed",
+                    reason="submission_not_found",
+                    submission_id=str(submission_id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Assignment submission not found."
+                )
+
+            if marks in [None, ""]:
+
+                return CustomResponse.errorResponse(
+                    description="marks is required."
+                )
+
+            try:
+
+                marks = float(marks)
+
+            except (TypeError, ValueError):
+
+                return CustomResponse.errorResponse(
+                    description="Invalid marks."
+                )
+
+            if marks < 0:
+
+                return CustomResponse.errorResponse(
+                    description="Marks cannot be negative."
+                )
+
+            if marks > submission.assignment.total_marks:
+
+                return CustomResponse.errorResponse(
+                    description=f"Marks cannot exceed {submission.assignment.total_marks}."
+                )
+
+            with transaction.atomic():
+
+                submission.marks = marks
+                submission.feedback = feedback
+                submission.status = AssignmentSubmission.Status.EVALUATED
+
+                submission.save(
+                    update_fields=[
+                        "marks",
+                        "feedback",
+                        "status",
+                    ]
+                )
+
+            application_logger.info(
+                "teacher_assignment_checked",
+                user_id=str(user.id),
+                submission_id=str(submission.id),
+                assignment_id=str(submission.assignment.id),
+                student_id=str(submission.student.id),
+                marks=marks,
+            )
+
+            return CustomResponse.successResponse(
+                description="Assignment evaluated successfully.",
+                data={
+                    "submission_id": str(submission.id),
+                    "marks": submission.marks,
+                    "feedback": submission.feedback,
+                    "status": submission.status,
+                },
+            )
+
+        except Exception:
+
+            application_logger.exception(
+                "teacher_assignment_check_failed",
+                user_id=str(user.id),
+                submission_id=str(submission_id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while evaluating assignment."
             )
