@@ -773,29 +773,18 @@ class SchoolListAPIView(APIView):
 
     def get(self, request):
 
-        school_id = request.GET.get(
-            "school_id"
-        )
-
         application_logger.info(
             "school_list_started",
             user_id=str(request.user.id),
-            school_id=school_id,
         )
 
         try:
-
-            check_permission(
-                request,
-                "school.view",
-                school_id,
-            )
 
             queryset = School.objects.select_related(
                 "organization",
             ).prefetch_related(
                 "branches",
-            ).all()
+            )
 
             data = []
 
@@ -845,12 +834,11 @@ class SchoolListAPIView(APIView):
             application_logger.info(
                 "school_list_fetched",
                 user_id=str(request.user.id),
-                school_id=school_id,
                 total_count=len(data),
             )
 
             return CustomResponse.successResponse(
-                data=data
+                data=data,
             )
 
         except Exception as e:
@@ -858,15 +846,12 @@ class SchoolListAPIView(APIView):
             application_logger.exception(
                 "school_list_failed",
                 user_id=str(request.user.id),
-                school_id=school_id,
                 error=str(e),
             )
 
             return CustomResponse.errorResponse(
-                description="Something went wrong while fetching schools."
+                description="Something went wrong while fetching schools.",
             )
-
-
 # ===========================
 # UPDATE SCHOOL
 # ===========================
