@@ -1216,6 +1216,11 @@ class UserListAPIView(APIView):
                                 if user_role.school
                                 else None
                             ),
+                            "school_name": (
+                                str(user_role.school.name)
+                                if user_role.school
+                                else None
+                            )
                         }
                         for user_role in obj.user_roles.all()
                     ],
