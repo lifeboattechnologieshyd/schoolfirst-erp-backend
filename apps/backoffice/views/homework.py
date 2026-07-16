@@ -461,19 +461,26 @@ class HomeworkListAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Something went wrong while fetching homeworks."
             )
+
+
+
 class HomeworkUpdateAPIView(APIView):
 
-    permission_classes = [IsAuthenticated, HasPermission]
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
 
     required_permission = "homework.update"
 
     def put(self, request, homework_id):
 
         school = request.school
+        user = request.user
 
         application_logger.info(
             "homework_update_started",
-            user_id=str(request.user.id),
+            user_id=str(user.id),
             school_id=str(school.id) if school else None,
             homework_id=str(homework_id),
         )
@@ -485,7 +492,7 @@ class HomeworkUpdateAPIView(APIView):
                 application_logger.warning(
                     "homework_update_failed",
                     reason="school_not_found",
-                    user_id=str(request.user.id),
+                    user_id=str(user.id),
                 )
 
                 return CustomResponse.errorResponse(
@@ -510,140 +517,137 @@ class HomeworkUpdateAPIView(APIView):
                     description="Homework not found."
                 )
 
-            required_fields = [
-                "academic_year_id",
-                "grade_id",
-                "subject_id",
-                "teacher_id",
-                "section_ids",
-                "title",
-                "description",
-                "assigned_date",
-                "due_date",
-            ]
+            academic_year = homework.academic_year
 
-            for field in required_fields:
+            if "academic_year_id" in request.data:
 
-                if request.data.get(field) in [None, "", []]:
-
-                    application_logger.warning(
-                        "homework_update_failed",
-                        reason="required_field_missing",
-                        field=field,
-                        homework_id=str(homework.id),
-                    )
-
-                    return CustomResponse.errorResponse(
-                        description=f"{field} is required."
-                    )
-
-            academic_year = AcademicYear.objects.filter(
-                id=request.data.get("academic_year_id"),
-                school=school,
-            ).first()
-
-            if academic_year is None:
-
-                return CustomResponse.errorResponse(
-                    description="Academic year not found."
-                )
-
-            grade = Grade.objects.filter(
-                id=request.data.get("grade_id"),
-                school=school,
-                academic_year=academic_year,
-            ).first()
-
-            if grade is None:
-
-                return CustomResponse.errorResponse(
-                    description="Grade not found."
-                )
-
-            subject = Subject.objects.filter(
-                id=request.data.get("subject_id"),
-                school=school,
-                academic_year=academic_year,
-                status=Subject.Status.ACTIVE,
-            ).first()
-
-            if subject is None:
-
-                return CustomResponse.errorResponse(
-                    description="Subject not found."
-                )
-
-            teacher = Staff.objects.filter(
-                id=request.data.get("teacher_id"),
-                school=school,
-                status=Staff.Status.ACTIVE,
-            ).first()
-
-            if teacher is None:
-
-                return CustomResponse.errorResponse(
-                    description="Teacher not found."
-                )
-
-            branch = None
-
-            branch_id = request.data.get("branch_id")
-
-            if branch_id:
-
-                branch = Branch.objects.filter(
-                    id=branch_id,
+                academic_year = AcademicYear.objects.filter(
+                    id=request.data.get("academic_year_id"),
                     school=school,
                 ).first()
 
-                if branch is None:
+                if academic_year is None:
+
+                    return CustomResponse.errorResponse(
+                        description="Academic year not found."
+                    )
+
+            grade = homework.grade
+
+            if "grade_id" in request.data:
+
+                grade = Grade.objects.filter(
+                    id=request.data.get("grade_id"),
+                    school=school,
+                    academic_year=academic_year,
+                ).first()
+
+                if grade is None:
+
+                    return CustomResponse.errorResponse(
+                        description="Grade not found."
+                    )
+
+            subject = homework.subject
+
+            if "subject_id" in request.data:
+
+                subject = Subject.objects.filter(
+                    id=request.data.get("subject_id"),
+                    school=school,
+                    academic_year=academic_year,
+                    status=Subject.Status.ACTIVE,
+                ).first()
+
+                if subject is None:
+
+                    return CustomResponse.errorResponse(
+                        description="Subject not found."
+                    )
+
+            teacher = homework.teacher
+
+            if "teacher_id" in request.data:
+
+                teacher = Staff.objects.filter(
+                    id=request.data.get("teacher_id"),
+                    school=school,
+                    status=Staff.Status.ACTIVE,
+                ).first()
+
+                if teacher is None:
+
+                    return CustomResponse.errorResponse(
+                        description="Teacher not found."
+                    )
+
+            branch = homework.branch
+
+            if "branch_id" in request.data:
+
+                branch_id = request.data.get("branch_id")
+
+                if branch_id:
+
+                    branch = Branch.objects.filter(
+                        id=branch_id,
+                        school=school,
+                    ).first()
+
+                    if branch is None:
+
+                        application_logger.warning(
+                            "homework_update_failed",
+                            reason="branch_not_found",
+                            branch_id=branch_id,
+                            homework_id=str(homework.id),
+                        )
+
+                        return CustomResponse.errorResponse(
+                            description="Branch not found."
+                        )
+
+                else:
+
+                    branch = None
+
+            sections = None
+
+            if "section_ids" in request.data:
+
+                section_ids = request.data.get("section_ids")
+
+                if not isinstance(section_ids, list):
 
                     application_logger.warning(
                         "homework_update_failed",
-                        reason="branch_not_found",
-                        branch_id=branch_id,
+                        reason="invalid_section_ids",
                         homework_id=str(homework.id),
                     )
 
                     return CustomResponse.errorResponse(
-                        description="Branch not found."
+                        description="section_ids must be a list."
                     )
 
-            section_ids = request.data.get("section_ids")
+                section_ids = list(set(section_ids))
 
-            if not isinstance(section_ids, list):
-
-                application_logger.warning(
-                    "homework_update_failed",
-                    reason="invalid_section_ids",
-                    homework_id=str(homework.id),
+                sections = Section.objects.filter(
+                    id__in=section_ids,
+                    grade=grade,
+                    branch=branch,
                 )
 
-                return CustomResponse.errorResponse(
-                    description="section_ids must be a list."
-                )
+                if sections.count() != len(section_ids):
 
-            section_ids = list(set(section_ids))
+                    application_logger.warning(
+                        "homework_update_failed",
+                        reason="invalid_sections",
+                        homework_id=str(homework.id),
+                    )
 
-            sections = Section.objects.filter(
-                id__in=section_ids,
-                grade=grade,
-                branch=branch,
-            )
-
-            if sections.count() != len(section_ids):
-
-                application_logger.warning(
-                    "homework_update_failed",
-                    reason="invalid_sections",
-                    homework_id=str(homework.id),
-                    grade_id=str(grade.id),
-                    branch_id=str(branch.id) if branch else None,
-                )
-
-                return CustomResponse.errorResponse(
-                    description="One or more sections are invalid."
-                )
+                    return CustomResponse.errorResponse(
+                        description="One or more sections are invalid."
+                    )
 
             status = request.data.get(
                 "status",
@@ -652,74 +656,96 @@ class HomeworkUpdateAPIView(APIView):
 
             if status not in Homework.Status.values:
 
-                application_logger.warning(
-                    "homework_update_failed",
-                    reason="invalid_status",
-                    homework_id=str(homework.id),
-                    status=status,
-                )
-
                 return CustomResponse.errorResponse(
                     description="Invalid status."
                 )
 
-            assigned_date = request.data.get("assigned_date")
+            assigned_date = request.data.get(
+                "assigned_date",
+                homework.assigned_date,
+            )
 
-            due_date = request.data.get("due_date")
+            due_date = request.data.get(
+                "due_date",
+                homework.due_date,
+            )
 
             if due_date < assigned_date:
-
-                application_logger.warning(
-                    "homework_update_failed",
-                    reason="invalid_due_date",
-                    homework_id=str(homework.id),
-                    assigned_date=assigned_date,
-                    due_date=due_date,
-                )
 
                 return CustomResponse.errorResponse(
                     description="Due date must be greater than or equal to assigned date."
                 )
             with transaction.atomic():
 
-                homework.branch = branch
-                homework.academic_year = academic_year
-                homework.grade = grade
-                homework.subject = subject
-                homework.teacher = teacher
-                homework.title = request.data.get("title").strip()
-                homework.description = request.data.get("description").strip()
-                homework.assigned_date = assigned_date
-                homework.due_date = due_date
-                homework.status = status
+                if "branch_id" in request.data:
+                    homework.branch = branch
+
+                if "academic_year_id" in request.data:
+                    homework.academic_year = academic_year
+
+                if "grade_id" in request.data:
+                    homework.grade = grade
+
+                if "subject_id" in request.data:
+                    homework.subject = subject
+
+                if "teacher_id" in request.data:
+                    homework.teacher = teacher
+
+                if "title" in request.data:
+                    homework.title = request.data.get(
+                        "title",
+                    ).strip()
+
+                if "description" in request.data:
+                    homework.description = request.data.get(
+                        "description",
+                    ).strip()
+
+                if "assigned_date" in request.data:
+                    homework.assigned_date = assigned_date
+
+                if "due_date" in request.data:
+                    homework.due_date = due_date
+
+                if "status" in request.data:
+                    homework.status = status
 
                 homework.save()
 
-                HomeworkSection.objects.filter(
-                    homework=homework,
-                ).delete()
+                if sections is not None:
 
-                HomeworkSection.objects.bulk_create(
-                    [
-                        HomeworkSection(
-                            homework=homework,
-                            section=section,
-                        )
-                        for section in sections
-                    ]
-                )
+                    HomeworkSection.objects.filter(
+                        homework=homework,
+                    ).delete()
+
+                    HomeworkSection.objects.bulk_create(
+                        [
+                            HomeworkSection(
+                                homework=homework,
+                                section=section,
+                            )
+                            for section in sections
+                        ]
+                    )
 
             application_logger.info(
                 "homework_updated",
                 homework_id=str(homework.id),
                 school_id=str(school.id),
-                branch_id=str(branch.id) if branch else None,
-                academic_year_id=str(academic_year.id),
-                grade_id=str(grade.id),
-                subject_id=str(subject.id),
-                teacher_id=str(teacher.id),
-                section_count=len(section_ids),
-                user_id=str(request.user.id),
+                branch_id=str(homework.branch.id)
+                if homework.branch
+                else None,
+                academic_year_id=str(homework.academic_year.id),
+                grade_id=str(homework.grade.id),
+                subject_id=str(homework.subject.id),
+                teacher_id=str(homework.teacher.id),
+                section_count=(
+                    HomeworkSection.objects.filter(
+                        homework=homework,
+                    ).count()
+                ),
+                user_id=str(user.id),
             )
 
             return CustomResponse.successResponse(
@@ -736,14 +762,13 @@ class HomeworkUpdateAPIView(APIView):
                 "homework_update_failed",
                 homework_id=str(homework_id),
                 school_id=str(school.id) if school else None,
-                user_id=str(request.user.id),
+                user_id=str(user.id),
                 error=str(e),
             )
 
             return CustomResponse.errorResponse(
                 description="Something went wrong while updating homework."
             )
-
 
 
 
