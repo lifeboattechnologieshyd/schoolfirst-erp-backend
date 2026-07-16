@@ -1,5 +1,6 @@
 from rest_framework.permissions import BasePermission
 
+from apps.core.models import UserRoles
 from apps.school.models import School
 from shared.helpers.rbac import (
     get_user_roles,
