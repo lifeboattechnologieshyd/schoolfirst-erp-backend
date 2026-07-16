@@ -1,3 +1,4 @@
+from apps.fee.models import SchoolPaymentGateway
 from apps.payment.services.phonepe import PhonePeService
 from apps.payment.services.razorpay import RazorpayService
 
@@ -5,31 +6,32 @@ from apps.payment.services.razorpay import RazorpayService
 class PaymentGatewayService:
 
     def __init__(self, gateway):
+
         self.gateway = gateway
 
     def create_payment(self, transaction):
 
         print("=" * 80)
-        print("Inside PaymentGatewayService")
-        print("Gateway:", self.gateway.gateway)
+        print("PAYMENT GATEWAY")
+        print("Gateway :", self.gateway.gateway)
         print("=" * 80)
 
-        if self.gateway.gateway == "PHONEPE":
-
-            print("Using PhonePe")
+        if self.gateway.gateway == SchoolPaymentGateway.Gateway.PHONEPE:
 
             return PhonePeService(
                 self.gateway,
-            ).create_payment(transaction)
+            ).create_payment(
+                transaction,
+            )
 
-        elif self.gateway.gateway == "RAZORPAY":
-
-            print("Using Razorpay")
+        if self.gateway.gateway == SchoolPaymentGateway.Gateway.RAZORPAY:
 
             return RazorpayService(
                 self.gateway,
-            ).create_payment(transaction)
+            ).create_payment(
+                transaction,
+            )
 
         raise Exception(
-            f"Unsupported gateway: {self.gateway.gateway}"
+            f"Unsupported payment gateway: {self.gateway.gateway}"
         )

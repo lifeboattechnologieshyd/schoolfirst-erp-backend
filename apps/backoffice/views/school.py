@@ -2223,7 +2223,7 @@ class GetStaffAPIView(APIView):
                 "branch",
             ).prefetch_related(
                 Prefetch(
-                    "user__userroles_set",
+                    "user__user_roles",
                     queryset=UserRoles.objects.filter(
                         school=school,
                     ).select_related(
