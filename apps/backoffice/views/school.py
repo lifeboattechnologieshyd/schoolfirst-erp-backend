@@ -3152,8 +3152,8 @@ class SubjectListAPIView(APIView):
 
             return CustomResponse.successResponse(
                 description="Subjects fetched successfully.",
+                total=len(data),
                 data=data,
-                total_count=len(data),
             )
 
         except Exception:
