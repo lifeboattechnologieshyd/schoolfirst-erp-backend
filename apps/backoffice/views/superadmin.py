@@ -22,6 +22,7 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 
 from shared.permissions import HasPermission
+from shared.utils.logger import application_logger
 from shared.utils.otp import generate_otp, send_otp_to_mobile
 
 
@@ -32,147 +33,215 @@ class CreateSuperAdminAPIView(APIView):
     @transaction.atomic
     def post(self, request):
 
-        print("=" * 50)
-        print("CreateSuperAdminAPIView Started")
-        print("Request User ID:", request.user.id)
-        print("Request Username:", request.user.username)
-        print("Request Mobile:", request.user.mobile)
-
-        role, created = Roles.objects.get_or_create(
-            role_name="SUPERADMIN",
-            defaults={
-                "description": "Platform Super Admin",
-            },
+        application_logger.info(
+            "superadmin_create_started",
+            user_id=str(request.user.id),
+            username=request.user.username,
+            mobile=request.user.mobile,
         )
 
-        print("Role ID:", role.id)
-        print("Role Name:", role.role_name)
-        print("Role Created:", created)
+        try:
 
-        all_permissions = Permissions.objects.all()
-
-        print("Total Permissions Found:", all_permissions.count())
-
-        assigned_permissions = 0
-
-        for permission in all_permissions:
-            _, permission_created = RolePermissions.objects.get_or_create(
-                role=role,
-                permission=permission,
+            role, created = Roles.objects.get_or_create(
+                role_name="SUPERADMIN",
+                defaults={
+                    "description": "Platform Super Admin",
+                },
             )
 
-            if permission_created:
-                assigned_permissions += 1
-
-            print(
-                f"Permission: {permission.permission_name} | Created: {permission_created}"
+            application_logger.info(
+                "superadmin_role_processed",
+                role_id=str(role.id),
+                role_name=role.role_name,
+                role_created=created,
             )
 
-        print("Total Permissions Assigned:", assigned_permissions)
+            all_permissions = Permissions.objects.all()
 
-        user_role, user_role_created = UserRoles.objects.get_or_create(
-            user=request.user,
-            role=role,
-            school=None,
-        )
+            application_logger.info(
+                "superadmin_permissions_loaded",
+                total_permissions=all_permissions.count(),
+            )
 
-        print("UserRole Created:", user_role_created)
-        print("UserRole ID:", user_role.id)
-        print("UserRole User:", user_role.user.username)
-        print("UserRole Role:", user_role.role.role_name)
-        print("UserRole School:", user_role.school)
+            assigned_permissions = 0
 
-        print(
-            "Verify SUPERADMIN Exists:",
-            UserRoles.objects.filter(
+            for permission in all_permissions:
+
+                _, permission_created = RolePermissions.objects.get_or_create(
+                    role=role,
+                    permission=permission,
+                )
+
+                if permission_created:
+                    assigned_permissions += 1
+
+            application_logger.info(
+                "superadmin_permissions_assigned",
+                role_id=str(role.id),
+                assigned_permissions=assigned_permissions,
+            )
+
+            user_role, user_role_created = UserRoles.objects.get_or_create(
                 user=request.user,
-                role__role_name="SUPERADMIN",
-            ).exists()
-        )
+                role=role,
+                school=None,
+            )
 
-        print("=" * 50)
+            application_logger.info(
+                "superadmin_user_role_processed",
+                user_role_id=str(user_role.id),
+                user_id=str(request.user.id),
+                role_name=role.role_name,
+                created=user_role_created,
+            )
 
-        return CustomResponse.successResponse(
-            data={
-                "role_id": str(role.id),
-                "role_name": role.role_name,
-                "permissions_count": all_permissions.count(),
-                "user_role_created": user_role_created,
-            },
-            description="SUPERADMIN role created successfully.",
-            status=status.HTTP_201_CREATED,
-        )
+            application_logger.info(
+                "superadmin_created",
+                user_id=str(request.user.id),
+                role_id=str(role.id),
+                permissions_count=all_permissions.count(),
+                assigned_permissions=assigned_permissions,
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "role_id": str(role.id),
+                    "role_name": role.role_name,
+                    "permissions_count": all_permissions.count(),
+                    "user_role_created": user_role_created,
+                },
+                description="SUPERADMIN role created successfully.",
+                status=status.HTTP_201_CREATED,
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "superadmin_create_failed",
+                user_id=str(request.user.id),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while creating SUPERADMIN."
+            )
 
 
 
 class SuperAdminRequestOTPAPIView(APIView):
+
     permission_classes = [AllowAny]
 
     def post(self, request):
+
         mobile = normalize_mobile(
             request.data.get("phone_number")
         )
 
-        if not mobile:
-            return CustomResponse.errorResponse(
-                description="mobile is required.",
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        user = UserMaster.objects.filter(
+        application_logger.info(
+            "superadmin_request_otp_started",
             mobile=mobile,
-            is_active=True,
-        ).first()
-
-        print("USER ID:", user.id)
-        print("MOBILE:", user.mobile)
-
-        print(
-            UserRoles.objects.filter(user=user).values(
-                "role__role_name",
-                "school_id"
-            )
         )
 
-        if not user:
+        try:
+
+            if not mobile:
+
+                application_logger.warning(
+                    "superadmin_request_otp_failed",
+                    reason="mobile_missing",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="mobile is required.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            user = UserMaster.objects.filter(
+                mobile=mobile,
+                is_active=True,
+            ).first()
+
+            if not user:
+
+                application_logger.warning(
+                    "superadmin_request_otp_failed",
+                    reason="user_not_found",
+                    mobile=mobile,
+                )
+
+                return CustomResponse.errorResponse(
+                    description="User not found.",
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            application_logger.info(
+                "superadmin_user_found",
+                user_id=str(user.id),
+                mobile=user.mobile,
+            )
+
+            is_superadmin = UserRoles.objects.filter(
+                user=user,
+                role__role_name="SUPERADMIN",
+            ).exists()
+
+            if not is_superadmin:
+
+                application_logger.warning(
+                    "superadmin_request_otp_failed",
+                    reason="not_superadmin",
+                    user_id=str(user.id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Only SUPERADMIN can login here.",
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            otp = generate_otp()
+
+            send_otp_to_mobile(
+                otp,
+                mobile,
+            )
+
+            UserOTP.objects.create(
+                mobile=int(mobile),
+                otp=otp,
+                expires_at=timezone.now() + timedelta(minutes=15),
+                is_used=False,
+            )
+
+            application_logger.info(
+                "superadmin_otp_sent",
+                user_id=str(user.id),
+                mobile=mobile,
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "mobile_otp": otp,
+                },
+                description="OTP sent successfully.",
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "superadmin_request_otp_failed",
+                mobile=mobile,
+                error=str(e),
+            )
+
             return CustomResponse.errorResponse(
-                description="User not found.",
-                status=status.HTTP_404_NOT_FOUND,
+                description="Something went wrong while sending OTP.",
             )
 
-        is_superadmin = UserRoles.objects.filter(
-            user=user,
-            role__role_name="SUPERADMIN",
-        ).exists()
-
-        if not is_superadmin:
-            return CustomResponse.errorResponse(
-                description="Only SUPERADMIN can login here.",
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        # otp = 1234
-
-        otp = generate_otp()
-        send_otp_to_mobile(otp, mobile)
-
-        UserOTP.objects.create(
-            mobile=int(mobile),
-            otp=otp,
-            expires_at=timezone.now() + timedelta(minutes=15),
-            is_used=False,
-        )
-
-        # send sms here
-
-        return CustomResponse.successResponse(
-            data={
-                "mobile_otp": otp ,
-            },
-            description="OTP sent successfully.",
-            status=status.HTTP_200_OK,
-        )
 
 class SuperAdminVerifyOTPAPIView(APIView):
+
     permission_classes = [AllowAny]
 
     @transaction.atomic
@@ -186,112 +255,200 @@ class SuperAdminVerifyOTPAPIView(APIView):
             request.data.get("otp", "")
         ).strip()
 
-        if not phone_number or not otp:
-            return CustomResponse.errorResponse(
-                description="mobile and otp are required.",
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        user = UserMaster.objects.filter(
+        application_logger.info(
+            "superadmin_verify_otp_started",
             mobile=phone_number,
-            is_active=True,
-        ).first()
-
-        if not user:
-            return CustomResponse.errorResponse(
-                description="User not found.",
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        otp_obj = (
-            UserOTP.objects.filter(
-                mobile=int(phone_number),
-                otp=otp,
-                is_used=False,
-                expires_at__gt=timezone.now(),
-            )
-            .order_by("-created_at")
-            .first()
         )
 
-        if not otp_obj:
-            return CustomResponse.errorResponse(
-                description="Invalid or expired OTP.",
-                status=status.HTTP_400_BAD_REQUEST,
+        try:
+
+            if not phone_number or not otp:
+
+                application_logger.warning(
+                    "superadmin_verify_otp_failed",
+                    reason="mobile_or_otp_missing",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="mobile and otp are required.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            user = UserMaster.objects.filter(
+                mobile=phone_number,
+                is_active=True,
+            ).first()
+
+            if not user:
+
+                application_logger.warning(
+                    "superadmin_verify_otp_failed",
+                    reason="user_not_found",
+                    mobile=phone_number,
+                )
+
+                return CustomResponse.errorResponse(
+                    description="User not found.",
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            otp_obj = (
+                UserOTP.objects.filter(
+                    mobile=int(phone_number),
+                    otp=otp,
+                    is_used=False,
+                    expires_at__gt=timezone.now(),
+                )
+                .order_by("-created_at")
+                .first()
             )
 
-        otp_obj.is_used = True
-        otp_obj.save(update_fields=["is_used"])
+            if not otp_obj:
 
-        user_role = UserRoles.objects.filter(
-            user=user,
-            role__role_name="SUPERADMIN",
-        ).exists()
+                application_logger.warning(
+                    "superadmin_verify_otp_failed",
+                    reason="invalid_or_expired_otp",
+                    mobile=phone_number,
+                )
 
-        if not user_role:
-            return CustomResponse.errorResponse(
-                description="SUPERADMIN role not assigned.",
-                status=status.HTTP_403_FORBIDDEN,
+                return CustomResponse.errorResponse(
+                    description="Invalid or expired OTP.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            otp_obj.is_used = True
+            otp_obj.save(
+                update_fields=[
+                    "is_used",
+                ]
             )
 
-        refresh = RefreshToken.for_user(user)
+            user_role = UserRoles.objects.filter(
+                user=user,
+                role__role_name="SUPERADMIN",
+            ).exists()
 
-        return CustomResponse.successResponse(
-            data={
-                "user": {
-                    "id": str(user.id),
-                    "username": user.username,
-                    "mobile": user.mobile,
-                    "email": user.email,
-                    "first_name": user.first_name,
+            if not user_role:
+
+                application_logger.warning(
+                    "superadmin_verify_otp_failed",
+                    reason="role_not_assigned",
+                    user_id=str(user.id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="SUPERADMIN role not assigned.",
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            refresh = RefreshToken.for_user(user)
+
+            application_logger.info(
+                "superadmin_login_success",
+                user_id=str(user.id),
+                mobile=user.mobile,
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "user": {
+                        "id": str(user.id),
+                        "username": user.username,
+                        "mobile": user.mobile,
+                        "email": user.email,
+                        "first_name": user.first_name,
+                    },
+                    "tokens": {
+                        "access": str(refresh.access_token),
+                        "refresh": str(refresh),
+                    },
                 },
-                "tokens": {
-                    "access": str(refresh.access_token),
-                    "refresh": str(refresh),
-                },
-            },
-            description="SUPERADMIN login successful.",
-            status=status.HTTP_200_OK,
-        )
+                description="SUPERADMIN login successful.",
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "superadmin_verify_otp_failed",
+                mobile=phone_number,
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while verifying OTP.",
+            )
+
 
 class SchoolLeadListAPIView(APIView):
+
     permission_classes = [IsAuthenticated]
 
-
     def get(self, request):
+
         user = request.user
-        is_superadmin = UserRoles.objects.filter(
-            user=user,
-            role__role_name="SUPERADMIN",
-        ).exists()
 
-        if not is_superadmin:
-            return CustomResponse.errorResponse(
-                description="Only SUPERADMIN can login here.",
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-
-        leads = SchoolLead.objects.all()
-
-        return CustomResponse.successResponse(
-            {
-                "data": [
-                    {
-                        "id": str(lead.id),
-                        "school_name": lead.school_name,
-                        "contact_person": lead.contact_person,
-                        "phone_number": lead.phone_number,
-                        "email": lead.email,
-                        "is_verified": lead.is_verified,
-                        "status": lead.status,
-                    }
-                    for lead in leads
-                ]
-            }
+        application_logger.info(
+            "school_lead_list_started",
+            user_id=str(user.id),
         )
 
+        try:
 
+            is_superadmin = UserRoles.objects.filter(
+                user=user,
+                role__role_name="SUPERADMIN",
+            ).exists()
+
+            if not is_superadmin:
+
+                application_logger.warning(
+                    "school_lead_list_failed",
+                    reason="not_superadmin",
+                    user_id=str(user.id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Only SUPERADMIN can login here.",
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            leads = SchoolLead.objects.all()
+
+            application_logger.info(
+                "school_lead_list_fetched",
+                user_id=str(user.id),
+                total_leads=leads.count(),
+            )
+
+            return CustomResponse.successResponse(
+                {
+                    "data": [
+                        {
+                            "id": str(lead.id),
+                            "school_name": lead.school_name,
+                            "contact_person": lead.contact_person,
+                            "phone_number": lead.phone_number,
+                            "email": lead.email,
+                            "is_verified": lead.is_verified,
+                            "status": lead.status,
+                        }
+                        for lead in leads
+                    ]
+                }
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "school_lead_list_failed",
+                user_id=str(user.id),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while fetching school leads.",
+            )
 class SchoolLeadUpdateAPIView(APIView):
 
     permission_classes = [IsAuthenticated]
@@ -620,67 +777,94 @@ class SchoolListAPIView(APIView):
             "school_id"
         )
 
-        check_permission(
-            request,
-            "school.view",
-            school_id,
+        application_logger.info(
+            "school_list_started",
+            user_id=str(request.user.id),
+            school_id=school_id,
         )
 
-        queryset = School.objects.select_related(
-            "organization",
-        ).prefetch_related(
-            "branches",
-        ).all()
+        try:
 
-        data = []
+            check_permission(
+                request,
+                "school.view",
+                school_id,
+            )
 
-        for obj in queryset:
+            queryset = School.objects.select_related(
+                "organization",
+            ).prefetch_related(
+                "branches",
+            ).all()
 
-            branches = []
+            data = []
 
-            for branch in obj.branches.all():
+            for obj in queryset:
 
-                branches.append({
-                    "id": str(branch.id),
-                    "name": branch.name,
-                    "code": branch.code,
-                    "status": branch.status,
+                branches = []
+
+                for branch in obj.branches.all():
+
+                    branches.append({
+                        "id": str(branch.id),
+                        "name": branch.name,
+                        "code": branch.code,
+                        "status": branch.status,
+                    })
+
+                data.append({
+                    "id": str(obj.id),
+                    "name": obj.name,
+                    "code": obj.code,
+                    "organization_name": (
+                        obj.organization.name
+                        if obj.organization
+                        else None
+                    ),
+                    "address": obj.address,
+                    "logo": obj.logo,
+                    "city": obj.city,
+                    "primary_color": obj.primary_color,
+                    "secondary_color": obj.secondary_color,
+                    "board": obj.board,
+                    "email": obj.email,
+                    "phone_number": obj.phone_number,
+                    "principal_name": obj.principal_name,
+                    "principal_email": obj.principal_email,
+                    "established_year": obj.established_year,
+                    "pincode": obj.pincode,
+                    "website": obj.website,
+                    "state": obj.state,
+                    "country": obj.country,
+                    "is_email_verified": obj.is_email_verified,
+                    "is_phone_verified": obj.is_phone_verified,
+                    "status": obj.status,
+                    "branches": branches,
                 })
 
-            data.append({
-                "id": str(obj.id),
-                "name": obj.name,
-                "code": obj.code,
-                "organization_name": (
-                    obj.organization.name
-                    if obj.organization
-                    else None
-                ),
-                "address": obj.address,
-                "logo": obj.logo,
-                "city": obj.city,
-                "primary_color": obj.primary_color,
-                "secondary_color": obj.secondary_color,
-                "board": obj.board,
-                "email": obj.email,
-                "phone_number": obj.phone_number,
-                "principal_name": obj.principal_name,
-                "principal_email": obj.principal_email,
-                "established_year": obj.established_year,
-                "pincode": obj.pincode,
-                "website": obj.website,
-                "state": obj.state,
-                "country": obj.country,
-                "is_email_verified": obj.is_email_verified,
-                "is_phone_verified": obj.is_phone_verified,
-                "status": obj.status,
+            application_logger.info(
+                "school_list_fetched",
+                user_id=str(request.user.id),
+                school_id=school_id,
+                total_count=len(data),
+            )
 
-                "branches": branches,
-            })
+            return CustomResponse.successResponse(
+                data=data
+            )
 
-        return CustomResponse.successResponse(
-            data=data
-        )
+        except Exception as e:
+
+            application_logger.exception(
+                "school_list_failed",
+                user_id=str(request.user.id),
+                school_id=school_id,
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while fetching schools."
+            )
 
 
 # ===========================
