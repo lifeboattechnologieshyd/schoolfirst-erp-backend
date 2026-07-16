@@ -1,6 +1,7 @@
 from datetime import timedelta
 
-from django.db.models import Q
+from django.db.models import Q, Prefetch
+
 from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -1108,6 +1109,8 @@ class UpdateBranchAPIView(APIView):
 
 
 
+
+
 class UserListAPIView(APIView):
 
     permission_classes = [
@@ -1120,62 +1123,127 @@ class UserListAPIView(APIView):
     def get(self, request):
 
         school = request.school
+        user = request.user
 
         search = request.query_params.get(
             "search",
             "",
         ).strip()
 
-        if has_role(
-            request.user,
-            RolesEnum.SUPERADMIN,
-        ):
+        application_logger.info(
+            "user_list_started",
+            user_id=str(user.id),
+            school_id=str(school.id) if school else None,
+            search=search,
+        )
+
+        try:
+
+            is_superadmin = has_role(
+                user,
+                RolesEnum.SUPERADMIN,
+            )
 
             queryset = UserMaster.objects.filter(
                 is_active=True,
             )
 
-        else:
+            if is_superadmin:
 
-            queryset = UserMaster.objects.filter(
-                user_roles__school=school,
-                is_active=True,
-            ).distinct()
+                queryset = queryset.prefetch_related(
+                    Prefetch(
+                        "user_roles",
+                        queryset=UserRoles.objects.select_related(
+                            "role",
+                            "school",
+                        ),
+                    )
+                )
 
-        if search:
+            else:
 
-            queryset = queryset.filter(
-                Q(first_name__icontains=search)
-                | Q(last_name__icontains=search)
-                | Q(username__icontains=search)
-                | Q(email__icontains=search)
-                | Q(mobile__icontains=search)
+                queryset = queryset.filter(
+                    user_roles__school=school,
+                ).distinct().prefetch_related(
+                    Prefetch(
+                        "user_roles",
+                        queryset=UserRoles.objects.filter(
+                            school=school,
+                        ).select_related(
+                            "role",
+                            "school",
+                        ),
+                    )
+                )
+
+            if search:
+
+                queryset = queryset.filter(
+                    Q(first_name__icontains=search)
+                    | Q(last_name__icontains=search)
+                    | Q(username__icontains=search)
+                    | Q(email__icontains=search)
+                    | Q(mobile__icontains=search)
+                )
+
+            queryset = queryset.order_by(
+                "first_name",
             )
 
-        queryset = queryset.order_by(
-            "first_name",
-        )
+            paginator = CustomPageNumberPagination()
 
-        paginator = CustomPageNumberPagination()
+            page = paginator.paginate_queryset(
+                queryset,
+                request,
+            )
 
-        page = paginator.paginate_queryset(
-            queryset,
-            request,
-        )
+            data = []
 
-        data = [
-            {
-                "id": str(user.id),
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "mobile":user.mobile,
-                "email":user.email,
+            for obj in page:
 
-            }
-            for user in page
-        ]
+                data.append({
+                    "id": str(obj.id),
+                    "first_name": obj.first_name,
+                    "last_name": obj.last_name,
+                    "mobile": obj.mobile,
+                    "email": obj.email,
+                    "roles": [
+                        {
+                            "id": str(user_role.role.id),
+                            "name": user_role.role.role_name,
+                            "school_id": (
+                                str(user_role.school.id)
+                                if user_role.school
+                                else None
+                            ),
+                        }
+                        for user_role in obj.user_roles.all()
+                    ],
+                })
 
-        return paginator.get_paginated_response(data)
+            application_logger.info(
+                "user_list_fetched",
+                user_id=str(user.id),
+                school_id=str(school.id) if school else None,
+                total_count=len(data),
+            )
+
+            return paginator.get_paginated_response(
+                data
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "user_list_failed",
+                user_id=str(user.id),
+                school_id=str(school.id) if school else None,
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while fetching users."
+            )
 
 class CreateSchoolConfigurationAPIView(APIView):
 

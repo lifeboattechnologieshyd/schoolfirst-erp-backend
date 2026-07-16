@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.homework.models import Homework, HomeworkSubmission, HomeworkSection
-from apps.school.models.school import Staff, Section, Branch, Subject, Grade, AcademicYear
+from apps.school.models.school import Staff, Section, Branch, Subject, Grade, AcademicYear, Student
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
