@@ -301,9 +301,9 @@ urlpatterns = [
 
     path("homework/<uuid:homework_id>",HomeworkUpdateAPIView.as_view(),),
 
-    path("homework/submissions",TeacherHomeworkSubmissionListAPIView.as_view(),),
+    path("homework/submissions/<uuid:homework_id>",TeacherHomeworkSubmissionListAPIView.as_view(),),
 
-    path("homework/check",TeacherCheckHomeworkAPIView.as_view(),),
+    path("homework/check/<uuid:submission_id>",TeacherCheckHomeworkAPIView.as_view(),),
 
     # ====================================
     #  Assignment   APIs
@@ -316,9 +316,9 @@ urlpatterns = [
 
     path("assignment/<uuid:assignment_id>",AssignmentUpdateAPIView.as_view(),),
 
-    path("assignment/submissions",TeacherAssignmentSubmissionListAPIView.as_view(),),
+    path("assignment/submissions/<uuid:assignment_id>",TeacherAssignmentSubmissionListAPIView.as_view(),),
 
-    path("assignment/check",TeacherCheckAssignmentAPIView.as_view(),),
+    path("assignment/check/<uuid:submission_id>",TeacherCheckAssignmentAPIView.as_view(),),
 
 
 
