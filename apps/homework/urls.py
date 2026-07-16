@@ -11,9 +11,9 @@ urlpatterns = [
 
     path("student",StudentHomeworkListAPIView.as_view(),),
 
-    path("submission",StudentHomeworkSubmissionAPIView.as_view(),),
+    path("submission/<uuid:homework_id>",StudentHomeworkSubmissionAPIView.as_view(),),
 
     path("assignment/student", StudentAssignmentListAPIView.as_view(), ),
 
-    path("assignment/submission", StudentAssignmentSubmissionAPIView.as_view(), ),
+    path("assignment/submission/<uuid:assignment_id>", StudentAssignmentSubmissionAPIView.as_view(), ),
 ]
