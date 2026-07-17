@@ -67,27 +67,19 @@ def get_phonepe_client(gateway):
     )
 
 
-def phone_pe_initate(order_id, gateway):
+def phone_pe_initate(order_id, gateway, amount, student_id):
 
     client = get_phonepe_client(gateway)
 
-    unique_order_id = str(order_id)
-
-    amount = 100
-
-    meta_info = MetaInfo(
-        udf1="onboarding",
-    )
-
     sdk_order_request = CreateSdkOrderRequest.build_standard_checkout_request(
-        merchant_order_id=unique_order_id,
-        amount=amount,
-        meta_info=meta_info,
+        merchant_order_id=str(order_id),
+        amount=int(amount * 100),   # amount in paise
+        meta_info=MetaInfo(
+            udf1=str(student_id),
+        ),
         disable_payment_retry=True,
     )
 
-    create_order_response = client.create_sdk_order(
+    return client.create_sdk_order(
         sdk_order_request=sdk_order_request,
     )
-
-    return create_order_response

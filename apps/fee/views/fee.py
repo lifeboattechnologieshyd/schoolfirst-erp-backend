@@ -7,10 +7,15 @@ from rest_framework.views import APIView
 from apps.fee.models import StudentFee, SchoolPaymentGateway
 from apps.payment.models import PaymentTransaction, PaymentTransactionItem
 from apps.payment.services.gateway import PaymentGatewayService
-from apps.payment.services.phonepe import create_phonepe_payment, get_phonepe_client
+from apps.payment.services.phonepe import create_phonepe_payment, get_phonepe_client, phone_pe_initate
 from apps.school.models.school import Student
 from shared.mixins import CustomResponse
 from django.db import transaction
+
+from shared.utils.logger import payment_logger
+
+
+
 
 class PendingStudentFeeAPIView(APIView):
 
@@ -20,76 +25,97 @@ class PendingStudentFeeAPIView(APIView):
 
     def get(self, request):
 
-        student = Student.objects.filter(
-            id=request.query_params.get("student_id"),
-        ).first()
+        try:
 
-        if student is None:
-
-            return CustomResponse.errorResponse(
-                description="Student not found.",
+            payment_logger.info(
+                "pending_student_fee_started",
+                school_id=str(request.school.id),
+                user_id=str(request.user.id),
+                student_id=request.query_params.get("student_id"),
             )
 
-        fees = StudentFee.objects.select_related(
-            "installment_item",
-            "installment_item__fee_template_item",
-            "installment_item__fee_template_item__fee_type",
-            "installment_item__installment",
-        ).filter(
-            student=student,
-        ).exclude(
-            status=StudentFee.Status.PAID,
-        ).order_by(
-            "due_date",
-        )
+            student = Student.objects.filter(
+                id=request.query_params.get("student_id"),
+            ).first()
 
-        total_amount = 0
+            if student is None:
 
-        data = []
+                payment_logger.warning(
+                    "pending_student_fee_student_not_found",
+                    school_id=str(request.school.id),
+                    student_id=request.query_params.get("student_id"),
+                )
 
-        for fee in fees:
+                return CustomResponse.errorResponse(
+                    description="Student not found.",
+                )
 
-            payable = fee.payable_amount
+            fees = StudentFee.objects.select_related(
+                "installment_item",
+                "installment_item__fee_template_item",
+                "installment_item__fee_template_item__fee_type",
+                "installment_item__installment",
+            ).filter(
+                student=student,
+            ).exclude(
+                status=StudentFee.Status.PAID,
+            ).order_by(
+                "due_date",
+            )
 
-            total_amount += payable
+            total_amount = 0
+            data = []
 
-            data.append({
+            for fee in fees:
 
-                "student_fee_id": str(fee.id),
+                payable = fee.payable_amount
+                total_amount += payable
 
-                "fee_type": fee.installment_item.fee_template_item.fee_type.name,
+                data.append({
+                    "student_fee_id": str(fee.id),
+                    "fee_type": fee.installment_item.fee_template_item.fee_type.name,
+                    "installment": fee.installment_item.installment.name,
+                    "amount": fee.amount,
+                    "concession": fee.concession_amount,
+                    "late_fee": fee.late_fee,
+                    "paid_amount": fee.paid_amount,
+                    "payable_amount": payable,
+                    "due_date": fee.due_date,
+                    "status": fee.status,
+                })
 
-                "installment": fee.installment_item.installment.name,
+            payment_logger.info(
+                "pending_student_fee_fetched",
+                school_id=str(request.school.id),
+                student_id=str(student.id),
+                fee_count=fees.count(),
+                total_payable_amount=str(total_amount),
+            )
 
-                "amount": fee.amount,
+            return CustomResponse.successResponse(
+                data={
+                    "student": {
+                        "id": str(student.id),
+                        "name": student.name,
+                        "admission_number": student.admission_number,
+                    },
+                    "fees": data,
+                    "total_payable_amount": total_amount,
+                }
+            )
 
-                "concession": fee.concession_amount,
+        except Exception:
 
-                "late_fee": fee.late_fee,
+            payment_logger.exception(
+                "pending_student_fee_failed",
+                school_id=str(request.school.id) if hasattr(request, "school") else None,
+                user_id=str(request.user.id) if request.user.is_authenticated else None,
+                student_id=request.query_params.get("student_id"),
+            )
 
-                "paid_amount": fee.paid_amount,
-
-                "payable_amount": payable,
-
-                "due_date": fee.due_date,
-
-                "status": fee.status,
-
-            })
-
-        return CustomResponse.successResponse(
-
-            data={
-
-                "student": {
-                    "id": str(student.id),
-                    "name": student.name,
-                    "admission_number": student.admission_number,
-                },
-                "fees": data,
-                "total_payable_amount": total_amount,
-            }
-        )
+            return CustomResponse.errorResponse(
+                description="Internal server error.",
+            )
 
 class CreatePaymentAPIView(APIView):
 
@@ -101,25 +127,27 @@ class CreatePaymentAPIView(APIView):
 
         try:
 
-            print("=" * 100)
-            print("CREATE PAYMENT API STARTED")
-            print("Request Data:", request.data)
-            print("=" * 100)
+            payment_logger.info(
+                "create_payment_started",
+                school_id=str(request.school.id),
+                user_id=str(request.user.id),
+                request_data=request.data,
+            )
 
             school = request.school
-
-            print("School:", school)
 
             student = Student.objects.filter(
                 id=request.data.get("student_id"),
                 school=school,
             ).first()
 
-            print("Student:", student)
-
             if student is None:
 
-                print("Student not found")
+                payment_logger.warning(
+                    "student_not_found",
+                    school_id=str(school.id),
+                    student_id=request.data.get("student_id"),
+                )
 
                 return CustomResponse.errorResponse(
                     description="Student not found.",
@@ -130,11 +158,12 @@ class CreatePaymentAPIView(APIView):
                 [],
             )
 
-            print("Student Fee IDs:", student_fee_ids)
-
             if not student_fee_ids:
 
-                print("No fee ids selected")
+                payment_logger.warning(
+                    "student_fee_ids_missing",
+                    student_id=str(student.id),
+                )
 
                 return CustomResponse.errorResponse(
                     description="Please select fees.",
@@ -147,51 +176,45 @@ class CreatePaymentAPIView(APIView):
                 status=StudentFee.Status.PAID,
             )
 
-            print("Pending Fees Count:", fees.count())
-
             if not fees.exists():
 
-                print("No pending fees")
+                payment_logger.warning(
+                    "pending_fees_not_found",
+                    student_id=str(student.id),
+                    fee_ids=student_fee_ids,
+                )
 
                 return CustomResponse.errorResponse(
                     description="No pending fees found.",
                 )
 
-            total_amount = 0
+            total_amount = sum(
+                fee.payable_amount
+                for fee in fees
+            )
 
-            for fee in fees:
-
-                print("-" * 80)
-                print("Fee ID:", fee.id)
-                print("Amount:", fee.amount)
-                print("Payable:", fee.payable_amount)
-
-                total_amount += fee.payable_amount
-
-            print("Total Amount:", total_amount)
+            payment_logger.info(
+                "payment_amount_calculated",
+                student_id=str(student.id),
+                fee_count=fees.count(),
+                total_amount=str(total_amount),
+            )
 
             gateway = SchoolPaymentGateway.objects.filter(
                 school=school,
                 is_active=True,
             ).first()
 
-            print("Gateway:", gateway)
-
             if gateway is None:
 
-                print("Gateway not configured")
+                payment_logger.warning(
+                    "payment_gateway_not_configured",
+                    school_id=str(school.id),
+                )
 
                 return CustomResponse.errorResponse(
                     description="Payment gateway not configured.",
                 )
-
-            print("Creating transaction...")
-
-            total_amount = sum(
-            fee.payable_amount
-            for fee in fees)
-
-            amount_paisa = int(total_amount * 100)
 
             transaction = PaymentTransaction.objects.create(
                 school=school,
@@ -201,29 +224,42 @@ class CreatePaymentAPIView(APIView):
                 amount=total_amount,
                 status=PaymentTransaction.Status.INITIATED,
             )
-            print("Creating Transaction Items...")
+
+            payment_logger.info(
+                "payment_transaction_created",
+                transaction_id=str(transaction.id),
+                transaction_number=transaction.transaction_number,
+            )
 
             for fee in fees:
 
-                print(
-                    f"Adding Fee -> {fee.id} | "
-                    f"{fee.installment_item.fee_template_item.fee_type.name} | "
-                    f"Amount: {fee.payable_amount}"
-                )
                 PaymentTransactionItem.objects.create(
-                            transaction=transaction,
-                            student_fee=fee,
-                            amount=fee.payable_amount,
-                        )
+                    transaction=transaction,
+                    student_fee=fee,
+                    amount=fee.payable_amount,
+                )
 
-            print("Transaction Items Created")
-
-            phonepe_response = create_phonepe_payment(
-                transaction,
-
+            payment_logger.info(
+                "payment_transaction_items_created",
+                transaction_id=str(transaction.id),
+                items_count=fees.count(),
             )
 
-            transaction.gateway_order_id = phonepe_response["order_id"]
+            phonepe_response = phone_pe_initate(
+                transaction.transaction_number,
+                gateway,
+                transaction.amount,
+                transaction.student.id,
+            )
+
+            payment_logger.info(
+                "phonepe_payment_initiated",
+                transaction_id=str(transaction.id),
+                order_id=phonepe_response.order_id,
+                state=phonepe_response.state,
+            )
+
+            transaction.gateway_order_id = phonepe_response.order_id
 
             transaction.save(
                 update_fields=[
@@ -231,36 +267,42 @@ class CreatePaymentAPIView(APIView):
                 ]
             )
 
-            print("Transaction Updated")
+            payment_logger.info(
+                "payment_transaction_updated",
+                transaction_id=str(transaction.id),
+                gateway_order_id=transaction.gateway_order_id,
+            )
 
-            print("=" * 100)
-            print("CREATE PAYMENT SUCCESS")
-            print("=" * 100)
+            payment_logger.info(
+                "create_payment_completed",
+                transaction_id=str(transaction.id),
+                student_id=str(student.id),
+            )
 
             return CustomResponse.successResponse(
                 description="Payment created successfully.",
                 data={
                     "transaction_id": str(transaction.id),
-                    "gateway": gateway.gateway,
-                    "amount": total_amount,
-                    "payment_url": phonepe_response["redirect_url"]}
+                    "transaction_number": transaction.transaction_number,
+                    "amount": transaction.amount,
+                    "token": phonepe_response.token,
+                    "order_id": phonepe_response.order_id,
+                    "state": phonepe_response.state,
+                    "expire_at": phonepe_response.expire_at,
+                },
             )
 
-        except Exception as e:
+        except Exception:
 
-            import traceback
-
-            print("=" * 100)
-            print("CREATE PAYMENT FAILED")
-            print(type(e))
-            print(str(e))
-            traceback.print_exc()
-            print("=" * 100)
+            payment_logger.exception(
+                "create_payment_failed",
+                school_id=str(request.school.id) if hasattr(request, "school") else None,
+                user_id=str(request.user.id) if request.user.is_authenticated else None,
+            )
 
             return CustomResponse.errorResponse(
-                description=str(e),
+                description="Internal server error.",
             )
-
 class PhonePeWebhookAPIView(APIView):
 
     permission_classes = [
