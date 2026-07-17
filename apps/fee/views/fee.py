@@ -220,7 +220,7 @@ class CreatePaymentAPIView(APIView):
 
             phonepe_response = create_phonepe_payment(
                 transaction,
-                amount_paisa,
+
             )
 
             transaction.gateway_order_id = phonepe_response["order_id"]
