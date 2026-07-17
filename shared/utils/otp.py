@@ -63,14 +63,14 @@ def _send_lifeboat_sms(otp, mobile):
         url = "https://sms.lifeboattechnologies.com/dev/bulkV2"
 
         headers = {
-            "authorization": settings.LIFEBOAT_SMS_AUTHORIZATION,
+            "authorization": settings.API_KEY,
             "Content-Type": "application/json",
         }
 
         payload = {
             "route": "dlt",
-            "sender_id": settings.LIFEBOAT_SENDER_ID,
-            "message": settings.LIFEBOAT_TEMPLATE_ID,
+            "sender_id": settings.SENDER_ID,
+            "message": settings.TEMPLATE_ID,
             "variables_values": otp,
             "numbers": mobile,
         }
