@@ -76,16 +76,20 @@ from rest_framework.response import Response
 class CustomResponse:
     @staticmethod
     def _response_payload(
-        *,
-        success: bool,
-        data: Any = None,
-        error: Any = None,
-        meta: Any = None,
-        extra: Any = None,
+            *,
+            success: bool,
+            data: Any = None,
+            error: Any = None,
+            meta: Any = None,
+            extra: Any = None,
     ) -> dict[str, Any]:
+
         payload = {
             "success": success,
         }
+
+        if extra:
+            payload.update(extra)
 
         if data is not None:
             payload["data"] = data
@@ -95,9 +99,6 @@ class CustomResponse:
 
         if meta is not None:
             payload["meta"] = meta
-
-        if extra:
-            payload.update(extra)
 
         return payload
 
