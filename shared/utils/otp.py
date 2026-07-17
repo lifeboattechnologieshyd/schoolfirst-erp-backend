@@ -38,109 +38,109 @@ def send_otp_to_mobile(otp, mobile):
 
     """
 
-    if _send_full2ads_sms(otp, mobile):
-
-        return True
+    # if _send_full2ads_sms(otp, mobile):
+    #
+    #     return True
 
     print("[OTP] Full2Ads failed. Trying Lifeboat SMS...")
 
     return _send_lifeboat_sms(otp, mobile)
 
-def _send_full2ads_sms(otp, mobile):
-
-    try:
-
-        print(f"[OTP][Full2Ads] Sending OTP to {mobile}")
-
-        base_url = "https://full2ads.com/smsapi/index"
-
-        msg = (
-
-            f"Use {otp} to complete your verification on the SchoolFirst App. "
-
-            f"The code remains valid for 10 minutes. With care, SchoolFirst."
-
-        )
-
-        tlv_payload = {
-
-            "DLT_ENTITY_ID": getattr(settings, "FULL2ADS_DLT_ENTITY_ID", ""),
-
-            "DLT_TEMPLATE_ID": getattr(settings, "FULL2ADS_DLT_TEMPLATE_ID", ""),
-
-        }
-
-        params = {
-
-            "key": settings.FULL2ADS_KEY,
-
-            "campaign": "0",
-
-            "routeid": getattr(settings, "FULL2ADS_ROUTE_ID", "1"),
-
-            "type": "text",
-
-            "contacts": mobile,
-
-            "senderid": settings.FULL2ADS_SENDER_ID,
-
-            "tlv": json.dumps(tlv_payload),
-
-            "msg": msg,
-
-        }
-
-        safe_params = params.copy()
-
-        safe_params["key"] = "****HIDDEN****"
-
-        print(f"[OTP][Full2Ads] Params: {safe_params}")
-
-        response = requests.get(
-
-            base_url,
-
-            params=params,
-
-            timeout=30,
-
-        )
-
-        print(f"[OTP][Full2Ads] Status: {response.status_code}")
-
-        print(f"[OTP][Full2Ads] Response: {response.text}")
-
-        text = (response.text or "").strip()
-
-        if response.status_code == 200:
-
-            if (
-
-                "success" in text.lower()
-
-                or "ok" in text.lower()
-
-                or text.isdigit()
-
-                or any(ch.isdigit() for ch in text)
-
-            ):
-
-                print("[OTP][Full2Ads] SMS sent successfully.")
-
-                return True
-
-        print("[OTP][Full2Ads] SMS failed.")
-
-        return False
-
-    except Exception as e:
-
-        print(f"[OTP][Full2Ads] Exception: {e}")
-
-        traceback.print_exc()
-
-        return False
+# def _send_full2ads_sms(otp, mobile):
+#
+#     try:
+#
+#         print(f"[OTP][Full2Ads] Sending OTP to {mobile}")
+#
+#         base_url = "https://full2ads.com/smsapi/index"
+#
+#         msg = (
+#
+#             f"Use {otp} to complete your verification on the SchoolFirst App. "
+#
+#             f"The code remains valid for 10 minutes. With care, SchoolFirst."
+#
+#         )
+#
+#         tlv_payload = {
+#
+#             "DLT_ENTITY_ID": getattr(settings, "FULL2ADS_DLT_ENTITY_ID", ""),
+#
+#             "DLT_TEMPLATE_ID": getattr(settings, "FULL2ADS_DLT_TEMPLATE_ID", ""),
+#
+#         }
+#
+#         params = {
+#
+#             "key": settings.FULL2ADS_KEY,
+#
+#             "campaign": "0",
+#
+#             "routeid": getattr(settings, "FULL2ADS_ROUTE_ID", "1"),
+#
+#             "type": "text",
+#
+#             "contacts": mobile,
+#
+#             "senderid": settings.FULL2ADS_SENDER_ID,
+#
+#             "tlv": json.dumps(tlv_payload),
+#
+#             "msg": msg,
+#
+#         }
+#
+#         safe_params = params.copy()
+#
+#         safe_params["key"] = "****HIDDEN****"
+#
+#         print(f"[OTP][Full2Ads] Params: {safe_params}")
+#
+#         response = requests.get(
+#
+#             base_url,
+#
+#             params=params,
+#
+#             timeout=30,
+#
+#         )
+#
+#         print(f"[OTP][Full2Ads] Status: {response.status_code}")
+#
+#         print(f"[OTP][Full2Ads] Response: {response.text}")
+#
+#         text = (response.text or "").strip()
+#
+#         if response.status_code == 200:
+#
+#             if (
+#
+#                 "success" in text.lower()
+#
+#                 or "ok" in text.lower()
+#
+#                 or text.isdigit()
+#
+#                 or any(ch.isdigit() for ch in text)
+#
+#             ):
+#
+#                 print("[OTP][Full2Ads] SMS sent successfully.")
+#
+#                 return True
+#
+#         print("[OTP][Full2Ads] SMS failed.")
+#
+#         return False
+#
+#     except Exception as e:
+#
+#         print(f"[OTP][Full2Ads] Exception: {e}")
+#
+#         traceback.print_exc()
+#
+#         return False
 
 def _send_lifeboat_sms(otp, mobile):
 
