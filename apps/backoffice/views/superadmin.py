@@ -1259,9 +1259,21 @@ class CreateSchoolConfigurationAPIView(APIView):
     def post(self, request):
 
         # school = request.school
-        school = request.data.get("school_id")
+        school_id = request.data.get("school_id")
+
+        if not school_id:
+            return CustomResponse.errorResponse(
+                description="School id is required.",
+            )
+
+        school = School.objects.filter(
+            id=school_id,
+        ).first()
+
         if school is None:
-            return CustomResponse.errorResponse(description="School not found.",)
+            return CustomResponse.errorResponse(
+                description="School not found.",
+            )
 
         if SchoolConfiguration.objects.filter(
             school=school,
