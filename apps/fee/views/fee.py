@@ -303,6 +303,8 @@ class CreatePaymentAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Internal server error.",
             )
+
+
 class PhonePeWebhookAPIView(APIView):
 
     permission_classes = [
@@ -313,17 +315,15 @@ class PhonePeWebhookAPIView(APIView):
 
     def post(self, request):
 
-        print("=" * 100)
-        print("PHONEPE WEBHOOK")
-        print("=" * 100)
-
-        raw_body = request.body.decode("utf-8")
-        auth_header = request.headers.get("Authorization")
-
-        print("Headers:", request.headers)
-        print("Body:", raw_body)
-
         try:
+
+            payment_logger.info(
+                "phonepe_webhook_received",
+                headers=dict(request.headers),
+            )
+
+            raw_body = request.body.decode("utf-8")
+            auth_header = request.headers.get("Authorization")
 
             gateway = SchoolPaymentGateway.objects.filter(
                 gateway=SchoolPaymentGateway.Gateway.PHONEPE,
@@ -332,133 +332,190 @@ class PhonePeWebhookAPIView(APIView):
 
             if gateway is None:
 
-                print("PhonePe gateway not configured")
+                payment_logger.warning(
+                    "phonepe_gateway_not_configured",
+                )
 
                 return CustomResponse.successResponse(
                     description="Gateway not configured.",
                 )
 
-            client = get_phonepe_client(gateway)
-
-            callback = client.validate_callback(
-                username="Ranjith",
-                password="password123",
-                callback_header_data=auth_header,
-                callback_response_data=raw_body,
+            payment_logger.info(
+                "phonepe_webhook_validation_started",
             )
 
-            print("Webhook validated successfully")
+            try:
 
-        except Exception as e:
+                client = get_phonepe_client(gateway)
 
-            print("Validation Failed:", str(e))
-
-            return CustomResponse.successResponse(
-                description="Ignored",
-            )
-
-        if not callback.payload:
-
-            print("Validation Ping")
-
-            return CustomResponse.successResponse(
-                description="Validation success",
-            )
-
-        payload = callback.payload
-
-        merchant_order_id = payload.merchant_order_id
-
-        print("Merchant Order ID:", merchant_order_id)
-
-        payment_transaction = PaymentTransaction.objects.select_related(
-            "student",
-        ).filter(
-            transaction_number=merchant_order_id,
-        ).first()
-
-        if payment_transaction is None:
-
-            print("Transaction not found")
-
-            return CustomResponse.successResponse(
-                description="Transaction not found.",
-            )
-
-        if payment_transaction.status == PaymentTransaction.Status.SUCCESS:
-
-            print("Already processed")
-
-            return CustomResponse.successResponse(
-                description="Already processed.",
-            )
-
-        state = payload.state
-
-        print("Payment State:", state)
-
-        with transaction.atomic():
-
-            payment_transaction.gateway_transaction_id = payload.order_id
-
-            if state == "COMPLETED":
-
-                payment_transaction.status = PaymentTransaction.Status.SUCCESS
-                payment_transaction.paid_at = timezone.now()
-
-                payment_transaction.save(
-                    update_fields=[
-                        "gateway_transaction_id",
-                        "status",
-                        "paid_at",
-                    ],
+                callback = client.validate_callback(
+                    username="Ranjith",
+                    password="password123",
+                    callback_header_data=auth_header,
+                    callback_response_data=raw_body,
                 )
 
-                self.update_student_fees(
-                    payment_transaction,
+                payment_logger.info(
+                    "phonepe_webhook_validated",
                 )
 
-                print("Payment Success")
+            except Exception:
 
-            elif state == "FAILED":
-
-                payment_transaction.status = PaymentTransaction.Status.FAILED
-
-                payment_transaction.save(
-                    update_fields=[
-                        "gateway_transaction_id",
-                        "status",
-                    ],
+                payment_logger.exception(
+                    "phonepe_webhook_validation_failed",
                 )
 
-                print("Payment Failed")
-
-            else:
-
-                payment_transaction.status = PaymentTransaction.Status.CANCELLED
-
-                payment_transaction.save(
-                    update_fields=[
-                        "gateway_transaction_id",
-                        "status",
-                    ],
+                return CustomResponse.successResponse(
+                    description="Ignored",
                 )
 
-                print("Payment Cancelled")
+            if not callback.payload:
 
-        print("=" * 100)
-        print("WEBHOOK COMPLETED")
-        print("=" * 100)
+                payment_logger.info(
+                    "phonepe_webhook_validation_ping",
+                )
 
-        return CustomResponse.successResponse(
-            description="Webhook processed.",
-        )
+                return CustomResponse.successResponse(
+                    description="Validation success",
+                )
+
+            payload = callback.payload
+
+            merchant_order_id = payload.merchant_order_id
+
+            payment_logger.info(
+                "payment_transaction_lookup",
+                merchant_order_id=merchant_order_id,
+            )
+
+            payment_transaction = PaymentTransaction.objects.select_related(
+                "student",
+            ).filter(
+                transaction_number=merchant_order_id,
+            ).first()
+
+            if payment_transaction is None:
+
+                payment_logger.warning(
+                    "payment_transaction_not_found",
+                    merchant_order_id=merchant_order_id,
+                )
+
+                return CustomResponse.successResponse(
+                    description="Transaction not found.",
+                )
+
+            if payment_transaction.status == PaymentTransaction.Status.SUCCESS:
+
+                payment_logger.info(
+                    "payment_transaction_already_processed",
+                    transaction_id=str(payment_transaction.id),
+                    transaction_number=payment_transaction.transaction_number,
+                )
+
+                return CustomResponse.successResponse(
+                    description="Already processed.",
+                )
+
+            state = payload.state
+
+            payment_logger.info(
+                "phonepe_payment_state_received",
+                transaction_id=str(payment_transaction.id),
+                transaction_number=payment_transaction.transaction_number,
+                state=state,
+                order_id=payload.order_id,
+            )
+
+            with transaction.atomic():
+
+                payment_transaction.gateway_transaction_id = payload.order_id
+
+                if state == "COMPLETED":
+
+                    payment_transaction.status = PaymentTransaction.Status.SUCCESS
+                    payment_transaction.paid_at = timezone.now()
+
+                    payment_transaction.save(
+                        update_fields=[
+                            "gateway_transaction_id",
+                            "status",
+                            "paid_at",
+                        ],
+                    )
+
+                    self.update_student_fees(
+                        payment_transaction,
+                    )
+
+                    payment_logger.info(
+                        "payment_transaction_marked_success",
+                        transaction_id=str(payment_transaction.id),
+                        gateway_transaction_id=payload.order_id,
+                    )
+
+                elif state == "FAILED":
+
+                    payment_transaction.status = PaymentTransaction.Status.FAILED
+
+                    payment_transaction.save(
+                        update_fields=[
+                            "gateway_transaction_id",
+                            "status",
+                        ],
+                    )
+
+                    payment_logger.info(
+                        "payment_transaction_marked_failed",
+                        transaction_id=str(payment_transaction.id),
+                        gateway_transaction_id=payload.order_id,
+                    )
+
+                else:
+
+                    payment_transaction.status = PaymentTransaction.Status.CANCELLED
+
+                    payment_transaction.save(
+                        update_fields=[
+                            "gateway_transaction_id",
+                            "status",
+                        ],
+                    )
+
+                    payment_logger.info(
+                        "payment_transaction_marked_cancelled",
+                        transaction_id=str(payment_transaction.id),
+                        gateway_transaction_id=payload.order_id,
+                    )
+
+            payment_logger.info(
+                "phonepe_webhook_completed",
+                transaction_id=str(payment_transaction.id),
+                transaction_number=payment_transaction.transaction_number,
+                status=payment_transaction.status,
+            )
+
+            return CustomResponse.successResponse(
+                description="Webhook processed.",
+            )
+
+        except Exception:
+
+            payment_logger.exception(
+                "phonepe_webhook_processing_failed",
+            )
+
+            return CustomResponse.errorResponse(
+                description="Internal server error.",
+            )
 
     def update_student_fees(self, payment_transaction):
 
-        print("=" * 80)
-        print("Updating Student Fees")
-        print("=" * 80)
+        payment_logger.info(
+            "student_fee_update_started",
+            transaction_id=str(payment_transaction.id),
+            transaction_number=payment_transaction.transaction_number,
+        )
 
         items = PaymentTransactionItem.objects.select_related(
             "student_fee",
@@ -466,17 +523,23 @@ class PhonePeWebhookAPIView(APIView):
             transaction=payment_transaction,
         )
 
-        print("Total Items:", items.count())
+        payment_logger.info(
+            "payment_transaction_items_fetched",
+            transaction_id=str(payment_transaction.id),
+            items_count=items.count(),
+        )
 
         for item in items:
 
             fee = item.student_fee
 
-            print("-" * 80)
-            print("Student Fee:", fee.id)
-            print("Fee Amount:", fee.amount)
-            print("Paid Before:", fee.paid_amount)
-            print("Transaction Amount:", item.amount)
+            payment_logger.info(
+                "student_fee_updating",
+                transaction_id=str(payment_transaction.id),
+                student_fee_id=str(fee.id),
+                previous_paid_amount=str(fee.paid_amount),
+                transaction_amount=str(item.amount),
+            )
 
             fee.paid_amount += item.amount
 
@@ -495,10 +558,16 @@ class PhonePeWebhookAPIView(APIView):
                 ],
             )
 
-            print("Paid After:", fee.paid_amount)
-            print("Fee Status:", fee.status)
+            payment_logger.info(
+                "student_fee_updated",
+                student_fee_id=str(fee.id),
+                paid_amount=str(fee.paid_amount),
+                status=fee.status,
+            )
 
-        print("=" * 80)
-        print("Student Fee Update Completed")
-        print("=" * 80)
+        payment_logger.info(
+            "student_fee_update_completed",
+            transaction_id=str(payment_transaction.id),
+            transaction_number=payment_transaction.transaction_number,
+        )
 
