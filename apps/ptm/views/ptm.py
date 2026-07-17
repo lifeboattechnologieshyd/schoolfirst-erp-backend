@@ -421,3 +421,190 @@ class StudentPTMResponseAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Something went wrong while submitting the response."
             )
+
+
+class StudentCompletedPTMAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        user = request.user
+        student_id = request.query_params.get("student_id")
+
+        application_logger.info(
+            "student_completed_ptm_started",
+            user_id=str(user.id),
+            student_id=str(student_id) if student_id else None,
+        )
+
+        try:
+
+            if not student_id:
+
+                return CustomResponse.errorResponse(
+                    description="student_id is required.",
+                )
+
+            student = Student.objects.select_related(
+                "school",
+                "branch",
+                "academic_year",
+                "grade",
+                "section",
+            ).filter(
+                id=student_id,
+                status=Student.Status.ACTIVE,
+            ).first()
+
+            if student is None:
+
+                application_logger.warning(
+                    "student_completed_ptm_student_not_found",
+                    user_id=str(user.id),
+                    student_id=str(student_id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Student not found.",
+                )
+
+            meetings = ParentTeacherMeeting.objects.select_related(
+                "academic_year",
+                "branch",
+                "grade",
+            ).prefetch_related(
+                Prefetch(
+                    "meeting_staffs",
+                    queryset=ParentTeacherMeetingStaff.objects.select_related(
+                        "staff",
+                    ),
+                ),
+            ).filter(
+                school_id=student.school_id,
+                academic_year_id=student.academic_year_id,
+                grade_id=student.grade_id,
+                meeting_sections__section_id=student.section_id,
+                status=ParentTeacherMeeting.Status.COMPLETED,
+            )
+
+            if student.branch_id:
+
+                meetings = meetings.filter(
+                    branch_id=student.branch_id,
+                )
+
+            else:
+
+                meetings = meetings.filter(
+                    branch__isnull=True,
+                )
+
+            meetings = meetings.distinct().order_by(
+                "-meeting_date",
+                "-start_time",
+            )
+
+            responses = ParentTeacherMeetingResponse.objects.filter(
+                meeting__in=meetings,
+                student=student,
+            )
+
+            response_map = {
+                response.meeting_id: response
+                for response in responses
+            }
+
+            attended_count = responses.filter(
+                attendance_status=ParentTeacherMeetingResponse.AttendanceStatus.PRESENT,
+            ).count()
+
+            absent_count = responses.filter(
+                attendance_status=ParentTeacherMeetingResponse.AttendanceStatus.ABSENT,
+            ).count()
+
+            data = []
+
+            for meeting in meetings:
+
+                response = response_map.get(
+                    meeting.id,
+                )
+
+                data.append(
+                    {
+                        "id": str(meeting.id),
+                        "title": meeting.title,
+                        "meeting_type": meeting.meeting_type,
+                        "meeting_date": meeting.meeting_date,
+                        "start_time": meeting.start_time,
+                        "end_time": meeting.end_time,
+                        "meeting_mode": meeting.meeting_mode,
+                        "location": meeting.location,
+                        "meeting_link": meeting.meeting_link,
+                        "attendance_status": (
+                            response.attendance_status
+                            if response
+                            else ParentTeacherMeetingResponse.AttendanceStatus.NOT_MARKED
+                        ),
+                        "is_attended": (
+                            response.attendance_status ==
+                            ParentTeacherMeetingResponse.AttendanceStatus.PRESENT
+                            if response
+                            else False
+                        ),
+                        "attended_at": (
+                            response.attended_at
+                            if response
+                            else None
+                        ),
+                        "remarks": (
+                            response.remarks
+                            if response
+                            else None
+                        ),
+                        "staffs": [
+                            {
+                                "id": str(item.staff.id),
+                                "name": item.staff.name,
+                                "staff_type": item.staff.get_staff_type_display(),
+                                "is_host": (
+                                    item.responsibility ==
+                                    ParentTeacherMeetingStaff.Responsibility.HOST
+                                ),
+                            }
+                            for item in meeting.meeting_staffs.all()
+                        ],
+                    }
+                )
+
+            application_logger.info(
+                "student_completed_ptm_fetched",
+                user_id=str(user.id),
+                student_id=str(student.id),
+                total_completed=len(data),
+            )
+
+            return CustomResponse.successResponse(
+                description="Completed parent teacher meetings fetched successfully.",
+                data={
+                    "summary": {
+                        "total_completed": len(data),
+                        "attended_count": attended_count,
+                        "absent_count": absent_count,
+                    },
+                    "meetings": data,
+                },
+            )
+
+        except Exception:
+
+            application_logger.exception(
+                "student_completed_ptm_failed",
+                user_id=str(user.id),
+                student_id=str(student_id) if student_id else None,
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while fetching completed parent teacher meetings.",
+            )
