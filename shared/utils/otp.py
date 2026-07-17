@@ -7,6 +7,7 @@ from django.conf import settings
 import requests
 
 from apps.school.models import School
+from shared.utils.logger import auth_logger
 
 
 def generate_otp():
@@ -29,22 +30,101 @@ def generate_school_code():
 
 
 def send_otp_to_mobile(otp, mobile):
-
     """
-
     Send OTP using Full2Ads.
 
     If Full2Ads fails, automatically send using Lifeboat SMS.
-
     """
 
     # if _send_full2ads_sms(otp, mobile):
     #
     #     return True
 
-    print("[OTP] Full2Ads failed. Trying Lifeboat SMS...")
+    auth_logger.warning(
+        "full2ads_sms_failed_fallback_to_lifeboat",
+        mobile=mobile,
+    )
 
-    return _send_lifeboat_sms(otp, mobile)
+    return _send_lifeboat_sms(
+        otp,
+        mobile,
+    )
+
+
+def _send_lifeboat_sms(otp, mobile):
+
+    try:
+
+        auth_logger.info(
+            "lifeboat_sms_send_started",
+            mobile=mobile,
+        )
+
+        url = "https://sms.lifeboattechnologies.com/dev/bulkV2"
+
+        headers = {
+            "authorization": settings.LIFEBOAT_SMS_AUTHORIZATION,
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "route": "dlt",
+            "sender_id": settings.LIFEBOAT_SENDER_ID,
+            "message": settings.LIFEBOAT_TEMPLATE_ID,
+            "variables_values": otp,
+            "numbers": mobile,
+        }
+
+        safe_headers = headers.copy()
+        safe_headers["authorization"] = "****HIDDEN****"
+
+        auth_logger.info(
+            "lifeboat_sms_request",
+            mobile=mobile,
+            headers=safe_headers,
+            payload=payload,
+        )
+
+        response = requests.post(
+            url,
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+
+        auth_logger.info(
+            "lifeboat_sms_response",
+            mobile=mobile,
+            status_code=response.status_code,
+            response=response.text,
+        )
+
+        if response.status_code in (200, 201):
+
+            auth_logger.info(
+                "lifeboat_sms_sent_successfully",
+                mobile=mobile,
+            )
+
+            return True
+
+        auth_logger.warning(
+            "lifeboat_sms_send_failed",
+            mobile=mobile,
+            status_code=response.status_code,
+            response=response.text,
+        )
+
+        return False
+
+    except Exception:
+
+        auth_logger.exception(
+            "lifeboat_sms_exception",
+            mobile=mobile,
+        )
+
+        return False
 
 # def _send_full2ads_sms(otp, mobile):
 #
@@ -142,77 +222,8 @@ def send_otp_to_mobile(otp, mobile):
 #
 #         return False
 
-def _send_lifeboat_sms(otp, mobile):
 
-    try:
 
-        print(f"[OTP][Lifeboat] Sending OTP to {mobile}")
-
-        url = "https://sms.lifeboattechnologies.com/dev/bulkV2"
-
-        headers = {
-
-            "authorization": settings.LIFEBOAT_SMS_AUTHORIZATION,
-
-            "Content-Type": "application/json",
-
-        }
-
-        payload = {
-
-            "route": "dlt",
-
-            "sender_id": settings.LIFEBOAT_SENDER_ID,
-
-            "message": settings.LIFEBOAT_TEMPLATE_ID,
-
-            "variables_values": otp,
-
-            "numbers": mobile,
-
-        }
-
-        safe_headers = headers.copy()
-
-        safe_headers["authorization"] = "****HIDDEN****"
-
-        print(f"[OTP][Lifeboat] Headers: {safe_headers}")
-
-        print(f"[OTP][Lifeboat] Payload: {payload}")
-
-        response = requests.post(
-
-            url,
-
-            headers=headers,
-
-            json=payload,
-
-            timeout=30,
-
-        )
-
-        print(f"[OTP][Lifeboat] Status: {response.status_code}")
-
-        print(f"[OTP][Lifeboat] Response: {response.text}")
-
-        if response.status_code in (200, 201):
-
-            print("[OTP][Lifeboat] SMS sent successfully.")
-
-            return True
-
-        print("[OTP][Lifeboat] SMS failed.")
-
-        return False
-
-    except Exception as e:
-
-        print(f"[OTP][Lifeboat] Exception: {e}")
-
-        traceback.print_exc()
-
-        return False
 
 
 # def send_otp_to_mobile(otp, mobile):
