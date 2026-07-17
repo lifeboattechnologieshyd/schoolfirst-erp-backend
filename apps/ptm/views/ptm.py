@@ -204,6 +204,7 @@ class StudentPTMListAPIView(APIView):
 
             return CustomResponse.successResponse(
                 description="Parent teacher meetings fetched successfully.",
+                total_count=len(data),
                 data={
                     "student": {
                         "id": str(student.id),
