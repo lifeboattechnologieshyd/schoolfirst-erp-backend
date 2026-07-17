@@ -2,6 +2,8 @@ import logging
 import os
 from pathlib import Path
 
+from phonepe.sdk.pg.env import Env
+
 from config.logs import LOGGING  # noqa: F401, F403
 from shared.utils import get_from_env, str_to_bool
 
@@ -140,3 +142,8 @@ FULL2ADS_SENDER_ID = "PAPREC"
 FULL2ADS_ROUTE_ID = "1"
 FULL2ADS_DLT_ENTITY_ID = "1001548232379518414"
 FULL2ADS_DLT_TEMPLATE_ID = "1007108926257131293"
+
+PHONE_PE_CLIENT_ID=os.environ.get("PHONE_PE_CLIENT_ID", "M232O4UX2AXM7_2604211147")
+PHONE_PE_CLIENT_SECRETE=os.environ.get("PHONE_PE_CLIENT_SECRET", "ZDZkZjFmOTQtOGNiMS00NjNiLThhOTMtYWEyYzcxODg5ZTZk")
+PHONE_PE_CLIENT_VERSION="1.0"
+PHONE_PE_ENV=Env.SANDBOX
