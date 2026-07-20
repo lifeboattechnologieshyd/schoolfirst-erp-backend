@@ -3,10 +3,12 @@ from django.db.models import Q
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from apps.calendar.models import CalendarEvent, CalendarEventTarget
 from apps.homework.models import Assignment, AssignmentSection, AssignmentSubmission
 from apps.school.models.school import AcademicYear, Grade, Subject, Staff, Branch, Section
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
+from shared.utils.calendar import create_calendar_event
 from shared.utils.logger import application_logger
 
 
@@ -249,6 +251,19 @@ class CreateAssignmentAPIView(APIView):
                         )
                         for section in sections
                     ]
+                )
+                create_calendar_event(
+                    school=school,
+                    title=assignment.title,
+                    description=assignment.description,
+                    event_type=CalendarEvent.EventType.ASSIGNMENT,
+                    event_date=assignment.due_date,  # or assigned_date
+                    reference_id=assignment.id,
+                    target_type=CalendarEventTarget.TargetType.SECTION,
+                    academic_year=academic_year,
+                    branch=branch,
+                    grade=grade,
+                    sections=sections,
                 )
             application_logger.info(
                 "assignment_created",

@@ -3,10 +3,12 @@ from django.db.models import Q
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from apps.calendar.models import CalendarEvent, CalendarEventTarget
 from apps.homework.models import Homework, HomeworkSubmission, HomeworkSection
 from apps.school.models.school import Staff, Section, Branch, Subject, Grade, AcademicYear, Student
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
+from shared.utils.calendar import create_calendar_event
 from shared.utils.logger import application_logger
 
 
@@ -252,6 +254,20 @@ class CreateHomeworkAPIView(APIView):
                         for section in sections
                     ]
                 )
+                create_calendar_event(
+                    school=school,
+                    title=homework.title,
+                    description=homework.description,
+                    event_type=CalendarEvent.EventType.HOMEWORK,
+                    event_date=homework.due_date,
+                    reference_id=homework.id,
+                    target_type=CalendarEventTarget.TargetType.SECTION,
+                    academic_year=academic_year,
+                    branch=branch,
+                    grade=grade,
+                    sections=sections,
+                )
+
 
         except Exception as e:
 

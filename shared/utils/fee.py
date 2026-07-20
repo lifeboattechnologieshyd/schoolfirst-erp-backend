@@ -1,4 +1,6 @@
+from apps.calendar.models import CalendarEvent, CalendarEventTarget
 from apps.fee.models import FeeInstallmentItem, StudentFee, StudentFeeAssignment
+from shared.utils.calendar import create_calendar_event
 
 
 def generate_student_fees(
@@ -40,6 +42,34 @@ def generate_student_fees(
         student_fees,
         ignore_conflicts=True,
     )
+
+    student_fees = StudentFee.objects.filter(
+        student=student,
+        installment_item__in=[
+            item.installment_item
+            for item in student_fees
+        ],
+    ).select_related(
+        "installment_item__fee_template_item__fee_type",
+    )
+
+    for student_fee in student_fees:
+        if CalendarEvent.objects.filter(
+                event_type=CalendarEvent.EventType.FEE,
+                reference_id=student_fee.id,
+        ).exists():
+            continue
+
+        create_calendar_event(
+            school=student.school,
+            title=f"{student_fee.installment_item.fee_template_item.fee_type.name} Fee Due",
+            description="",
+            event_type=CalendarEvent.EventType.FEE,
+            event_date=student_fee.due_date,
+            reference_id=student_fee.id,
+            target_type=CalendarEventTarget.TargetType.STUDENT,
+            students=[student],
+        )
 
     return assignment
 
