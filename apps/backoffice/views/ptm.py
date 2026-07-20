@@ -1129,6 +1129,17 @@ class BulkPTMAttendanceAPIView(APIView):
                             "attended_at",
                         ],
                     )
+                meeting.status = ParentTeacherMeeting.Status.COMPLETED
+                meeting.save(
+                    update_fields=[
+                        "status",
+                    ],
+                )
+            application_logger.info(
+                "ptm_status_updated_to_completed",
+                meeting_id=str(meeting.id),
+                user_id=str(user.id),
+            )
 
             application_logger.info(
                 "bulk_ptm_attendance_completed",
