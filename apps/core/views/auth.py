@@ -675,30 +675,21 @@ class VerifyOTPAPIView(APIView):
                     mobile=mobile,
                 )
 
-                user = UserMaster.objects.filter(
+                user, user_created = UserMaster.objects.get_or_create(
                     mobile=mobile,
-                ).first()
+                    defaults={
+                        "username": mobile,
+                        "status": UserMaster.Status.ACTIVE,
+                    },
+                )
 
-                user_created = False
-
-                if user is None:
-
-                    user = UserMaster.objects.create(
-                        username=mobile,
-                        mobile=mobile,
-                        status=UserMaster.Status.ACTIVE,
-                    )
-
-                    user_created = True
-
+                if user_created:
                     auth_logger.info(
                         "parent_user_created",
                         user_id=str(user.id),
                         mobile=mobile,
                     )
-
                 else:
-
                     auth_logger.info(
                         "parent_user_found",
                         user_id=str(user.id),
@@ -709,31 +700,86 @@ class VerifyOTPAPIView(APIView):
                     "grade",
                     "section",
                     "academic_year",
-                    "school"
+                    "school",
                 ).filter(
                     Q(father_mobile=mobile)
                     | Q(mother_mobile=mobile)
                     | Q(guardian_mobile=mobile)
                 )
-                if students.exists():
+                student_count = students.count()
+
+                student_data = []
+                if student_count > 0:
+
+                    auth_logger.info(
+                        "parent_students_fetched",
+                        user_id=str(user.id),
+                        mobile=mobile,
+                        student_count=student_count,
+                    )
+
                     role = Roles.objects.filter(
                         role_name=RolesEnum.PARENT,
                     ).first()
+
+                    if role is None:
+                        auth_logger.error("parent_role_not_found")
+                        raise ValueError("Parent role not configured.")
+
                     UserRoles.objects.get_or_create(
                         user=user,
                         role=role,
                         school=None,
                     )
 
-                student_count = students.count()
+                    for student in students:
 
-                auth_logger.info(
-                    "parent_students_fetched",
-                    user_id=str(user.id),
-                    mobile=mobile,
-                    student_count=student_count,
-                    user_role = role
-                )
+
+                        if student.father_mobile == mobile:
+                            relationship = "Father"
+                        elif student.mother_mobile == mobile:
+                            relationship = "Mother"
+                        else:
+                            relationship = "Guardian"
+
+                        student_data.append({
+                            "student_id": str(student.id),
+                            "admission_number": student.admission_number,
+                            "roll_number": student.roll_number,
+                            "name": student.name,
+                            "photo_url": student.photo_url,
+                            "gender": student.gender,
+                            "date_of_birth": student.date_of_birth,
+                            "school": {
+                                "id": str(student.school.id),
+                                "name": student.school.name,
+                            },
+                            "grade": {
+                                "id": str(student.grade.id),
+                                "name": student.grade.name,
+                            } if student.grade else None,
+                            "section": {
+                                "id": str(student.section.id),
+                                "name": student.section.name,
+                            } if student.section else None,
+                            "academic_year": (
+                                student.academic_year.name
+                                if student.academic_year
+                                else None
+                            ),
+                            "relationship": relationship,
+                            "father_name": student.father_name,
+                            "mother_name": student.mother_name,
+                            "father_mobile": student.father_mobile,
+                            "mother_mobile": student.mother_mobile,
+                            "guardian_name": student.guardian_name,
+                            "guardian_mobile": student.guardian_mobile,
+                            "status": student.status,
+                        })
+
+
+
+
 
                 refresh = RefreshToken.for_user(user)
 
@@ -764,60 +810,14 @@ class VerifyOTPAPIView(APIView):
                     session_created=session_created,
                 )
 
-                student_data = []
 
-                for student in students:
-
-                    if student.father_mobile == mobile:
-                        relationship = "Father"
-
-                    elif student.mother_mobile == mobile:
-                        relationship = "Mother"
-
-                    else:
-                        relationship = "Guardian"
-
-                    student_data.append({
-                        "student_id": str(student.id),
-                        "admission_number": student.admission_number,
-                        "roll_number": student.roll_number,
-                        "name": student.name,
-                        "photo_url": student.photo_url,
-                        "gender": student.gender,
-                        "date_of_birth": student.date_of_birth,
-                        "school":{
-                            "id": str(student.school.id),
-                            "name": student.school.name,
-                        },
-                        "grade": {
-                            "id": str(student.grade.id),
-                            "name": student.grade.name,
-                        } if student.grade else None,
-                        "section": {
-                            "id": str(student.section.id),
-                            "name": student.section.name,
-                        } if student.section else None,
-                        "academic_year": (
-                            student.academic_year.name
-                            if student.academic_year
-                            else None
-                        ),
-                        "relationship": relationship,
-                        "father_name": student.father_name,
-                        "mother_name": student.mother_name,
-                        "father_mobile": student.father_mobile,
-                        "mother_mobile": student.mother_mobile,
-                        "guardian_name": student.guardian_name,
-                        "guardian_mobile": student.guardian_mobile,
-                        "status": student.status,
-                    })
 
             auth_logger.info(
                 "parent_login_successful",
                 user_id=str(user.id),
                 mobile=mobile,
                 user_created=user_created,
-                student_count=len(student_data),
+                student_count=student_count,
                 device_id=device_id,
                 device_type=device_type,
             )
