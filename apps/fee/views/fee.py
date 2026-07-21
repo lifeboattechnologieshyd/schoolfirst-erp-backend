@@ -55,6 +55,9 @@ class PendingStudentFeeAPIView(APIView):
                 "installment_item__fee_template_item",
                 "installment_item__fee_template_item__fee_type",
                 "installment_item__installment",
+                "installment_item__installment__collection_plan",
+                "installment_item__installment__collection_plan__fee_template",
+                "installment_item__installment__collection_plan__fee_template__academic_year",
             ).filter(
                 student=student,
             ).exclude(
@@ -70,9 +73,20 @@ class PendingStudentFeeAPIView(APIView):
 
                 payable = fee.payable_amount
                 total_amount += payable
+                academic_year = (
+                    fee.installment_item
+                    .installment
+                    .collection_plan
+                    .fee_template
+                    .academic_year
+                )
 
                 data.append({
                     "student_fee_id": str(fee.id),
+                    "academic_year": {
+                        "id": str(academic_year.id),
+                        "name": academic_year.name,
+                    },
                     "fee_type": fee.installment_item.fee_template_item.fee_type.name,
                     "installment": fee.installment_item.installment.name,
                     "amount": fee.amount,
