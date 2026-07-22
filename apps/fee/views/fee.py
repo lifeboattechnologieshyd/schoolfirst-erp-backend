@@ -707,7 +707,7 @@ class CompletedStudentFeePaymentsAPIView(APIView):
                     "reference_number": transaction.transaction_number,
                     "gateway_order_id": transaction.gateway_order_id,
                     "gateway_transaction_id": transaction.gateway_transaction_id,
-                    "payment_gateway": transaction.gateway.name,
+                    "payment_gateway": transaction.gateway.gateway,
                     "payment_date": transaction.paid_at,
                     "total_amount": transaction.amount,
                     "fees": fee_items,
