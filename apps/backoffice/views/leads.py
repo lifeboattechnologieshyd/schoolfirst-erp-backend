@@ -171,32 +171,32 @@ class SchoolLeadVerifyOTPAPIView(APIView):
             ]
         )
 
-        school = School.objects.filter(
-            Q(email=lead.email) | Q(phone_number=lead.phone_number)
-        ).first()
+        # school = School.objects.filter(
+        #     Q(email=lead.email) | Q(phone_number=lead.phone_number)
+        # ).first()
 
-        if not school:
-            school = School.objects.create(
-                name=lead.school_name,
-                code=generate_school_code(),
-                email=lead.email,
-                phone_number=lead.phone_number,
-                principal_name=lead.contact_person,
-                total_students=lead.number_of_students,
-                address=lead.location,
-                city="Unknown",
-                state="Unknown",
-                country="India",
-                status=School.Status.ACTIVE,
-                is_email_verified=True,
-                is_phone_verified=True,
-            )
+        # if not school:
+        #     school = School.objects.create(
+        #         name=lead.school_name,
+        #         code=generate_school_code(),
+        #         email=lead.email,
+        #         phone_number=lead.phone_number,
+        #         principal_name=lead.contact_person,
+        #         total_students=lead.number_of_students,
+        #         address=lead.location,
+        #         city="Unknown",
+        #         state="Unknown",
+        #         country="India",
+        #         status=School.Status.ACTIVE,
+        #         is_email_verified=True,
+        #         is_phone_verified=True,
+        #     )
 
         user = UserMaster.objects.filter(
             Q(email=lead.email) | Q(mobile=lead.phone_number)
         ).first()
 
-        is_new_user = False
+        # is_new_user = False
 
         if not user:
             username = lead.phone_number
@@ -217,34 +217,34 @@ class SchoolLeadVerifyOTPAPIView(APIView):
                 status=UserMaster.Status.ACTIVE,
             )
 
-            user.set_unusable_password()
-            user.save(update_fields=["password"])
+            # user.set_unusable_password()
+            # user.save(update_fields=["password"])
 
-            is_new_user = True
+            # is_new_user = True
 
-        role, _ = Roles.objects.get_or_create(
-            role_name="SYSTEM_ADMIN",
-            defaults={
-                "description": "School System Admin",
-            },
-        )
+        # role, _ = Roles.objects.get_or_create(
+        #     role_name="SYSTEM_ADMIN",
+        #     defaults={
+        #         "description": "School System Admin",
+        #     },
+        # )
 
-        UserRoles.objects.get_or_create(
-            user=user,
-            school=school,
-            role=role,
-        )
+        # UserRoles.objects.get_or_create(
+        #     user=user,
+        #     school=school,
+        #     role=role,
+        # )
 
         refresh = RefreshToken.for_user(user)
 
         return CustomResponse.successResponse(
             data={
-                "is_new_user": is_new_user,
-                "school": {
-                    "id": str(school.id),
-                    "name": school.name,
-                    "code": school.code,
-                },
+                # "is_new_user": is_new_user,
+                # "school": {
+                #     "id": str(school.id),
+                #     "name": school.name,
+                #     "code": school.code,
+                # },
                 "user": {
                     "id": str(user.id),
                     "username": user.username,
@@ -256,7 +256,7 @@ class SchoolLeadVerifyOTPAPIView(APIView):
                     "is_active": user.is_active,
                     "is_staff": user.is_staff,
                 },
-                "role": role.role_name,
+                # "role": role.role_name,
                 "tokens": {
                     "access": str(refresh.access_token),
                     "refresh": str(refresh),
