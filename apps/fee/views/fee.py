@@ -598,3 +598,112 @@ class PhonePeWebhookAPIView(APIView):
             transaction_id=str(payment_transaction.id),
         )
 
+
+
+
+class CompletedStudentFeePaymentsAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        student_id = request.query_params.get("student_id")
+
+        if not student_id:
+            return CustomResponse.errorResponse(
+                description="student_id is required."
+            )
+
+        student = Student.objects.select_related(
+            "academic_year",
+        ).filter(
+            id=student_id,
+        ).first()
+
+        if student is None:
+            return CustomResponse.errorResponse(
+                description="Student not found."
+            )
+
+        transactions = PaymentTransaction.objects.select_related(
+            "gateway",
+        ).prefetch_related(
+            "items",
+            "items__student_fee",
+            "items__student_fee__installment_item",
+            "items__student_fee__installment_item__fee_template_item",
+            "items__student_fee__installment_item__fee_template_item__fee_type",
+            "items__student_fee__installment_item__installment",
+            "items__student_fee__installment_item__installment__collection_plan",
+            "items__student_fee__installment_item__installment__collection_plan__fee_template",
+            "items__student_fee__installment_item__installment__collection_plan__fee_template__academic_year",
+        ).filter(
+            student=student,
+            status=PaymentTransaction.Status.SUCCESS,
+        ).order_by(
+            "-paid_at",
+        )
+
+        total_paid_amount = 0
+        payments = []
+
+        for transaction in transactions:
+
+            fee_items = []
+
+            for item in transaction.items.all():
+
+                fee = item.student_fee
+
+                academic_year = (
+                    fee.installment_item
+                    .installment
+                    .collection_plan
+                    .fee_template
+                    .academic_year
+                )
+
+                fee_items.append({
+                    "student_fee_id": str(fee.id),
+                    "academic_year": {
+                        "id": str(academic_year.id),
+                        "name": academic_year.name,
+                    },
+                    "fee_type": fee.installment_item.fee_template_item.fee_type.name,
+                    "installment": fee.installment_item.installment.name,
+                    "amount": fee.amount,
+                    "concession": fee.concession_amount,
+                    "late_fee": fee.late_fee,
+                    "paid_amount": item.amount,
+                    "status": fee.status,
+                })
+
+            total_paid_amount += transaction.amount
+
+            payments.append({
+                "transaction_id": str(transaction.id),
+                "reference_number": transaction.transaction_number,
+                "gateway_order_id": transaction.gateway_order_id,
+                "gateway_transaction_id": transaction.gateway_transaction_id,
+                "payment_gateway": transaction.gateway.name,
+                "payment_date": transaction.paid_at,
+                "total_amount": transaction.amount,
+                "fees": fee_items,
+            })
+
+        return CustomResponse.successResponse(
+            description="Completed fee payments fetched successfully.",
+            data={
+                "student": {
+                    "id": str(student.id),
+                    "name": student.name,
+                    "admission_number": student.admission_number,
+                    "academic_year": {
+                        "id": str(student.academic_year.id),
+                        "name": student.academic_year.name,
+                    } if student.academic_year else None,
+                },
+                "total_paid_amount": total_paid_amount,
+                "payments": payments,
+            },
+        )
