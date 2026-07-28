@@ -1045,6 +1045,7 @@ class Staff(AuditModel):
     class StaffType(models.TextChoices):
         TEACHER = "TEACHER", "Teacher"
         DRIVER = "DRIVER", "Driver"
+        BUS_ATTENDANT = "BUS_ATTENDANT", "Bus Attendant"
         # ACCOUNTANT = "ACCOUNTANT", "Accountant"
         # RECEPTIONIST = "RECEPTIONIST", "Receptionist"
         # LIBRARIAN = "LIBRARIAN", "Librarian"
