@@ -6,7 +6,7 @@ from apps.calendar.models import CalendarEventTarget, CalendarEvent
 from apps.school.models.school import AcademicYear, Branch, Grade, Section, Student, Staff
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
-from shared.utils.logger import application_logger
+from shared.utils.logger import application_logger, audit_logger
 
 
 class CreateCalendarEventAPIView(APIView):
@@ -221,7 +221,7 @@ class CreateCalendarEventAPIView(APIView):
             targets
         )
 
-        application_logger.info(
+        audit_logger.info(
             "calendar_event_created",
             user_id=str(user.id),
             school_id=str(school.id),
@@ -345,7 +345,7 @@ class CalendarEventListAPIView(APIView):
                 "targets": targets,
             })
 
-        application_logger.info(
+        audit_logger.info(
             "calendar_event_list_fetched",
             user_id=str(request.user.id),
             school_id=str(school.id),
@@ -606,7 +606,7 @@ class UpdateCalendarEventAPIView(APIView):
                 targets,
             )
 
-        application_logger.info(
+        audit_logger.info(
             "calendar_event_updated",
             user_id=str(request.user.id),
             school_id=str(school.id),
@@ -619,3 +619,4 @@ class UpdateCalendarEventAPIView(APIView):
                 "id": str(event.id),
             },
         )
+

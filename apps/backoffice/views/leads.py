@@ -18,7 +18,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.school.models import SchoolLead, School
 from apps.core.models import UserMaster, UserOTP, Roles, UserRoles
 from shared.mixins import CustomResponse
-from shared.utils.otp import generate_school_code, generate_otp
+from shared.utils.otp import generate_school_code, generate_otp, send_otp_to_mobile
 
 
 def normalize_email(value):
@@ -73,9 +73,9 @@ class SchoolLeadRequestOTPAPIView(APIView):
         location = request.data.get("location")
 
         email = normalize_email(request.data.get("email"))
-        phone_number = normalize_mobile(request.data.get("phone_number"))
+        mobile = normalize_mobile(request.data.get("phone_number"))
 
-        if not email or not phone_number:
+        if not email or not mobile:
             return CustomResponse.errorResponse(
                 data={
                     "fields": ["email", "phone_number"]
@@ -89,22 +89,26 @@ class SchoolLeadRequestOTPAPIView(APIView):
             contact_person=contact_person,
             number_of_students=number_of_students,
             location=location,
-            phone_number=phone_number,
+            phone_number=mobile,
             email=email,
             is_verified=False,
             is_mobile_verified=False,
             is_email_verified=False,
         )
 
-        mobile_otp = generate_otp()
+        otp = generate_otp()
+        send_otp_to_mobile(
+            otp,
+            mobile,
+        )
 
         expires_at = timezone.now() + timedelta(minutes=15)
 
         UserOTP.objects.create(
             user_id=None,
             email=None,
-            mobile=int(phone_number),
-            otp=mobile_otp,
+            mobile=int(mobile),
+            otp=otp,
             expires_at=expires_at,
             is_used=False,
         )
@@ -114,7 +118,7 @@ class SchoolLeadRequestOTPAPIView(APIView):
         return CustomResponse.successResponse(
             data={
                 "lead_id": str(lead.id),
-                "mobile_otp": mobile_otp if settings.DEBUG else None,
+                "mobile_otp": mobile if settings.DEBUG else None,
             },
             description="OTP sent successfully.",
             status=status.HTTP_200_OK,
