@@ -559,11 +559,7 @@ class CreateOrganizationAPIView(APIView):
 
     def post(self, request):
 
-        check_permission(
-            request=request,
-            permission_name="organization.create",
-            school_id=None,
-        )
+
 
         organization = Organization.objects.create(
             name=request.data.get("name"),
