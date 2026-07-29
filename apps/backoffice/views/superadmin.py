@@ -598,11 +598,7 @@ class OrganizationListAPIView(APIView):
 
     def get(self, request):
 
-        check_permission(
-            request,
-            "organization.view",
-            None,
-        )
+
 
         queryset = Organization.objects.all()
 
@@ -649,11 +645,7 @@ class UpdateOrganizationAPIView(APIView):
         organization_id,
     ):
 
-        check_permission(
-            request,
-            "organization.update",
-            None,
-        )
+
 
         organization = Organization.objects.filter(
             id=organization_id
