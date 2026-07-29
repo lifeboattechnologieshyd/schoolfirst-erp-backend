@@ -559,30 +559,54 @@ class CreateOrganizationAPIView(APIView):
 
     def post(self, request):
 
-
-
-        organization = Organization.objects.create(
-            name=request.data.get("name"),
-            code=request.data.get("code"),
-            email=request.data.get("email"),
-            phone_number=request.data.get("phone_number"),
-            address=request.data.get("address"),
-            website=request.data.get("website"),
-            logo=request.data.get("logo"),
-            status=request.data.get(
-                "status",
-                Organization.Status.ACTIVE,
-            ),
+        application_logger.info(
+            "organization_create_requested",
+            requested_by=str(request.user.id),
+            organization_name=request.data.get("name"),
         )
 
-        return CustomResponse.successResponse(
-            description="Organization created successfully",
-            data={
-                "id": organization.id,
-            },
-        )
+        try:
 
+            organization = Organization.objects.create(
+                name=request.data.get("name"),
+                code=request.data.get("code"),
+                email=request.data.get("email"),
+                phone_number=request.data.get("phone_number"),
+                address=request.data.get("address"),
+                website=request.data.get("website"),
+                logo=request.data.get("logo"),
+                status=request.data.get(
+                    "status",
+                    Organization.Status.ACTIVE,
+                ),
+            )
 
+            application_logger.info(
+                "organization_created",
+                requested_by=str(request.user.id),
+                organization_id=str(organization.id),
+                organization_name=organization.name,
+            )
+
+            return CustomResponse.successResponse(
+                description="Organization created successfully",
+                data={
+                    "id": organization.id,
+                },
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "organization_create_failed",
+                requested_by=str(request.user.id),
+                organization_name=request.data.get("name"),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(e),
+            )
 # ===========================
 # ORGANIZATION LIST
 # ===========================
@@ -598,34 +622,58 @@ class OrganizationListAPIView(APIView):
 
     def get(self, request):
 
-
-
-        queryset = Organization.objects.all()
-
         search = request.GET.get("search")
 
-        if search:
-            queryset = queryset.filter(
-                name__icontains=search
-            )
-
-        data = []
-
-        for obj in queryset:
-
-            data.append({
-                "id": obj.id,
-                "name": obj.name,
-                "code": obj.code,
-                "email": obj.email,
-                "status": obj.status,
-            })
-
-        return CustomResponse.successResponse(
-            data=data
+        application_logger.info(
+            "organization_list_requested",
+            requested_by=str(request.user.id),
+            search=search,
         )
 
+        try:
 
+            queryset = Organization.objects.all()
+
+            if search:
+                queryset = queryset.filter(
+                    name__icontains=search
+                )
+
+            data = []
+
+            for obj in queryset:
+
+                data.append({
+                    "id": obj.id,
+                    "name": obj.name,
+                    "code": obj.code,
+                    "email": obj.email,
+                    "status": obj.status,
+                })
+
+            application_logger.info(
+                "organization_list_fetched",
+                requested_by=str(request.user.id),
+                search=search,
+                returned_count=len(data),
+            )
+
+            return CustomResponse.successResponse(
+                data=data
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "organization_list_failed",
+                requested_by=str(request.user.id),
+                search=search,
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(e),
+            )
 # ===========================
 # UPDATE ORGANIZATION
 # ===========================
@@ -645,49 +693,81 @@ class UpdateOrganizationAPIView(APIView):
         organization_id,
     ):
 
+        application_logger.info(
+            "organization_update_requested",
+            requested_by=str(request.user.id),
+            organization_id=str(organization_id),
+        )
 
+        try:
 
-        organization = Organization.objects.filter(
-            id=organization_id
-        ).first()
+            organization = Organization.objects.filter(
+                id=organization_id
+            ).first()
 
-        if not organization:
-            return CustomResponse.errorResponse(
-                description="Organization not found"
+            if not organization:
+
+                application_logger.warning(
+                    "organization_update_failed",
+                    requested_by=str(request.user.id),
+                    organization_id=str(organization_id),
+                    reason="organization_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Organization not found"
+                )
+
+            organization.name = request.data.get(
+                "name",
+                organization.name,
             )
 
-        organization.name = request.data.get(
-            "name",
-            organization.name,
-        )
+            organization.address = request.data.get(
+                "address",
+                organization.address,
+            )
 
-        organization.address = request.data.get(
-            "address",
-            organization.address,
-        )
+            organization.website = request.data.get(
+                "website",
+                organization.website,
+            )
 
-        organization.website = request.data.get(
-            "website",
-            organization.website,
-        )
+            organization.logo = request.data.get(
+                "logo",
+                organization.logo,
+            )
 
-        organization.logo = request.data.get(
-            "logo",
-            organization.logo,
-        )
+            organization.status = request.data.get(
+                "status",
+                organization.status,
+            )
 
-        organization.status = request.data.get(
-            "status",
-            organization.status,
-        )
+            organization.save()
 
-        organization.save()
+            application_logger.info(
+                "organization_updated",
+                requested_by=str(request.user.id),
+                organization_id=str(organization.id),
+                organization_name=organization.name,
+            )
 
-        return CustomResponse.successResponse(
-            description="Organization updated successfully"
-        )
+            return CustomResponse.successResponse(
+                description="Organization updated successfully"
+            )
 
+        except Exception as e:
 
+            application_logger.exception(
+                "organization_update_failed",
+                requested_by=str(request.user.id),
+                organization_id=str(organization_id),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(e),
+            )
 # ===========================
 # CREATE SCHOOL
 # ===========================
@@ -703,49 +783,86 @@ class CreateSchoolAPIView(APIView):
 
     def post(self, request):
 
-        organization = Organization.objects.filter(
-            id=request.data.get(
-                "organization_id"
-            )
-        ).first()
+        application_logger.info(
+            "school_create_requested",
+            requested_by=str(request.user.id),
+            organization_id=request.data.get("organization_id"),
+            school_name=request.data.get("name"),
+        )
 
-        if not organization:
+        try:
+
+            organization = Organization.objects.filter(
+                id=request.data.get(
+                    "organization_id"
+                )
+            ).first()
+
+            if not organization:
+
+                application_logger.warning(
+                    "school_create_failed",
+                    requested_by=str(request.user.id),
+                    organization_id=request.data.get("organization_id"),
+                    reason="organization_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Organization not found"
+                )
+
+            school = School.objects.create(
+                organization=organization,
+                name=request.data.get("name"),
+                code=request.data.get("code"),
+                board=request.data.get("board"),
+                email=request.data.get("email"),
+                phone_number=request.data.get("phone_number"),
+                address=request.data.get("address"),
+                city=request.data.get("city"),
+                state=request.data.get("state"),
+                country=request.data.get(
+                    "country",
+                    "India",
+                ),
+                primary_color=request.data.get("primary_color"),
+                secondary_color=request.data.get("secondary_color"),
+            )
+
+            check_permission(
+                request,
+                "school.create",
+                school.id,
+            )
+
+            application_logger.info(
+                "school_created",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                school_name=school.name,
+                organization_id=str(organization.id),
+            )
+
+            return CustomResponse.successResponse(
+                description="School created successfully",
+                data={
+                    "id": school.id,
+                },
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "school_create_failed",
+                requested_by=str(request.user.id),
+                organization_id=request.data.get("organization_id"),
+                school_name=request.data.get("name"),
+                error=str(e),
+            )
+
             return CustomResponse.errorResponse(
-                description="Organization not found"
+                description=str(e),
             )
-
-        school = School.objects.create(
-            organization=organization,
-            name=request.data.get("name"),
-            code=request.data.get("code"),
-            board=request.data.get("board"),
-            email=request.data.get("email"),
-            phone_number=request.data.get("phone_number"),
-            address=request.data.get("address"),
-            city=request.data.get("city"),
-            state=request.data.get("state"),
-            country=request.data.get(
-                "country",
-                "India",
-            ),
-            primary_color=request.data.get("primary_color"),
-            secondary_color=request.data.get("secondary_color"),
-
-        )
-
-        check_permission(
-            request,
-            "school.create",
-            school.id,
-        )
-
-        return CustomResponse.successResponse(
-            description="School created successfully",
-            data={
-                "id": school.id,
-            },
-        )
-
 
 # ===========================
 # SCHOOL LIST
@@ -860,40 +977,137 @@ class UpdateSchoolAPIView(APIView):
         school_id,
     ):
 
-        school = School.objects.filter(
-            id=school_id
-        ).first()
-
-        if not school:
-            return CustomResponse.errorResponse(
-                description="School not found"
-            )
-
-        check_permission(request,"school.update",school.id,)
-        school.name = request.data.get("name",school.name,)
-        school.address = request.data.get("address",school.address,)
-        school.city = request.data.get("city",school.city,)
-        school.state = request.data.get( "state",school.state,)
-        school.status = request.data.get("status",school.status,)
-        school.primary_color = request.data.get("primary_color",school.primary_color)
-        school.secondary_color = request.data.get("secondary_color",school.secondary_color)
-        school.principal_name = request.data.get("principal_name",school.principal_name)
-        school.principal_email = request.data.get("principal_email",school.principal_email)
-        school.email = request.data.get("email",school.email,)
-        school.logo = request.data.get("logo",school.logo,)
-        school.board = request.data.get("board",school.board,)
-        school.website = request.data.get("website",school.website,)
-        school.state = request.data.get("state",school.state,)
-        school.country = request.data.get("country",school.country,)
-        school.pincode = request.data.get("pincode",school.pincode,)
-
-
-        school.save()
-
-        return CustomResponse.successResponse(
-            description="School updated successfully"
+        application_logger.info(
+            "school_update_requested",
+            requested_by=str(request.user.id),
+            school_id=str(school_id),
         )
 
+        try:
+
+            school = School.objects.filter(
+                id=school_id
+            ).first()
+
+            if not school:
+
+                application_logger.warning(
+                    "school_update_failed",
+                    requested_by=str(request.user.id),
+                    school_id=str(school_id),
+                    reason="school_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="School not found"
+                )
+
+            check_permission(
+                request,
+                "school.update",
+                school.id,
+            )
+
+            school.name = request.data.get(
+                "name",
+                school.name,
+            )
+
+            school.address = request.data.get(
+                "address",
+                school.address,
+            )
+
+            school.city = request.data.get(
+                "city",
+                school.city,
+            )
+
+            school.state = request.data.get(
+                "state",
+                school.state,
+            )
+
+            school.status = request.data.get(
+                "status",
+                school.status,
+            )
+
+            school.primary_color = request.data.get(
+                "primary_color",
+                school.primary_color,
+            )
+
+            school.secondary_color = request.data.get(
+                "secondary_color",
+                school.secondary_color,
+            )
+
+            school.principal_name = request.data.get(
+                "principal_name",
+                school.principal_name,
+            )
+
+            school.principal_email = request.data.get(
+                "principal_email",
+                school.principal_email,
+            )
+
+            school.email = request.data.get(
+                "email",
+                school.email,
+            )
+
+            school.logo = request.data.get(
+                "logo",
+                school.logo,
+            )
+
+            school.board = request.data.get(
+                "board",
+                school.board,
+            )
+
+            school.website = request.data.get(
+                "website",
+                school.website,
+            )
+
+            school.country = request.data.get(
+                "country",
+                school.country,
+            )
+
+            school.pincode = request.data.get(
+                "pincode",
+                school.pincode,
+            )
+
+            school.save()
+
+            application_logger.info(
+                "school_updated",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                school_name=school.name,
+            )
+
+            return CustomResponse.successResponse(
+                description="School updated successfully"
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "school_update_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school_id),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(e),
+            )
 
 # ===========================
 # DELETE SCHOOL
@@ -930,45 +1144,83 @@ class CreateBranchAPIView(APIView):
 
     def post(self, request):
 
-        school = School.objects.filter(
-            id=request.data.get(
-                "school_id"
-            )
-        ).first()
+        application_logger.info(
+            "branch_create_requested",
+            requested_by=str(request.user.id),
+            school_id=request.data.get("school_id"),
+            branch_name=request.data.get("name"),
+        )
 
-        if not school:
+        try:
+
+            school = School.objects.filter(
+                id=request.data.get(
+                    "school_id"
+                )
+            ).first()
+
+            if not school:
+
+                application_logger.warning(
+                    "branch_create_failed",
+                    requested_by=str(request.user.id),
+                    school_id=request.data.get("school_id"),
+                    reason="school_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="School not found"
+                )
+
+            check_permission(
+                request,
+                "branch.create",
+                school.id,
+            )
+
+            branch = Branch.objects.create(
+                school=school,
+                name=request.data.get("name"),
+                code=request.data.get("code"),
+                email=request.data.get("email"),
+                phone_number=request.data.get(
+                    "phone_number"
+                ),
+                address=request.data.get(
+                    "address"
+                ),
+                city=request.data.get("city"),
+                state=request.data.get("state"),
+            )
+
+            application_logger.info(
+                "branch_created",
+                requested_by=str(request.user.id),
+                branch_id=str(branch.id),
+                branch_name=branch.name,
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.successResponse(
+                description="Branch created successfully",
+                data={
+                    "id": branch.id,
+                },
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "branch_create_failed",
+                requested_by=str(request.user.id),
+                school_id=request.data.get("school_id"),
+                branch_name=request.data.get("name"),
+                error=str(e),
+            )
+
             return CustomResponse.errorResponse(
-                description="School not found"
-            )
-
-        check_permission(
-            request,
-            "branch.create",
-            school.id,
-        )
-
-        branch = Branch.objects.create(
-            school=school,
-            name=request.data.get("name"),
-            code=request.data.get("code"),
-            email=request.data.get("email"),
-            phone_number=request.data.get(
-                "phone_number"
-            ),
-            address=request.data.get(
-                "address"
-            ),
-            city=request.data.get("city"),
-            state=request.data.get("state"),
-        )
-
-        return CustomResponse.successResponse(
-            description="Branch created successfully",
-            data={
-                "id": branch.id,
-            },
-        )
-# ===========================
+                description=str(e),
+            )# ===========================
 #  BRANCH LIST
 # ===========================
 
@@ -985,50 +1237,78 @@ class BranchListAPIView(APIView):
     def get(self, request):
 
         school_id = request.GET.get("school_id")
+        search = request.GET.get("search")
 
-        check_permission(
-            request=request,
-            permission_name="branch.view",
+        application_logger.info(
+            "branch_list_requested",
+            requested_by=str(request.user.id),
             school_id=school_id,
+            search=search,
         )
 
-        queryset = Branch.objects.all()
+        try:
 
-        if school_id:
-            queryset = queryset.filter(
+            check_permission(
+                request=request,
+                permission_name="branch.view",
                 school_id=school_id,
             )
 
-        search = request.GET.get("search")
+            queryset = Branch.objects.all()
 
-        if search:
-            queryset = queryset.filter(
-                name__icontains=search,
+            if school_id:
+                queryset = queryset.filter(
+                    school_id=school_id,
+                )
+
+            if search:
+                queryset = queryset.filter(
+                    name__icontains=search,
+                )
+
+            data = []
+
+            for branch in queryset:
+
+                data.append({
+                    "id": branch.id,
+                    "school_id": branch.school_id,
+                    "school_name": branch.school.name,
+                    "name": branch.name,
+                    "code": branch.code,
+                    "email": branch.email,
+                    "phone_number": branch.phone_number,
+                    "city": branch.city,
+                    "state": branch.state,
+                    "status": branch.status,
+                })
+
+            application_logger.info(
+                "branch_list_fetched",
+                requested_by=str(request.user.id),
+                school_id=school_id,
+                search=search,
+                returned_count=len(data),
             )
 
-        data = []
+            return CustomResponse.successResponse(
+                description="Branch list fetched successfully",
+                data=data,
+            )
 
-        for branch in queryset:
+        except Exception as e:
 
-            data.append({
-                "id": branch.id,
-                "school_id": branch.school_id,
-                "school_name": branch.school.name,
-                "name": branch.name,
-                "code": branch.code,
-                "email": branch.email,
-                "phone_number": branch.phone_number,
-                "city": branch.city,
-                "state": branch.state,
-                "status": branch.status,
-            })
+            application_logger.exception(
+                "branch_list_failed",
+                requested_by=str(request.user.id),
+                school_id=school_id,
+                search=search,
+                error=str(e),
+            )
 
-        return CustomResponse.successResponse(
-            description="Branch list fetched successfully",
-            data=data,
-        )
-
-
+            return CustomResponse.errorResponse(
+                description=str(e),
+            )
 # ===========================
 # UPDATE BRANCH
 # ===========================
@@ -1048,56 +1328,88 @@ class UpdateBranchAPIView(APIView):
         branch_id,
     ):
 
-        branch = Branch.objects.filter(
-            id=branch_id
-        ).first()
+        application_logger.info(
+            "branch_update_requested",
+            requested_by=str(request.user.id),
+            branch_id=str(branch_id),
+        )
 
-        if not branch:
-            return CustomResponse.errorResponse(
-                description="Branch not found"
+        try:
+
+            branch = Branch.objects.filter(
+                id=branch_id
+            ).first()
+
+            if not branch:
+
+                application_logger.warning(
+                    "branch_update_failed",
+                    requested_by=str(request.user.id),
+                    branch_id=str(branch_id),
+                    reason="branch_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Branch not found"
+                )
+
+            check_permission(
+                request,
+                "branch.update",
+                branch.school_id,
             )
 
-        check_permission(
-            request,
-            "branch.update",
-            branch.school_id,
-        )
+            branch.name = request.data.get(
+                "name",
+                branch.name,
+            )
 
-        branch.name = request.data.get(
-            "name",
-            branch.name,
-        )
+            branch.address = request.data.get(
+                "address",
+                branch.address,
+            )
 
-        branch.address = request.data.get(
-            "address",
-            branch.address,
-        )
+            branch.city = request.data.get(
+                "city",
+                branch.city,
+            )
 
-        branch.city = request.data.get(
-            "city",
-            branch.city,
-        )
+            branch.state = request.data.get(
+                "state",
+                branch.state,
+            )
 
-        branch.state = request.data.get(
-            "state",
-            branch.state,
-        )
+            branch.status = request.data.get(
+                "status",
+                branch.status,
+            )
 
-        branch.status = request.data.get(
-            "status",
-            branch.status,
-        )
+            branch.save()
 
-        branch.save()
+            application_logger.info(
+                "branch_updated",
+                requested_by=str(request.user.id),
+                branch_id=str(branch.id),
+                branch_name=branch.name,
+                school_id=str(branch.school_id),
+            )
 
-        return CustomResponse.successResponse(
-            description="Branch updated successfully"
-        )
+            return CustomResponse.successResponse(
+                description="Branch updated successfully"
+            )
 
+        except Exception as e:
 
+            application_logger.exception(
+                "branch_update_failed",
+                requested_by=str(request.user.id),
+                branch_id=str(branch_id),
+                error=str(e),
+            )
 
-
-
+            return CustomResponse.errorResponse(
+                description=str(e),
+            )
 
 class UserListAPIView(APIView):
 
