@@ -29,7 +29,7 @@ class Organization(AuditModel):
 
     address = models.TextField(blank=True,null=True,)
 
-    website = models.CharField(max_length=30,null=True,)
+    website = models.CharField(max_length=50,null=True,)
 
     logo = models.CharField(max_length=300,null=True,)
 
