@@ -190,6 +190,11 @@ def get_user_permissions(user, school_id=None):
             "role__role_permissions_for_role__permission__permission_name",
             flat=True,
         )
+        auth_logger.info(
+            "role_permissions_debug",
+            roles=list(role_queryset.values_list("role__role_name", flat=True)),
+            permissions=role_permissions,
+        )
 
         direct_permissions = direct_queryset.values_list(
             "permission__permission_name",
