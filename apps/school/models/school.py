@@ -214,9 +214,9 @@ class School(AuditModel):
 
     logo = models.CharField(max_length=300,blank=True,null=True)
 
-    primary_color = models.CharField(max_length=100, default="FFFFFF")
+    primary_color = models.CharField(max_length=100, null=True,blank=True,)
 
-    secondary_color = models.CharField(max_length=100, default="FFFFFF")
+    secondary_color = models.CharField(max_length=100, null=True,blank=True,)
 
     is_email_verified = models.BooleanField(default=False,)
 
