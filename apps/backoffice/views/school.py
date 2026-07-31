@@ -457,7 +457,7 @@ class SectionListAPIView(APIView):
             branch_id=branch_id,
         )
 
-        sections = Section.objects.select_related("grade", "grade__school", "branch").filter(grade__school=school)
+        sections = Section.objects.select_related("grade", "grade__school", "branch", "class_teacher",).filter(grade__school=school)
 
         if branch_id:
             sections = sections.filter(branch_id=branch_id)
@@ -472,6 +472,13 @@ class SectionListAPIView(APIView):
                 } if section.branch else None,
                 "grade": section.grade.name,
                 "name": section.name,
+                "class_teacher": {
+                    "id": str(section.class_teacher.id),
+                    "employee_id": section.class_teacher.employee_id,
+                    "name": section.class_teacher.name,
+                    "mobile": section.class_teacher.mobile,
+                    "staff_type": section.class_teacher.staff_type,
+                } if section.class_teacher else None,
                 "capacity": section.capacity,
                 "status": section.status,
             }
