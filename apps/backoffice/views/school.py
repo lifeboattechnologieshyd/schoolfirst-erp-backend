@@ -449,6 +449,7 @@ class SectionListAPIView(APIView):
 
         school = request.school
         branch_id = request.query_params.get("branch_id")
+        grade_id = request.query_params.get("grade_id")
 
         application_logger.info(
             "sections_fetch_started",
@@ -458,6 +459,9 @@ class SectionListAPIView(APIView):
         )
 
         sections = Section.objects.select_related("grade", "grade__school", "branch", "class_teacher",).filter(grade__school=school)
+
+        if grade_id:
+            sections = sections.filter(grade_id=grade_id)
 
         if branch_id:
             sections = sections.filter(branch_id=branch_id)
