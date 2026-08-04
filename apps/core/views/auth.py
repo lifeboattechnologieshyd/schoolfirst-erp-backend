@@ -163,7 +163,7 @@ class ADMINSendOTPAPIView(APIView):
 
         return CustomResponse.successResponse(
             data={
-                "mobile_otp": otp,
+                # "mobile_otp": otp,
             },
             description="OTP sent successfully.",
         )

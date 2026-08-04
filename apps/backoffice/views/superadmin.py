@@ -222,7 +222,7 @@ class SuperAdminRequestOTPAPIView(APIView):
 
             return CustomResponse.successResponse(
                 data={
-                    "mobile_otp": otp,
+                    # "mobile_otp": otp,
                 },
                 description="OTP sent successfully.",
                 status=status.HTTP_200_OK,
