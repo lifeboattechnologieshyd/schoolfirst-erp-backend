@@ -1,5 +1,6 @@
 import uuid
 
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 
 from apps.school.models import School
@@ -971,8 +972,133 @@ class LiveLocation(AuditModel):
             f"({self.latitude}, {self.longitude})"
         )
 
+class LocationHistory(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
 
+    class LocationSource(models.TextChoices):
+        MOBILE = "MOBILE", "Driver Mobile"
+        GPS_DEVICE = "GPS_DEVICE", "GPS Device"
 
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="location_history",
+    )
+
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="location_history",
+    )
+
+    trip = models.ForeignKey(
+        Trip,
+        on_delete=models.CASCADE,
+        related_name="location_history",
+    )
+
+    latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+    )
+
+    longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+    )
+
+    speed = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        help_text="Speed in km/h",
+    )
+
+    heading = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Direction (0–359°)",
+        validators=[
+            MinValueValidator(0),
+            MaxValueValidator(359),
+        ],
+    )
+
+    altitude = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Altitude in meters",
+    )
+
+    accuracy = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="GPS accuracy in meters",
+    )
+
+    source = models.CharField(
+        max_length=20,
+        choices=LocationSource.choices,
+        default=LocationSource.MOBILE,
+    )
+
+    device_timestamp = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp received from the GPS device/mobile.",
+    )
+
+    recorded_at = models.DateTimeField(
+        db_index=True,
+        help_text="Time when this location was recorded.",
+    )
+
+    class Meta:
+
+        db_table = "transport_location_history"
+
+        ordering = [
+            "-recorded_at",
+        ]
+
+        get_latest_by = "recorded_at"
+
+        indexes = [
+            models.Index(
+                fields=[
+                    "trip",
+                    "-recorded_at",
+                ],
+                name="trip_recorded_idx",
+            ),
+            models.Index(
+                fields=[
+                    "school",
+                    "-recorded_at",
+                ],
+                name="school_recorded_idx",
+            ),
+        ]
+
+    def __str__(self):
+
+        return (
+            f"{self.trip} - "
+            f"({self.latitude}, {self.longitude})"
+        )
 
 class TripEvent(AuditModel):
     objects = SoftDeleteManager()

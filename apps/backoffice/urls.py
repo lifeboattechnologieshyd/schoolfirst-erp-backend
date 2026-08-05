@@ -36,7 +36,12 @@ from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdmin
     UpdateBranchAPIView, BranchListAPIView, UserListAPIView, GetSchoolClientInfoAPIView, \
     CreateSchoolConfigurationAPIView, GetSchoolConfigurationAPIView, UpdateSchoolConfigurationAPIView
 from apps.backoffice.views.transport import CreateVehicleAPIView, VehicleListAPIView, UpdateVehicleAPIView, \
-    CreateVehicleDocumentAPIView, VehicleDocumentListAPIView, UpdateVehicleDocumentAPIView
+    CreateVehicleDocumentAPIView, VehicleDocumentListAPIView, UpdateVehicleDocumentAPIView, CreateRouteAPIView, \
+    RouteListAPIView, UpdateRouteAPIView, CreateStopAPIView, StopListAPIView, UpdateStopAPIView, \
+    CreateStudentTransportAPIView, UpdateStudentTransportAPIView, CreateTripAPIView, TripListAPIView, UpdateTripAPIView, \
+    CreateTripAttendanceAPIView, TripAttendanceListAPIView, UpdateTripAttendanceAPIView, UpdateLiveLocationAPIView, \
+    LiveLocationAPIView, LocationHistoryAPIView, StartTripAPIView, EndTripAPIView
+from apps.fee.views.fee import CompletedStudentFeePaymentsAPIView
 
 urlpatterns = [
 
@@ -333,6 +338,52 @@ urlpatterns = [
     path("vehicle/documents",VehicleDocumentListAPIView.as_view(),),
 
     path("vehicle/documents/<uuid:document_id>",UpdateVehicleDocumentAPIView.as_view(),),
+
+    path("stop/create",CreateStopAPIView.as_view(),),
+
+    path("stop",StopListAPIView.as_view(),),
+
+    path("stop/<uuid:stop_id>",UpdateStopAPIView.as_view(),),
+
+
+    path("route/create",CreateRouteAPIView.as_view(),),
+
+    path("route",RouteListAPIView.as_view(),),
+
+    path("route/<uuid:route_id>",UpdateRouteAPIView.as_view(),),
+
+    path("student/transport/create",CreateStudentTransportAPIView.as_view(),),
+
+    path("student/transport",StudentListAPIView.as_view(),),
+
+    path("student/transport/<uuid:student_transport_id>",UpdateStudentTransportAPIView.as_view(),),
+
+    path("trip/create",CreateTripAPIView.as_view(),),
+
+    path("trip",TripListAPIView.as_view(),),
+
+    path("trip/<uuid:trip_id>",UpdateTripAPIView.as_view(),),
+
+    path("trip/attendance/create",CreateTripAttendanceAPIView.as_view(),),
+
+    path("trip/attendance",TripAttendanceListAPIView.as_view(),),
+
+    path("trip/attendance/<uuid:attendance_id>",UpdateTripAttendanceAPIView.as_view(),),
+
+    path("live-location/update",UpdateLiveLocationAPIView.as_view(),),
+
+    path("live-location",LiveLocationAPIView.as_view(),),
+
+    path("location/history",LocationHistoryAPIView.as_view(),),
+
+    path("trip/start",StartTripAPIView.as_view(),),
+
+    path("trip/end",EndTripAPIView.as_view(),),
+
+
+
+
+
 
 
 
