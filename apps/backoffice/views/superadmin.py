@@ -1411,6 +1411,146 @@ class UpdateBranchAPIView(APIView):
                 description=str(e),
             )
 
+# class UserListAPIView(APIView):
+#
+#     permission_classes = [
+#         IsAuthenticated,
+#         HasPermission,
+#     ]
+#
+#     required_permission = "user.view"
+#
+#     def get(self, request):
+#
+#         school = request.school
+#         user = request.user
+#
+#         search = request.query_params.get(
+#             "search",
+#             "",
+#         ).strip()
+#
+#         application_logger.info(
+#             "user_list_started",
+#             user_id=str(user.id),
+#             school_id=str(school.id) if school else None,
+#             search=search,
+#         )
+#
+#         try:
+#
+#             is_superadmin = has_role(
+#                 user,
+#                 RolesEnum.SUPERADMIN,
+#             )
+#
+#             queryset = UserMaster.objects.filter(
+#                 is_active=True,
+#             )
+#
+#             if is_superadmin:
+#
+#                 queryset = queryset.prefetch_related(
+#                     Prefetch(
+#                         "user_roles",
+#                         queryset=UserRoles.objects.select_related(
+#                             "role",
+#                             "school",
+#                         ),
+#                     )
+#                 )
+#
+#             else:
+#
+#                 queryset = queryset.filter(
+#                     user_roles__school=school,
+#                 ).distinct().prefetch_related(
+#                     Prefetch(
+#                         "user_roles",
+#                         queryset=UserRoles.objects.filter(
+#                             school=school,
+#                         ).select_related(
+#                             "role",
+#                             "school",
+#                         ),
+#                     )
+#                 )
+#
+#             if search:
+#
+#                 queryset = queryset.filter(
+#                     Q(first_name__icontains=search)
+#                     | Q(last_name__icontains=search)
+#                     | Q(username__icontains=search)
+#                     | Q(email__icontains=search)
+#                     | Q(mobile__icontains=search)
+#                 )
+#
+#             queryset = queryset.order_by(
+#                 "first_name",
+#             )
+#
+#             paginator = CustomPageNumberPagination()
+#
+#             page = paginator.paginate_queryset(
+#                 queryset,
+#                 request,
+#             )
+#
+#             data = []
+#
+#             for obj in page:
+#
+#                 data.append({
+#                     "id": str(obj.id),
+#                     "first_name": obj.first_name,
+#                     "last_name": obj.last_name,
+#                     "mobile": obj.mobile,
+#                     "email": obj.email,
+#                     "roles": [
+#                         {
+#                             "id": str(user_role.role.id),
+#                             "name": user_role.role.role_name,
+#                             "school_id": (
+#                                 str(user_role.school.id)
+#                                 if user_role.school
+#                                 else None
+#                             ),
+#                             "school_name": (
+#                                 str(user_role.school.name)
+#                                 if user_role.school
+#                                 else None
+#                             )
+#                         }
+#                         for user_role in obj.user_roles.all()
+#                     ],
+#                 })
+#
+#             application_logger.info(
+#                 "user_list_fetched",
+#                 user_id=str(user.id),
+#                 school_id=str(school.id) if school else None,
+#                 total_count=len(data),
+#             )
+#
+#             return paginator.get_paginated_response(
+#                 data
+#             )
+#
+#         except Exception as e:
+#
+#             application_logger.exception(
+#                 "user_list_failed",
+#                 user_id=str(user.id),
+#                 school_id=str(school.id) if school else None,
+#                 error=str(e),
+#             )
+#
+#             return CustomResponse.errorResponse(
+#                 description="Something went wrong while fetching users."
+#             )
+
+
 class UserListAPIView(APIView):
 
     permission_classes = [
@@ -1430,11 +1570,21 @@ class UserListAPIView(APIView):
             "",
         ).strip()
 
+        school_filter = request.query_params.get(
+            "school_id"
+        )
+
+        role_filter = request.query_params.get(
+            "role_id"
+        )
+
         application_logger.info(
             "user_list_started",
             user_id=str(user.id),
             school_id=str(school.id) if school else None,
             search=search,
+            filter_school_id=school_filter,
+            filter_role_id=role_filter,
         )
 
         try:
@@ -1450,31 +1600,53 @@ class UserListAPIView(APIView):
 
             if is_superadmin:
 
-                queryset = queryset.prefetch_related(
-                    Prefetch(
-                        "user_roles",
-                        queryset=UserRoles.objects.select_related(
-                            "role",
-                            "school",
-                        ),
-                    )
+                role_queryset = UserRoles.objects.select_related(
+                    "role",
+                    "school",
                 )
+
+                if school_filter:
+
+                    role_queryset = role_queryset.filter(
+                        school_id=school_filter,
+                    )
+
+                    queryset = queryset.filter(
+                        user_roles__school_id=school_filter,
+                    )
+
+                if role_filter:
+
+                    role_queryset = role_queryset.filter(
+                        role_id=role_filter,
+                    )
+
+                    queryset = queryset.filter(
+                        user_roles__role_id=role_filter,
+                    )
 
             else:
 
+                role_queryset = UserRoles.objects.filter(
+                    school=school,
+                ).select_related(
+                    "role",
+                    "school",
+                )
+
                 queryset = queryset.filter(
                     user_roles__school=school,
-                ).distinct().prefetch_related(
-                    Prefetch(
-                        "user_roles",
-                        queryset=UserRoles.objects.filter(
-                            school=school,
-                        ).select_related(
-                            "role",
-                            "school",
-                        ),
-                    )
                 )
+
+                if role_filter:
+
+                    role_queryset = role_queryset.filter(
+                        role_id=role_filter,
+                    )
+
+                    queryset = queryset.filter(
+                        user_roles__role_id=role_filter,
+                    )
 
             if search:
 
@@ -1486,9 +1658,16 @@ class UserListAPIView(APIView):
                     | Q(mobile__icontains=search)
                 )
 
-            queryset = queryset.order_by(
+            queryset = queryset.distinct().prefetch_related(
+                Prefetch(
+                    "user_roles",
+                    queryset=role_queryset,
+                )
+            ).order_by(
                 "first_name",
             )
+
+            total = queryset.count()
 
             paginator = CustomPageNumberPagination()
 
@@ -1517,10 +1696,10 @@ class UserListAPIView(APIView):
                                 else None
                             ),
                             "school_name": (
-                                str(user_role.school.name)
+                                user_role.school.name
                                 if user_role.school
                                 else None
-                            )
+                            ),
                         }
                         for user_role in obj.user_roles.all()
                     ],
@@ -1530,11 +1709,15 @@ class UserListAPIView(APIView):
                 "user_list_fetched",
                 user_id=str(user.id),
                 school_id=str(school.id) if school else None,
-                total_count=len(data),
+                filter_school_id=school_filter,
+                filter_role_id=role_filter,
+                total=total,
             )
 
-            return paginator.get_paginated_response(
-                data
+            return CustomResponse.successResponse(
+                description="Users fetched successfully.",
+                total=total,
+                data=data,
             )
 
         except Exception as e:
@@ -1543,6 +1726,8 @@ class UserListAPIView(APIView):
                 "user_list_failed",
                 user_id=str(user.id),
                 school_id=str(school.id) if school else None,
+                filter_school_id=school_filter,
+                filter_role_id=role_filter,
                 error=str(e),
             )
 
