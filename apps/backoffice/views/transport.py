@@ -2,7 +2,8 @@ from django.db import transaction
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.transport.models import Vehicle
+from apps.school.models.school import Branch
+from apps.transport.models import Vehicle, VehicleDocument
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger, audit_logger
@@ -601,5 +602,504 @@ class UpdateVehicleAPIView(APIView):
                 "model": vehicle.model,
                 "status": vehicle.status,
                 "status_display": vehicle.get_status_display(),
+            },
+        )
+
+
+class CreateVehicleDocumentAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "vehicle.document.create"
+
+    def post(self, request):
+
+        school = request.school
+        vehicle_id = request.data.get("vehicle_id")
+        document_type = request.data.get("document_type")
+
+        application_logger.info(
+            "vehicle_document_create_requested",
+            requested_by=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            vehicle_id=vehicle_id,
+            document_type=document_type,
+        )
+
+        if school is None:
+
+            application_logger.warning(
+                "vehicle_document_create_failed",
+                requested_by=str(request.user.id),
+                reason="school_not_found",
+            )
+
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        required_fields = [
+            "vehicle_id",
+            "document_type",
+            "document_number",
+        ]
+
+        for field in required_fields:
+
+            if request.data.get(field) in [None, ""]:
+
+                application_logger.warning(
+                    "vehicle_document_create_failed",
+                    requested_by=str(request.user.id),
+                    school_id=str(school.id),
+                    vehicle_id=vehicle_id,
+                    field=field,
+                    reason="required_field_missing",
+                )
+
+                return CustomResponse.errorResponse(
+                    description=f"{field} is required."
+                )
+
+        vehicle = Vehicle.objects.filter(
+            id=vehicle_id,
+            school=school,
+        ).first()
+
+        if vehicle is None:
+
+            application_logger.warning(
+                "vehicle_document_create_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                vehicle_id=vehicle_id,
+                reason="vehicle_not_found",
+            )
+
+            return CustomResponse.errorResponse(
+                description="Vehicle not found."
+            )
+
+        if document_type not in VehicleDocument.DocumentType.values:
+
+            application_logger.warning(
+                "vehicle_document_create_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                vehicle_id=str(vehicle.id),
+                document_type=document_type,
+                reason="invalid_document_type",
+            )
+
+            return CustomResponse.errorResponse(
+                description="Invalid document type."
+            )
+
+        if VehicleDocument.objects.filter(
+            vehicle=vehicle,
+            document_type=document_type,
+        ).exists():
+
+            application_logger.warning(
+                "vehicle_document_create_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                vehicle_id=str(vehicle.id),
+                document_type=document_type,
+                reason="document_already_exists",
+            )
+
+            return CustomResponse.errorResponse(
+                description=f"{document_type.replace('_', ' ').title()} already exists."
+            )
+
+        issue_date = request.data.get("issue_date")
+        expiry_date = request.data.get("expiry_date")
+
+        if issue_date and expiry_date and issue_date > expiry_date:
+
+            application_logger.warning(
+                "vehicle_document_create_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                vehicle_id=str(vehicle.id),
+                reason="invalid_date_range",
+            )
+
+            return CustomResponse.errorResponse(
+                description="Expiry date must be greater than or equal to issue date."
+            )
+
+        try:
+
+            with transaction.atomic():
+
+                document = VehicleDocument.objects.create(
+                    vehicle=vehicle,
+                    document_type=document_type,
+                    document_number=request.data.get("document_number").strip(),
+                    issue_date=issue_date,
+                    expiry_date=expiry_date,
+                    issued_by=request.data.get("issued_by"),
+                    document_file=request.data.get("document_file"),
+                    remarks=request.data.get("remarks"),
+                    status=request.data.get(
+                        "status",
+                        VehicleDocument.Status.ACTIVE,
+                    ),
+                )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "vehicle_document_create_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                vehicle_id=str(vehicle.id),
+                document_type=document_type,
+                reason="vehicle_document_creation_failed",
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(e)
+            )
+
+        application_logger.info(
+            "vehicle_document_created",
+            requested_by=str(request.user.id),
+            school_id=str(school.id),
+            vehicle_id=str(vehicle.id),
+            document_id=str(document.id),
+            document_type=document.document_type,
+        )
+
+        return CustomResponse.successResponse(
+            description="Vehicle document uploaded successfully.",
+            data={
+                "id": str(document.id),
+                "vehicle_id": str(vehicle.id),
+                "document_type": document.document_type,
+                "document_number": document.document_number,
+                "status": document.status,
+            },
+        )
+
+
+class VehicleDocumentListAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "vehicle.document.view"
+
+    def get(self, request):
+
+        school = request.school
+        vehicle_id = request.GET.get("vehicle_id")
+
+        application_logger.info(
+            "vehicle_document_list_requested",
+            requested_by=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            vehicle_id=vehicle_id,
+        )
+
+        if school is None:
+
+            application_logger.warning(
+                "vehicle_document_list_failed",
+                requested_by=str(request.user.id),
+                vehicle_id=vehicle_id,
+                reason="school_not_found",
+            )
+
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        if not vehicle_id:
+
+            application_logger.warning(
+                "vehicle_document_list_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                reason="vehicle_id_required",
+            )
+
+            return CustomResponse.errorResponse(
+                description="vehicle_id is required."
+            )
+
+        try:
+
+            vehicle = Vehicle.objects.filter(
+                id=vehicle_id,
+                school=school,
+            ).first()
+
+            if vehicle is None:
+
+                application_logger.warning(
+                    "vehicle_document_list_failed",
+                    requested_by=str(request.user.id),
+                    school_id=str(school.id),
+                    vehicle_id=vehicle_id,
+                    reason="vehicle_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Vehicle not found."
+                )
+
+            documents = VehicleDocument.objects.filter(
+                vehicle=vehicle,
+            ).order_by(
+                "document_type"
+            )
+
+            data = []
+
+            for document in documents:
+
+                data.append({
+                    "id": str(document.id),
+                    "document_type": document.document_type,
+                    "document_type_display": document.get_document_type_display(),
+                    "document_number": document.document_number,
+                    "issue_date": document.issue_date,
+                    "expiry_date": document.expiry_date,
+                    "issued_by": document.issued_by,
+                    "document_file": (
+                        document.document_file.url
+                        if document.document_file
+                        else None
+                    ),
+                    "remarks": document.remarks,
+                    "status": document.status,
+                    "status_display": document.get_status_display(),
+                    "created_at": document.created_at,
+                    "updated_at": document.updated_at,
+                })
+
+        except Exception as e:
+
+            application_logger.exception(
+                "vehicle_document_list_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                vehicle_id=vehicle_id,
+                reason="vehicle_document_list_fetch_failed",
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(e)
+            )
+
+        application_logger.info(
+            "vehicle_document_list_fetched",
+            requested_by=str(request.user.id),
+            school_id=str(school.id),
+            vehicle_id=str(vehicle.id),
+            returned_count=len(data),
+        )
+
+        return CustomResponse.successResponse(
+            description="Vehicle documents fetched successfully.",
+            data={
+                "vehicle_id": str(vehicle.id),
+                "vehicle_number": vehicle.vehicle_number,
+                "documents": data,
+            },
+        )
+
+
+class UpdateVehicleDocumentAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "vehicle.document.update"
+
+    def put(self, request, document_id):
+
+        school = request.school
+
+        application_logger.info(
+            "vehicle_document_update_requested",
+            requested_by=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            document_id=str(document_id),
+        )
+
+        if school is None:
+
+            application_logger.warning(
+                "vehicle_document_update_failed",
+                requested_by=str(request.user.id),
+                document_id=str(document_id),
+                reason="school_not_found",
+            )
+
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        document = VehicleDocument.objects.select_related(
+            "vehicle"
+        ).filter(
+            id=document_id,
+            vehicle__school=school,
+        ).first()
+
+        if document is None:
+
+            application_logger.warning(
+                "vehicle_document_update_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                document_id=str(document_id),
+                reason="document_not_found",
+            )
+
+            return CustomResponse.errorResponse(
+                description="Vehicle document not found."
+            )
+
+        document_type = request.data.get("document_type")
+
+        if document_type:
+
+            if document_type not in VehicleDocument.DocumentType.values:
+
+                application_logger.warning(
+                    "vehicle_document_update_failed",
+                    requested_by=str(request.user.id),
+                    school_id=str(school.id),
+                    document_id=str(document.id),
+                    vehicle_id=str(document.vehicle.id),
+                    document_type=document_type,
+                    reason="invalid_document_type",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Invalid document type."
+                )
+
+            if VehicleDocument.objects.filter(
+                vehicle=document.vehicle,
+                document_type=document_type,
+            ).exclude(
+                id=document.id
+            ).exists():
+
+                application_logger.warning(
+                    "vehicle_document_update_failed",
+                    requested_by=str(request.user.id),
+                    school_id=str(school.id),
+                    document_id=str(document.id),
+                    vehicle_id=str(document.vehicle.id),
+                    document_type=document_type,
+                    reason="document_type_already_exists",
+                )
+
+                return CustomResponse.errorResponse(
+                    description=f"{document_type.replace('_', ' ').title()} already exists."
+                )
+
+            document.document_type = document_type
+
+        issue_date = request.data.get(
+            "issue_date",
+            document.issue_date,
+        )
+
+        expiry_date = request.data.get(
+            "expiry_date",
+            document.expiry_date,
+        )
+
+        if issue_date and expiry_date and issue_date > expiry_date:
+
+            application_logger.warning(
+                "vehicle_document_update_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                document_id=str(document.id),
+                vehicle_id=str(document.vehicle.id),
+                reason="invalid_date_range",
+            )
+
+            return CustomResponse.errorResponse(
+                description="Expiry date must be greater than or equal to issue date."
+            )
+
+        if request.data.get("document_number") not in [None, ""]:
+            document.document_number = request.data.get(
+                "document_number"
+            ).strip()
+
+        if "issue_date" in request.data:
+            document.issue_date = request.data.get("issue_date") or None
+
+        if "expiry_date" in request.data:
+            document.expiry_date = request.data.get("expiry_date") or None
+
+        if "issued_by" in request.data:
+            document.issued_by = request.data.get("issued_by")
+
+        if "document_file" in request.data:
+            document.document_file = request.data.get("document_file")
+
+        if "remarks" in request.data:
+            document.remarks = request.data.get("remarks")
+
+        if "status" in request.data:
+            document.status = request.data.get("status")
+
+        try:
+
+            with transaction.atomic():
+
+                document.save()
+
+        except Exception as e:
+
+            application_logger.exception(
+                "vehicle_document_update_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                document_id=str(document.id),
+                vehicle_id=str(document.vehicle.id),
+                reason="vehicle_document_update_failed",
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(e)
+            )
+
+        application_logger.info(
+            "vehicle_document_updated",
+            requested_by=str(request.user.id),
+            school_id=str(school.id),
+            document_id=str(document.id),
+            vehicle_id=str(document.vehicle.id),
+            document_type=document.document_type,
+        )
+
+        return CustomResponse.successResponse(
+            description="Vehicle document updated successfully.",
+            data={
+                "id": str(document.id),
+                "vehicle_id": str(document.vehicle.id),
+                "document_type": document.document_type,
+                "document_number": document.document_number,
+                "issue_date": document.issue_date,
+                "expiry_date": document.expiry_date,
+                "issued_by": document.issued_by,
+                "document_file": (
+                    document.document_file.url
+                    if document.document_file
+                    else None
+                ),
+                "remarks": document.remarks,
+                "status": document.status,
             },
         )

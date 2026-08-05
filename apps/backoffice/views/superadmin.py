@@ -1684,6 +1684,7 @@ class UserListAPIView(APIView):
                     "id": str(obj.id),
                     "first_name": obj.first_name,
                     "last_name": obj.last_name,
+                    "username": obj.username,
                     "mobile": obj.mobile,
                     "email": obj.email,
                     "roles": [

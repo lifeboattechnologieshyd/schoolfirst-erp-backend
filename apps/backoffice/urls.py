@@ -35,6 +35,8 @@ from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdmin
     UpdateOrganizationAPIView, SchoolListAPIView, CreateSchoolAPIView, UpdateSchoolAPIView, CreateBranchAPIView, \
     UpdateBranchAPIView, BranchListAPIView, UserListAPIView, GetSchoolClientInfoAPIView, \
     CreateSchoolConfigurationAPIView, GetSchoolConfigurationAPIView, UpdateSchoolConfigurationAPIView
+from apps.backoffice.views.transport import CreateVehicleAPIView, VehicleListAPIView, UpdateVehicleAPIView, \
+    CreateVehicleDocumentAPIView, VehicleDocumentListAPIView, UpdateVehicleDocumentAPIView
 
 urlpatterns = [
 
@@ -319,6 +321,18 @@ urlpatterns = [
     path("assignment/submissions/<uuid:assignment_id>",TeacherAssignmentSubmissionListAPIView.as_view(),),
 
     path("assignment/check/<uuid:submission_id>",TeacherCheckAssignmentAPIView.as_view(),),
+
+    path("vehicle/create",CreateVehicleAPIView.as_view(),),
+
+    path("vehicle",VehicleListAPIView.as_view(),),
+
+    path("vehicle/<uuid:vehicle_id>",UpdateVehicleAPIView.as_view(),),
+
+    path("vehicle/documents/create",CreateVehicleDocumentAPIView.as_view(),),
+
+    path("vehicle/documents",VehicleDocumentListAPIView.as_view(),),
+
+    path("vehicle/documents/<uuid:document_id>",UpdateVehicleDocumentAPIView.as_view(),),
 
 
 
