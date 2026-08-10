@@ -2256,17 +2256,17 @@ class GetSchoolClientInfoAPIView(APIView):
 
     authentication_classes = []
 
-    def post(self, request):
+    def get(self, request,identifier):
 
-        identifier = request.data.get(
-            "identifier",
-        )
-
-        if not identifier:
-
-            return CustomResponse.errorResponse(
-                description="Identifier is required.",
-            )
+        # identifier = request.GET.get(
+        #     "identifier",
+        # )
+        #
+        # if not identifier:
+        #
+        #     return CustomResponse.errorResponse(
+        #         description="Identifier is required.",
+        #     )
 
         client = (
             SchoolClient.objects.select_related(

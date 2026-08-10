@@ -114,7 +114,7 @@ urlpatterns = [
 
     path("configuration/update",UpdateSchoolConfigurationAPIView.as_view(),),
 
-    path("client-info",GetSchoolClientInfoAPIView.as_view(),name="client-info"),
+    path("client-info/<str:identifier>",GetSchoolClientInfoAPIView.as_view(),),
 
     # ====================================
     # Branch APIs
