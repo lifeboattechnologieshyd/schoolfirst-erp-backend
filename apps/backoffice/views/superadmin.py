@@ -1999,11 +1999,10 @@ class CreateSchoolConfigurationAPIView(APIView):
 class GetSchoolConfigurationAPIView(APIView):
 
     permission_classes = [
-        IsAuthenticated,
-        HasPermission,
+
     ]
 
-    required_permission = "school.configuration.view"
+    # required_permission = "school.configuration.view"
 
     def get(self, request):
 
