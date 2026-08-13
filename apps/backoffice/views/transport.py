@@ -193,15 +193,8 @@ class CreateVehicleAPIView(APIView):
             description="Vehicle created successfully.",
             data={
                 "id": str(vehicle.id),
-                "vehicle_number": vehicle.vehicle_number,
-                "registration_number": vehicle.registration_number,
-                "vehicle_type": vehicle.vehicle_type,
-                "vehicle_type_display": vehicle.get_vehicle_type_display(),
-                "capacity": vehicle.capacity,
-                "manufacturer": vehicle.manufacturer,
-                "model": vehicle.model,
-                "status": vehicle.status,
-                "status_display": vehicle.get_status_display(),
+
+
             },
         )
 
