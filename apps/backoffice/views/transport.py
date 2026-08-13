@@ -3154,10 +3154,10 @@ class UpdateStopAPIView(APIView):
                 "drop_time",
                 stop.drop_time,
             )
-            stop.radius = request.data.get(
-                "radius",
-                stop.radius,
-            )
+            # stop.radius = request.data.get(
+            #     "radius",
+            #     stop.radius,
+            # )
             stop.status = request.data.get(
                 "status",
                 stop.status,
