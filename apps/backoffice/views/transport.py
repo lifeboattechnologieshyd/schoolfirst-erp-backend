@@ -3032,7 +3032,7 @@ class StopListAPIView(APIView):
                 "longitude": stop.longitude,
                 "pickup_time": stop.pickup_time,
                 "drop_time": stop.drop_time,
-                "radius": stop.radius,
+                # "radius": stop.radius,
                 "status": stop.status,
             })
 
