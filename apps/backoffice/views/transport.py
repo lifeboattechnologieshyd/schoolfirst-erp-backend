@@ -164,7 +164,6 @@ class CreateVehicleAPIView(APIView):
                     panic_button=request.data.get("panic_button", False),
                     rfid_reader=request.data.get("rfid_reader", False),
                     status=status,
-                    remarks=request.data.get("remarks"),
                 )
 
         except Exception as e:
