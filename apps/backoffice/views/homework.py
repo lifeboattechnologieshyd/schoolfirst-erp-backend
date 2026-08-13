@@ -819,6 +819,7 @@ class TeacherHomeworkSubmissionListAPIView(APIView):
                 "grade",
                 "subject",
                 "teacher",
+                "academic_year",
             ).prefetch_related(
                 "homework_sections__section",
             ).filter(
@@ -946,6 +947,7 @@ class TeacherHomeworkSubmissionListAPIView(APIView):
                         "title": homework.title,
                         "subject": homework.subject.name,
                         "grade": homework.grade.name,
+                        "academic_year": homework.academic_year.name,
 
                     },
                     "sections": sections,
