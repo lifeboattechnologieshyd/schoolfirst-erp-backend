@@ -2928,10 +2928,10 @@ class CreateStopAPIView(APIView):
                 longitude=request.data.get("longitude"),
                 pickup_time=request.data.get("pickup_time"),
                 drop_time=request.data.get("drop_time"),
-                radius=request.data.get(
-                    "radius",
-                    100,
-                ),
+                # radius=request.data.get(
+                #     "radius",
+                #     100,
+                # ),
                 status=request.data.get(
                     "status",
                     Stop.Status.ACTIVE,
