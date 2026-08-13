@@ -55,7 +55,7 @@ class HomeworkSection(AuditModel):
 
     id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False,)
     homework = models.ForeignKey(Homework,on_delete=models.CASCADE,related_name="homework_sections",)
-    section = models.ForeignKey(Section,on_delete=models.CASCADE,)
+    section = models.ForeignKey(Section,on_delete=models.CASCADE,related_name="homework_sections")
 
     class Meta:
         db_table = "homework_sections"
