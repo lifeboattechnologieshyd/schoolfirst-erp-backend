@@ -327,6 +327,10 @@ urlpatterns = [
 
     path("assignment/check/<uuid:submission_id>",TeacherCheckAssignmentAPIView.as_view(),),
 
+    # ====================================
+    #  Transport   APIs
+    # ====================================
+
     path("vehicle/create",CreateVehicleAPIView.as_view(),),
 
     path("vehicle",VehicleListAPIView.as_view(),),

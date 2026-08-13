@@ -858,6 +858,13 @@ class TeacherHomeworkSubmissionListAPIView(APIView):
                 submission.student_id: submission
                 for submission in submissions
             }
+            sections = [
+                {
+                    "id": str(homework_section.section.id),
+                    "name": homework_section.section.name,
+                }
+                for homework_section in homework.homework_sections.all()
+            ]
 
             data = []
 
@@ -939,7 +946,9 @@ class TeacherHomeworkSubmissionListAPIView(APIView):
                         "title": homework.title,
                         "subject": homework.subject.name,
                         "grade": homework.grade.name,
+
                     },
+                    "sections": sections,
                     "students": data,
                 },
                 total_count=len(data),
