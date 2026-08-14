@@ -887,6 +887,11 @@ class TeacherHomeworkSubmissionListAPIView(APIView):
                     },
 
                     "submission": {
+                        "submission_id": (
+                            str(submission.id)
+                            if submission
+                            else None
+                        ),
 
                         "status": (
                             submission.status
