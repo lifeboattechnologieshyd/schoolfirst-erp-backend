@@ -474,7 +474,12 @@ class SectionListAPIView(APIView):
                     "id": str(section.branch.id),
                     "name": section.branch.name,
                 } if section.branch else None,
-                "grade": section.grade.name,
+                "grade":{
+                    "id":str(section.grade.id),
+                    "name":section.grade.name,
+                },
+
+
                 "name": section.name,
                 "class_teacher": {
                     "id": str(section.class_teacher.id),

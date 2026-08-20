@@ -900,7 +900,7 @@ class TeacherCheckAssignmentAPIView(APIView):
 
     required_permission = "assignment.update"
 
-    def post(self, request, submission_id):
+    def put(self, request, submission_id):
 
         user = request.user
 
@@ -920,6 +920,7 @@ class TeacherCheckAssignmentAPIView(APIView):
                 "student",
             ).filter(
                 id=submission_id,
+                assignment__school=request.school,
             ).first()
 
             if submission is None:
