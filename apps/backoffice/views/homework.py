@@ -178,8 +178,16 @@ class CreateHomeworkAPIView(APIView):
         sections = Section.objects.filter(
             id__in=section_ids,
             grade=grade,
-            # branch=branch,
         )
+
+        if branch:
+            sections = sections.filter(
+                branch=branch,
+            )
+        else:
+            sections = sections.filter(
+                branch__isnull=True,
+            )
 
         if sections.count() != len(section_ids):
             application_logger.warning(
