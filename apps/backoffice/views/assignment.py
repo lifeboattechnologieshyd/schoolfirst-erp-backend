@@ -181,6 +181,15 @@ class CreateAssignmentAPIView(APIView):
                 branch=branch,
             )
 
+            if branch:
+                sections = sections.filter(
+                    branch=branch,
+                )
+            else:
+                sections = sections.filter(
+                    branch__isnull=True,
+                )
+
             if sections.count() != len(section_ids):
                 application_logger.warning(
                     "homework_create_failed",
