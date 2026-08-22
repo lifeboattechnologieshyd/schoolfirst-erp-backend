@@ -189,17 +189,54 @@ class CreateHomeworkAPIView(APIView):
                 branch__isnull=True,
             )
 
-        if sections.count() != len(section_ids):
+        valid_section_ids = set(
+            str(section.id)
+            for section in sections
+        )
+
+        invalid_section_ids = [
+            section_id
+            for section_id in section_ids
+            if str(section_id) not in valid_section_ids
+        ]
+
+        if invalid_section_ids:
+            invalid_sections = Section.objects.filter(
+                id__in=invalid_section_ids,
+            ).select_related(
+                "grade",
+                "branch",
+            )
+
+            invalid_section_details = [
+                {
+                    "id": str(section.id),
+                    "name": section.name,
+                    "grade": section.grade.name,
+                    "branch": (
+                        section.branch.name
+                        if section.branch
+                        else None
+                    ),
+                }
+                for section in invalid_sections
+            ]
+
             application_logger.warning(
                 "homework_create_failed",
                 reason="invalid_sections",
                 section_ids=section_ids,
+                invalid_section_ids=invalid_section_ids,
+                invalid_section_details=invalid_section_details,
                 grade_id=str(grade.id),
                 branch_id=str(branch.id) if branch else None,
             )
 
             return CustomResponse.errorResponse(
-                description="One or more sections are invalid."
+                description="Invalid section(s): A. Section belongs to branch 'school', but no branch was selected.",
+                data={
+                    "invalid_sections": invalid_section_details,
+                },
             )
 
         status = request.data.get(
