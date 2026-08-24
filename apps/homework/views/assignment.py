@@ -1,5 +1,4 @@
-from datetime import timezone
-
+from django.utils import timezone
 from django.db import transaction
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
