@@ -249,11 +249,27 @@ class StudentAssignmentSubmissionAPIView(APIView):
                     description="Assignment not found."
                 )
 
-            if not isinstance(attachments, list):
+            attachments = request.data.get("attachments", [])
 
+            if not isinstance(attachments, list):
                 return CustomResponse.errorResponse(
-                    description="attachments must be a list."
+                    description="Attachments must be a list."
                 )
+
+            for item in attachments:
+
+                if not isinstance(item, dict):
+                    return CustomResponse.errorResponse(
+                        description="Each attachment must be an object."
+                    )
+
+                file_name = item.get("file_name")
+                file_url = item.get("file_url")
+
+                if not file_name or not file_url:
+                    return CustomResponse.errorResponse(
+                        description="Attachment file_name and file_url are required."
+                    )
 
             submission_status = (
                 AssignmentSubmission.Status.LATE
