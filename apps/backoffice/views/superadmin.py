@@ -1279,6 +1279,7 @@ class BranchListAPIView(APIView):
                     "email": branch.email,
                     "phone_number": branch.phone_number,
                     "city": branch.city,
+                    "address": branch.address,
                     "state": branch.state,
                     "status": branch.status,
                 })
