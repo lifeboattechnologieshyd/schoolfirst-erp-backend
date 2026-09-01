@@ -21,7 +21,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.core.models import UserOTP, UserMaster, UserRoles, UserDeviceSession, Roles
 from django.db import transaction
 
-from apps.school.models.school import Student
+from apps.school.models.school import Student, StudentDocument
 from shared.enums.roles import RolesEnum
 from shared.helpers import get_user_roles, get_user_permissions
 from shared.mixins import CustomResponse
@@ -859,3 +859,368 @@ class VerifyOTPAPIView(APIView):
         )
 
 
+class StudentProfileAPIView(APIView):
+
+    permission_classes = [IsAuthenticated,]
+
+    def get(self, request, student_id):
+
+        auth_logger.info(
+            "student_profile_requested",
+            user_id=str(request.user.id),
+            student_id=str(student_id),
+        )
+
+        try:
+
+            student = Student.objects.select_related(
+                "school",
+                "branch",
+                "academic_year",
+                "grade",
+                "section",
+            ).prefetch_related(
+                "documents",
+            ).filter(
+                id=student_id,
+                status=Student.Status.ACTIVE,
+            ).filter(
+                Q(father_mobile=request.user.mobile)
+                | Q(mother_mobile=request.user.mobile)
+                | Q(guardian_mobile=request.user.mobile)
+            ).first()
+
+            if student is None:
+
+                auth_logger.warning(
+                    "student_profile_failed",
+                    user_id=str(request.user.id),
+                    student_id=str(student_id),
+                    reason="student_not_found_or_access_denied",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Student not found.",
+                )
+
+            if student.father_mobile == request.user.mobile:
+                relationship = "Father"
+
+            elif student.mother_mobile == request.user.mobile:
+                relationship = "Mother"
+
+            else:
+                relationship = "Guardian"
+
+            documents = []
+
+            for document in student.documents.filter(
+                status=StudentDocument.Status.ACTIVE,
+            ):
+
+                documents.append({
+                    "id": str(document.id),
+                    "document_type": document.document_type,
+                    "title": document.title,
+                    "file_url": document.file_url,
+                    "academic_year": (
+                        {
+                            "id": str(document.academic_year.id),
+                            "name": document.academic_year.name,
+                        }
+                        if document.academic_year
+                        else None
+                    ),
+                    "remarks": document.remarks,
+                    "status": document.status,
+                })
+
+            auth_logger.info(
+                "student_profile_fetched",
+                user_id=str(request.user.id),
+                student_id=str(student.id),
+                school_id=str(student.school.id),
+                document_count=len(documents),
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "id": str(student.id),
+                    "name": student.name,
+                    "photo_url": student.photo_url,
+                    "admission_number": student.admission_number,
+                    "roll_number": student.roll_number,
+                    "gender": student.gender,
+                    "date_of_birth": student.date_of_birth,
+                    "blood_group": student.blood_group,
+                    "nationality": student.nationality,
+                    "mother_tongue": student.mother_tongue,
+                    "email": student.email,
+                    "address": student.address,
+                    "admission_date": student.admission_date,
+                    "enrollment_type": student.enrollment_type,
+                    "status": student.status,
+                    "board": student.board,
+                    "student_category": student.student_category,
+                    "religion": student.religion,
+                    "caste": student.caste,
+                    "sub_caste": student.sub_caste,
+                    "identification_marks": student.identification_marks,
+
+                    "school": {
+                        "id": str(student.school.id),
+                        "name": student.school.name,
+                    },
+
+                    "branch": (
+                        {
+                            "id": str(student.branch.id),
+                            "name": student.branch.name,
+                            "code": student.branch.code,
+                        }
+                        if student.branch
+                        else None
+                    ),
+
+                    "academic_year": (
+                        {
+                            "id": str(student.academic_year.id),
+                            "name": student.academic_year.name,
+                        }
+                        if student.academic_year
+                        else None
+                    ),
+
+                    "grade": (
+                        {
+                            "id": str(student.grade.id),
+                            "name": student.grade.name,
+                        }
+                        if student.grade
+                        else None
+                    ),
+
+                    "section": (
+                        {
+                            "id": str(student.section.id),
+                            "name": student.section.name,
+                        }
+                        if student.section
+                        else None
+                    ),
+
+                    "parent": {
+                        "relationship": relationship,
+
+                        "father_name": student.father_name,
+                        "father_mobile": student.father_mobile,
+                        "father_occupation": student.father_occupation,
+
+                        "mother_name": student.mother_name,
+                        "mother_mobile": student.mother_mobile,
+                        "mother_occupation": student.mother_occupation,
+
+                        "guardian_name": student.guardian_name,
+                        "guardian_mobile": student.guardian_mobile,
+                        "guardian_occupation": student.guardian_occupation,
+                    },
+
+                    "emergency_contact": {
+                        "name": student.emergency_contact_name,
+                        "mobile": student.emergency_contact_mobile,
+                    },
+
+                    "previous_school": {
+                        "name": student.previous_school_name,
+                        "tc_number": student.previous_school_tc_number,
+                        "exam_percentage": student.previous_exam_percentage,
+                    },
+
+                    "transport": {
+                        "required": student.transport_required,
+                        "pickup_point": student.pickup_point,
+                    },
+
+                    "hostel_type": student.hostel_type,
+
+                    "documents": documents,
+                },
+                description="Student profile fetched successfully.",
+            )
+
+        except Exception as e:
+
+            auth_logger.exception(
+                "student_profile_api_failed",
+                user_id=str(request.user.id),
+                student_id=str(student_id),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while fetching student profile.",
+            )
+
+    def put(self, request, student_id):
+
+        auth_logger.info(
+            "student_profile_update_requested",
+            user_id=str(request.user.id),
+            student_id=str(student_id),
+        )
+
+        try:
+
+            student = Student.objects.filter(
+                id=student_id,
+                status=Student.Status.ACTIVE,
+            ).filter(
+                Q(father_mobile=request.user.mobile)
+                | Q(mother_mobile=request.user.mobile)
+                | Q(guardian_mobile=request.user.mobile)
+            ).first()
+
+            if student is None:
+                auth_logger.warning(
+                    "student_profile_update_failed",
+                    user_id=str(request.user.id),
+                    student_id=str(student_id),
+                    reason="student_not_found_or_access_denied",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Student not found.",
+                )
+
+            allowed_fields = [
+                "name",
+                "date_of_birth",
+                "place_of_birth",
+                "blood_group",
+                "photo_url",
+                "nationality",
+                "mother_tongue",
+                "email",
+                "address",
+                "emergency_contact_name",
+                "emergency_contact_mobile",
+                "father_name",
+                "father_mobile",
+                "father_occupation",
+                "mother_name",
+                "mother_mobile",
+                "mother_occupation",
+                "guardian_name",
+                "guardian_mobile",
+                "guardian_occupation",
+                "identification_marks",
+                "transport_required",
+                "pickup_point",
+                "hostel_type",
+            ]
+
+            for field in allowed_fields:
+
+                if field in request.data:
+                    setattr(
+                        student,
+                        field,
+                        request.data.get(field),
+                    )
+
+            if "blood_group" in request.data:
+
+                valid_blood_groups = [
+                    "A+",
+                    "A-",
+                    "B+",
+                    "B-",
+                    "AB+",
+                    "AB-",
+                    "O+",
+                    "O-",
+                ]
+
+                blood_group = request.data.get("blood_group")
+
+                if (
+                        blood_group
+                        and blood_group not in valid_blood_groups
+                ):
+                    return CustomResponse.errorResponse(
+                        description="Invalid blood group.",
+                    )
+
+            if "hostel_type" in request.data:
+
+                hostel_type = request.data.get(
+                    "hostel_type"
+                )
+
+                if hostel_type not in Student.HostelType.values:
+                    return CustomResponse.errorResponse(
+                        description="Invalid hostel type.",
+                    )
+
+            if "transport_required" in request.data:
+
+                transport_required = request.data.get(
+                    "transport_required"
+                )
+
+                if not isinstance(
+                        transport_required,
+                        bool,
+                ):
+                    return CustomResponse.errorResponse(
+                        description="transport_required must be true or false.",
+                    )
+
+            student.save()
+
+            auth_logger.info(
+                "student_profile_updated",
+                user_id=str(request.user.id),
+                student_id=str(student.id),
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "id": str(student.id),
+                    "name": student.name,
+                    "photo_url": student.photo_url,
+                    "email": student.email,
+                    "date_of_birth": student.date_of_birth,
+                    "address": student.address,
+                    "emergency_contact_name": (
+                        student.emergency_contact_name
+                    ),
+                    "emergency_contact_mobile": (
+                        student.emergency_contact_mobile
+                    ),
+                    "father_name": student.father_name,
+                    "father_mobile": student.father_mobile,
+                    "father_occupation": student.father_occupation,
+                    "mother_name": student.mother_name,
+                    "mother_mobile": student.mother_mobile,
+                    "mother_occupation": student.mother_occupation,
+                    "guardian_name": student.guardian_name,
+                    "guardian_mobile": student.guardian_mobile,
+                    "guardian_occupation": student.guardian_occupation,
+                    "transport_required": student.transport_required,
+                },
+                description="Student profile updated successfully.",
+            )
+
+        except Exception as e:
+
+            auth_logger.exception(
+                "student_profile_update_api_failed",
+                user_id=str(request.user.id),
+                student_id=str(student_id),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while updating student profile.",
+            )
