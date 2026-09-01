@@ -4050,9 +4050,7 @@ class CreateSchoolDocumentTypeAPIView(APIView):
                 description="School document type created successfully.",
                 data={
                     "id": str(document_type.id),
-                    "name": document_type.name,
-                    "description": document_type.description,
-                    "status": document_type.status,
+
                 },
             )
 
@@ -4282,9 +4280,7 @@ class UpdateSchoolDocumentTypeAPIView(APIView):
                 description="School document type updated successfully.",
                 data={
                     "id": str(document_type.id),
-                    "name": document_type.name,
-                    "description": document_type.description,
-                    "status": document_type.status,
+
                 },
             )
 
@@ -4473,6 +4469,7 @@ class CreateSchoolDocumentAPIView(APIView):
                 description=request.data.get("description"),
                 remarks=request.data.get("remarks"),
                 status=status_value,
+                file_url = request.data.get("file_url"),
             )
 
             application_logger.info(
@@ -4494,21 +4491,7 @@ class CreateSchoolDocumentAPIView(APIView):
                 description="School document created successfully.",
                 data={
                     "id": str(document.id),
-                    "title": document.title,
-                    "document_type": {
-                        "id": str(document.document_type.id),
-                        "name": document.document_type.name,
-                    },
-                    "branch": {
-                        "id": str(branch.id),
-                        "name": branch.name,
-                    } if branch else None,
-                    "academic_year": {
-                        "id": str(academic_year.id),
-                        "name": academic_year.name,
-                    } if academic_year else None,
-                    "file_url": document.file_url,
-                    "status": document.status,
+
                 },
             )
 
@@ -4629,7 +4612,6 @@ class SchoolDocumentListAPIView(APIView):
                     "remarks": document.remarks,
                     "file_url": document.file_url,
                     "status": document.status,
-                    "published_at": document.published_at,
                     "document_type": {
                         "id": str(document.document_type.id),
                         "name": document.document_type.name,
@@ -4897,9 +4879,7 @@ class UpdateSchoolDocumentAPIView(APIView):
                 description="School document updated successfully.",
                 data={
                     "id": str(document.id),
-                    "title": document.title,
-                    "file_url": document.file_url,
-                    "status": document.status,
+
                 },
             )
 

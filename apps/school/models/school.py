@@ -1381,10 +1381,7 @@ class SchoolDocument(AuditModel):
         default=Status.DRAFT,
     )
 
-    published_at = models.DateTimeField(
-        null=True,
-        blank=True,
-    )
+
 
     class Meta:
 
