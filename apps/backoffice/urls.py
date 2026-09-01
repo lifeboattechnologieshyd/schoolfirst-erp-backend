@@ -30,7 +30,9 @@ from apps.backoffice.views.school import AcademicYearListAPIView, CreateAcademic
     CreateStudentDocumentAPIView, StudentDocumentListAPIView, UpdateStudentDocumentAPIView, \
     DownloadStudentTemplateAPIView, CreateStaffAPIView, GetStaffAPIView, UpdateStaffAPIView, CreateStaffDocumentAPIView, \
     StaffDocumentListAPIView, UpdateStaffDocumentAPIView, CreateSubjectAPIView, SubjectListAPIView, \
-    SubjectUpdateAPIView, SchoolAPIView, SchoolUpdateAPIView, BranchAPIView, BranchLISTAPIView, BranchUpdateAPIView
+    SubjectUpdateAPIView, SchoolAPIView, SchoolUpdateAPIView, BranchAPIView, BranchLISTAPIView, BranchUpdateAPIView, \
+    CreateSchoolDocumentAPIView, SchoolDocumentListAPIView, UpdateSchoolDocumentAPIView, \
+    CreateSchoolDocumentTypeAPIView, SchoolDocumentTypeListAPIView, UpdateSchoolDocumentTypeAPIView
 from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdminRequestOTPAPIView, \
     SuperAdminVerifyOTPAPIView, SchoolLeadUpdateAPIView, OrganizationListAPIView, CreateOrganizationAPIView, \
     UpdateOrganizationAPIView, SchoolListAPIView, CreateSchoolAPIView, UpdateSchoolAPIView, CreateBranchAPIView, \
@@ -396,6 +398,18 @@ urlpatterns = [
     path("trip/start",StartTripAPIView.as_view(),),
 
     path("trip/end",EndTripAPIView.as_view(),),
+
+    path("school/document/type/create",CreateSchoolDocumentTypeAPIView.as_view(),),
+
+    path("school/document/type",SchoolDocumentTypeListAPIView.as_view(),),
+
+    path("school/document/type/<uuid:document_type_id>",UpdateSchoolDocumentTypeAPIView.as_view(),),
+
+    path("school/documents/create",CreateSchoolDocumentAPIView.as_view(),),
+
+    path("school/documents",SchoolDocumentListAPIView.as_view(),),
+
+    path("school/documents/<uuid:document_id>",UpdateSchoolDocumentAPIView.as_view(),),
 
 
 

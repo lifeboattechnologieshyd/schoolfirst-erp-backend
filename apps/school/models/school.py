@@ -1247,3 +1247,173 @@ class SubjectGrade(AuditModel):
         indexes = [models.Index(fields=["subject"],),
                    models.Index(fields=["grade"],),
         ]
+
+
+class SchoolDocumentType(AuditModel):
+
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    class Status(models.TextChoices):
+
+        ACTIVE = "ACTIVE", "Active"
+
+        INACTIVE = "INACTIVE", "Inactive"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+    )
+
+
+
+    description = models.TextField(
+        null=True,
+        blank=True,
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+
+    class Meta:
+
+        db_table = "school_document_types"
+
+        ordering = [
+            "name",
+        ]
+
+        indexes = [
+
+            models.Index(
+                fields=["status"],
+            ),
+
+        ]
+
+    def __str__(self):
+
+        return self.name
+
+
+class SchoolDocument(AuditModel):
+
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    class Status(models.TextChoices):
+
+        DRAFT = "DRAFT", "Draft"
+
+        ACTIVE = "ACTIVE", "Active"
+
+        INACTIVE = "INACTIVE", "Inactive"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="documents",
+    )
+
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="school_documents",
+    )
+
+    document_type = models.ForeignKey(
+        SchoolDocumentType,
+        on_delete=models.PROTECT,
+        related_name="documents",
+    )
+
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="school_documents",
+    )
+
+    title = models.CharField(
+        max_length=255,
+    )
+
+    description = models.TextField(
+        null=True,
+        blank=True,
+    )
+
+    file_url = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+    )
+
+    remarks = models.TextField(
+        null=True,
+        blank=True,
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRAFT,
+    )
+
+    published_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+
+        db_table = "school_documents"
+
+        indexes = [
+
+            models.Index(
+                fields=["school"],
+            ),
+
+            models.Index(
+                fields=[
+                    "school",
+                    "document_type",
+                ],
+            ),
+
+            models.Index(
+                fields=["branch"],
+            ),
+
+            models.Index(
+                fields=["academic_year"],
+            ),
+
+            models.Index(
+                fields=["status"],
+            ),
+
+        ]
+
+    def __str__(self):
+
+        return self.title
