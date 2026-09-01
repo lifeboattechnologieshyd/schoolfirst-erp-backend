@@ -1270,8 +1270,11 @@ class SchoolDocumentType(AuditModel):
         max_length=100,
         unique=True,
     )
-
-
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="document_types",
+    )
 
     description = models.TextField(
         null=True,
