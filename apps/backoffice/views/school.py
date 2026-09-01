@@ -4126,6 +4126,7 @@ class SchoolDocumentTypeListAPIView(APIView):
             )
 
             return CustomResponse.successResponse(
+                total = len(data),
                 data=data,
                 description="School document types fetched successfully.",
             )
@@ -4652,7 +4653,9 @@ class SchoolDocumentListAPIView(APIView):
             )
 
             return CustomResponse.successResponse(
+                total=len(data),
                 data=data,
+                description="Successfully fetched school documents.",
             )
 
         except Exception as e:
