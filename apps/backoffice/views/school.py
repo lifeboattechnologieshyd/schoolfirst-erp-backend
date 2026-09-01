@@ -3955,57 +3955,120 @@ class CreateSchoolDocumentTypeAPIView(APIView):
 
         school = request.school
 
-        if school is None:
-            return CustomResponse.errorResponse(
-                description="School not found.",
-            )
-
-        name = request.data.get("name")
-
-        if not name:
-            return CustomResponse.errorResponse(
-                description="Name is required.",
-            )
-
-        name = name.strip()
-
-        if SchoolDocumentType.objects.filter(
-            school=school,
-            name__iexact=name,
-        ).exists():
-
-            return CustomResponse.errorResponse(
-                description="Document type already exists.",
-            )
-
-        status_value = request.data.get(
-            "status",
-            SchoolDocumentType.Status.ACTIVE,
+        application_logger.info(
+            "school_document_type_create_started",
+            user_id=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            name=request.data.get("name"),
         )
 
-        if status_value not in SchoolDocumentType.Status.values:
+        try:
 
-            return CustomResponse.errorResponse(
-                description="Invalid status.",
+            if school is None:
+
+                application_logger.warning(
+                    "school_document_type_create_failed",
+                    user_id=str(request.user.id),
+                    reason="school_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="School not found.",
+                )
+
+            name = request.data.get("name")
+
+            if not name:
+
+                application_logger.warning(
+                    "school_document_type_create_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    reason="name_required",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Name is required.",
+                )
+
+            name = name.strip()
+
+            if SchoolDocumentType.objects.filter(
+                school=school,
+                name__iexact=name,
+            ).exists():
+
+                application_logger.warning(
+                    "school_document_type_create_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    name=name,
+                    reason="document_type_already_exists",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Document type already exists.",
+                )
+
+            status_value = request.data.get(
+                "status",
+                SchoolDocumentType.Status.ACTIVE,
             )
 
-        document_type = SchoolDocumentType.objects.create(
-            school=school,
-            name=name,
-            description=request.data.get("description"),
-            status=status_value,
-        )
+            if status_value not in SchoolDocumentType.Status.values:
 
-        return CustomResponse.successResponse(
-            description="School document type created successfully.",
-            data={
-                "id": str(document_type.id),
-                "name": document_type.name,
-                "description": document_type.description,
-                "status": document_type.status,
-            },
-        )
+                application_logger.warning(
+                    "school_document_type_create_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    name=name,
+                    status=status_value,
+                    reason="invalid_status",
+                )
 
+                return CustomResponse.errorResponse(
+                    description="Invalid status.",
+                )
+
+            document_type = SchoolDocumentType.objects.create(
+                school=school,
+                name=name,
+                description=request.data.get("description"),
+                status=status_value,
+            )
+
+            application_logger.info(
+                "school_document_type_created",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                document_type_id=str(document_type.id),
+                name=document_type.name,
+                status=document_type.status,
+            )
+
+            return CustomResponse.successResponse(
+                description="School document type created successfully.",
+                data={
+                    "id": str(document_type.id),
+                    "name": document_type.name,
+                    "description": document_type.description,
+                    "status": document_type.status,
+                },
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "school_document_type_create_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id) if school else None,
+                name=request.data.get("name"),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while creating document type.",
+            )
 class SchoolDocumentTypeListAPIView(APIView):
 
     permission_classes = [
@@ -4019,32 +4082,66 @@ class SchoolDocumentTypeListAPIView(APIView):
 
         school = request.school
 
-        if school is None:
-            return CustomResponse.errorResponse(
-                description="School not found.",
+        application_logger.info(
+            "school_document_type_list_started",
+            user_id=str(request.user.id),
+            school_id=str(school.id) if school else None,
+        )
+
+        try:
+
+            if school is None:
+
+                application_logger.warning(
+                    "school_document_type_list_failed",
+                    user_id=str(request.user.id),
+                    reason="school_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="School not found.",
+                )
+
+            queryset = SchoolDocumentType.objects.filter(
+                school=school,
+            ).order_by(
+                "name",
             )
 
-        queryset = SchoolDocumentType.objects.filter(
-            school=school,
-        ).order_by(
-            "name",
-        )
+            data = [
+                {
+                    "id": str(document_type.id),
+                    "name": document_type.name,
+                    "description": document_type.description,
+                    "status": document_type.status,
+                }
+                for document_type in queryset
+            ]
 
-        data = [
-            {
-                "id": str(document_type.id),
-                "name": document_type.name,
-                "description": document_type.description,
-                "status": document_type.status,
-            }
-            for document_type in queryset
-        ]
+            application_logger.info(
+                "school_document_type_list_fetched",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                total_count=len(data),
+            )
 
-        return CustomResponse.successResponse(
-            data=data,
-            description="School document types fetched successfully.",
-        )
+            return CustomResponse.successResponse(
+                data=data,
+                description="School document types fetched successfully.",
+            )
 
+        except Exception as e:
+
+            application_logger.exception(
+                "school_document_type_list_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id) if school else None,
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while fetching document types.",
+            )
 class UpdateSchoolDocumentTypeAPIView(APIView):
 
     permission_classes = [
@@ -4058,75 +4155,152 @@ class UpdateSchoolDocumentTypeAPIView(APIView):
 
         school = request.school
 
-        if school is None:
-            return CustomResponse.errorResponse(
-                description="School not found.",
-            )
-
-        document_type = SchoolDocumentType.objects.filter(
-            id=document_type_id,
-            school=school,
-        ).first()
-
-        if document_type is None:
-            return CustomResponse.errorResponse(
-                description="Document type not found.",
-            )
-
-        name = request.data.get(
-            "name",
-            document_type.name,
+        application_logger.info(
+            "school_document_type_update_started",
+            user_id=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            document_type_id=str(document_type_id),
         )
 
-        description = request.data.get(
-            "description",
-            document_type.description,
-        )
+        try:
 
-        status_value = request.data.get(
-            "status",
-            document_type.status,
-        )
+            if school is None:
 
-        if not name:
-            return CustomResponse.errorResponse(
-                description="Name is required.",
+                application_logger.warning(
+                    "school_document_type_update_failed",
+                    user_id=str(request.user.id),
+                    document_type_id=str(document_type_id),
+                    reason="school_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="School not found.",
+                )
+
+            document_type = SchoolDocumentType.objects.filter(
+                id=document_type_id,
+                school=school,
+            ).first()
+
+            if document_type is None:
+
+                application_logger.warning(
+                    "school_document_type_update_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    document_type_id=str(document_type_id),
+                    reason="document_type_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Document type not found.",
+                )
+
+            name = request.data.get(
+                "name",
+                document_type.name,
             )
 
-        name = name.strip()
-
-        if SchoolDocumentType.objects.filter(
-            school=school,
-            name__iexact=name,
-        ).exclude(
-            id=document_type.id,
-        ).exists():
-
-            return CustomResponse.errorResponse(
-                description="Document type already exists.",
+            description = request.data.get(
+                "description",
+                document_type.description,
             )
 
-        if status_value not in SchoolDocumentType.Status.values:
-
-            return CustomResponse.errorResponse(
-                description="Invalid status.",
+            status_value = request.data.get(
+                "status",
+                document_type.status,
             )
 
-        document_type.name = name
-        document_type.description = description
-        document_type.status = status_value
+            if not name:
 
-        document_type.save()
+                application_logger.warning(
+                    "school_document_type_update_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    document_type_id=str(document_type.id),
+                    reason="name_required",
+                )
 
-        return CustomResponse.successResponse(
-            description="School document type updated successfully.",
-            data={
-                "id": str(document_type.id),
-                "name": document_type.name,
-                "description": document_type.description,
-                "status": document_type.status,
-            },
-        )
+                return CustomResponse.errorResponse(
+                    description="Name is required.",
+                )
+
+            name = name.strip()
+
+            if SchoolDocumentType.objects.filter(
+                school=school,
+                name__iexact=name,
+            ).exclude(
+                id=document_type.id,
+            ).exists():
+
+                application_logger.warning(
+                    "school_document_type_update_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    document_type_id=str(document_type.id),
+                    name=name,
+                    reason="document_type_already_exists",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Document type already exists.",
+                )
+
+            if status_value not in SchoolDocumentType.Status.values:
+
+                application_logger.warning(
+                    "school_document_type_update_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    document_type_id=str(document_type.id),
+                    status=status_value,
+                    reason="invalid_status",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Invalid status.",
+                )
+
+            document_type.name = name
+            document_type.description = description
+            document_type.status = status_value
+
+            document_type.save()
+
+            application_logger.info(
+                "school_document_type_updated",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                document_type_id=str(document_type.id),
+                name=document_type.name,
+                status=document_type.status,
+            )
+
+            return CustomResponse.successResponse(
+                description="School document type updated successfully.",
+                data={
+                    "id": str(document_type.id),
+                    "name": document_type.name,
+                    "description": document_type.description,
+                    "status": document_type.status,
+                },
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "school_document_type_update_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id) if school else None,
+                document_type_id=str(document_type_id),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while updating document type.",
+            )
+
 
 
 class CreateSchoolDocumentAPIView(APIView):
@@ -4142,114 +4316,216 @@ class CreateSchoolDocumentAPIView(APIView):
 
         school = request.school
 
-        if school is None:
-            return CustomResponse.errorResponse(
-                description="School not found.",
-            )
-
-        document_type_id = request.data.get(
-            "document_type_id"
+        application_logger.info(
+            "school_document_create_started",
+            user_id=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            document_type_id=request.data.get("document_type_id"),
+            branch_id=request.data.get("branch_id"),
+            academic_year_id=request.data.get("academic_year_id"),
+            title=request.data.get("title"),
         )
 
-        title = request.data.get("title")
+        try:
 
-        if not document_type_id:
-            return CustomResponse.errorResponse(
-                description="Document type is required.",
-            )
+            if school is None:
 
-        if not title:
-            return CustomResponse.errorResponse(
-                description="Title is required.",
-            )
-
-        document_type = SchoolDocumentType.objects.filter(
-            id=document_type_id,
-            school=school,
-            status=SchoolDocumentType.Status.ACTIVE,
-        ).first()
-
-        if document_type is None:
-            return CustomResponse.errorResponse(
-                description="Document type not found.",
-            )
-
-        branch = None
-
-        branch_id = request.data.get("branch_id")
-
-        if branch_id:
-
-            branch = Branch.objects.filter(
-                id=branch_id,
-                school=school,
-            ).first()
-
-            if branch is None:
-                return CustomResponse.errorResponse(
-                    description="Branch not found.",
+                application_logger.warning(
+                    "school_document_create_failed",
+                    user_id=str(request.user.id),
+                    reason="school_not_found",
                 )
 
-        academic_year = None
-
-        academic_year_id = request.data.get(
-            "academic_year_id"
-        )
-
-        if academic_year_id:
-
-            academic_year = AcademicYear.objects.filter(
-                id=academic_year_id,
-                school=school,
-            ).first()
-
-            if academic_year is None:
                 return CustomResponse.errorResponse(
-                    description="Academic year not found.",
+                    description="School not found.",
                 )
 
-        status_value = request.data.get(
-            "status",
-            SchoolDocument.Status.DRAFT,
-        )
-
-        if status_value not in SchoolDocument.Status.values:
-            return CustomResponse.errorResponse(
-                description="Invalid status.",
+            document_type_id = request.data.get(
+                "document_type_id"
             )
 
-        document = SchoolDocument.objects.create(
-            school=school,
-            branch=branch,
-            academic_year=academic_year,
-            document_type=document_type,
-            title=title.strip(),
-            description=request.data.get("description"),
-            remarks=request.data.get("remarks"),
-            status=status_value,
-        )
+            title = request.data.get("title")
 
-        return CustomResponse.successResponse(
-            description="School document created successfully.",
-            data={
-                "id": str(document.id),
-                "title": document.title,
-                "document_type": {
-                    "id": str(document.document_type.id),
-                    "name": document.document_type.name,
+            if not document_type_id:
+
+                application_logger.warning(
+                    "school_document_create_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    reason="document_type_required",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Document type is required.",
+                )
+
+            if not title:
+
+                application_logger.warning(
+                    "school_document_create_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    reason="title_required",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Title is required.",
+                )
+
+            document_type = SchoolDocumentType.objects.filter(
+                id=document_type_id,
+                school=school,
+                status=SchoolDocumentType.Status.ACTIVE,
+            ).first()
+
+            if document_type is None:
+
+                application_logger.warning(
+                    "school_document_create_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    document_type_id=document_type_id,
+                    reason="document_type_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Document type not found.",
+                )
+
+            branch = None
+
+            branch_id = request.data.get("branch_id")
+
+            if branch_id:
+
+                branch = Branch.objects.filter(
+                    id=branch_id,
+                    school=school,
+                ).first()
+
+                if branch is None:
+
+                    application_logger.warning(
+                        "school_document_create_failed",
+                        user_id=str(request.user.id),
+                        school_id=str(school.id),
+                        branch_id=branch_id,
+                        reason="branch_not_found",
+                    )
+
+                    return CustomResponse.errorResponse(
+                        description="Branch not found.",
+                    )
+
+            academic_year = None
+
+            academic_year_id = request.data.get(
+                "academic_year_id"
+            )
+
+            if academic_year_id:
+
+                academic_year = AcademicYear.objects.filter(
+                    id=academic_year_id,
+                    school=school,
+                ).first()
+
+                if academic_year is None:
+
+                    application_logger.warning(
+                        "school_document_create_failed",
+                        user_id=str(request.user.id),
+                        school_id=str(school.id),
+                        academic_year_id=academic_year_id,
+                        reason="academic_year_not_found",
+                    )
+
+                    return CustomResponse.errorResponse(
+                        description="Academic year not found.",
+                    )
+
+            status_value = request.data.get(
+                "status",
+                SchoolDocument.Status.DRAFT,
+            )
+
+            if status_value not in SchoolDocument.Status.values:
+
+                application_logger.warning(
+                    "school_document_create_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    status=status_value,
+                    reason="invalid_status",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Invalid status.",
+                )
+
+            document = SchoolDocument.objects.create(
+                school=school,
+                branch=branch,
+                academic_year=academic_year,
+                document_type=document_type,
+                title=title.strip(),
+                description=request.data.get("description"),
+                remarks=request.data.get("remarks"),
+                status=status_value,
+            )
+
+            application_logger.info(
+                "school_document_created",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                document_id=str(document.id),
+                document_type_id=str(document_type.id),
+                branch_id=str(branch.id) if branch else None,
+                academic_year_id=(
+                    str(academic_year.id)
+                    if academic_year
+                    else None
+                ),
+                status=document.status,
+            )
+
+            return CustomResponse.successResponse(
+                description="School document created successfully.",
+                data={
+                    "id": str(document.id),
+                    "title": document.title,
+                    "document_type": {
+                        "id": str(document.document_type.id),
+                        "name": document.document_type.name,
+                    },
+                    "branch": {
+                        "id": str(branch.id),
+                        "name": branch.name,
+                    } if branch else None,
+                    "academic_year": {
+                        "id": str(academic_year.id),
+                        "name": academic_year.name,
+                    } if academic_year else None,
+                    "file_url": document.file_url,
+                    "status": document.status,
                 },
-                "branch": {
-                    "id": str(branch.id),
-                    "name": branch.name,
-                } if branch else None,
-                "academic_year": {
-                    "id": str(academic_year.id),
-                    "name": academic_year.name,
-                } if academic_year else None,
-                "file_url": document.file_url,
-                "status": document.status,
-            },
-        )
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "school_document_create_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id) if school else None,
+                document_type_id=request.data.get("document_type_id"),
+                branch_id=request.data.get("branch_id"),
+                academic_year_id=request.data.get("academic_year_id"),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while creating school document.",
+            )
 
 
 class SchoolDocumentListAPIView(APIView):
@@ -4265,99 +4541,132 @@ class SchoolDocumentListAPIView(APIView):
 
         school = request.school
 
-        if school is None:
+        application_logger.info(
+            "school_document_list_started",
+            user_id=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            branch_id=request.query_params.get("branch_id"),
+            document_type_id=request.query_params.get(
+                "document_type_id"
+            ),
+            academic_year_id=request.query_params.get(
+                "academic_year_id"
+            ),
+            status=request.query_params.get("status"),
+        )
+
+        try:
+
+            if school is None:
+
+                application_logger.warning(
+                    "school_document_list_failed",
+                    user_id=str(request.user.id),
+                    reason="school_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="School not found.",
+                )
+
+            queryset = SchoolDocument.objects.select_related(
+                "document_type",
+                "branch",
+                "academic_year",
+            ).filter(
+                school=school,
+            )
+
+            branch_id = request.query_params.get(
+                "branch_id"
+            )
+
+            document_type_id = request.query_params.get(
+                "document_type_id"
+            )
+
+            academic_year_id = request.query_params.get(
+                "academic_year_id"
+            )
+
+            status_value = request.query_params.get(
+                "status"
+            )
+
+            if branch_id:
+                queryset = queryset.filter(
+                    branch_id=branch_id,
+                )
+
+            if document_type_id:
+                queryset = queryset.filter(
+                    document_type_id=document_type_id,
+                )
+
+            if academic_year_id:
+                queryset = queryset.filter(
+                    academic_year_id=academic_year_id,
+                )
+
+            if status_value:
+                queryset = queryset.filter(
+                    status=status_value,
+                )
+
+            queryset = queryset.order_by(
+                "-created_at"
+            )
+
+            data = []
+
+            for document in queryset:
+
+                data.append({
+                    "id": str(document.id),
+                    "title": document.title,
+                    "description": document.description,
+                    "remarks": document.remarks,
+                    "file_url": document.file_url,
+                    "status": document.status,
+                    "published_at": document.published_at,
+                    "document_type": {
+                        "id": str(document.document_type.id),
+                        "name": document.document_type.name,
+                    },
+                    "branch": {
+                        "id": str(document.branch.id),
+                        "name": document.branch.name,
+                    } if document.branch else None,
+                    "academic_year": {
+                        "id": str(document.academic_year.id),
+                        "name": document.academic_year.name,
+                    } if document.academic_year else None,
+                    "created_at": document.created_at,
+                })
+
+            application_logger.info(
+                "school_document_list_fetched",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                returned_count=len(data),
+            )
+
+            return CustomResponse.successResponse(
+                data=data,
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "school_document_list_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id) if school else None,
+                error=str(e),
+            )
+
             return CustomResponse.errorResponse(
-                description="School not found.",
+                description="Something went wrong while fetching school documents.",
             )
-
-        queryset = SchoolDocument.objects.select_related(
-            "document_type",
-            "branch",
-            "academic_year",
-        ).filter(
-            school=school,
-        )
-
-        branch_id = request.query_params.get(
-            "branch_id"
-        )
-
-        document_type_id = request.query_params.get(
-            "document_type_id"
-        )
-
-        academic_year_id = request.query_params.get(
-            "academic_year_id"
-        )
-
-        status_value = request.query_params.get(
-            "status"
-        )
-
-        if branch_id:
-            queryset = queryset.filter(
-                branch_id=branch_id,
-            )
-
-        if document_type_id:
-            queryset = queryset.filter(
-                document_type_id=document_type_id,
-            )
-
-        if academic_year_id:
-            queryset = queryset.filter(
-                academic_year_id=academic_year_id,
-            )
-
-        if status_value:
-            queryset = queryset.filter(
-                status=status_value,
-            )
-
-        queryset = queryset.order_by(
-            "-created_at"
-        )
-
-        data = []
-
-        for document in queryset:
-
-            data.append({
-                "id": str(document.id),
-
-                "title": document.title,
-
-                "description": document.description,
-
-                "remarks": document.remarks,
-
-                "file_url": document.file_url,
-
-                "status": document.status,
-
-                "published_at": document.published_at,
-
-                "document_type": {
-                    "id": str(document.document_type.id),
-                    "name": document.document_type.name,
-                },
-
-                "branch": {
-                    "id": str(document.branch.id),
-                    "name": document.branch.name,
-                } if document.branch else None,
-
-                "academic_year": {
-                    "id": str(document.academic_year.id),
-                    "name": document.academic_year.name,
-                } if document.academic_year else None,
-
-                "created_at": document.created_at,
-            })
-
-        return CustomResponse.successResponse(
-            data=data,
-        )
 
 class UpdateSchoolDocumentAPIView(APIView):
 
@@ -4372,129 +4681,235 @@ class UpdateSchoolDocumentAPIView(APIView):
 
         school = request.school
 
-        if school is None:
-            return CustomResponse.errorResponse(
-                description="School not found.",
-            )
-
-        document = SchoolDocument.objects.filter(
-            id=document_id,
-            school=school,
-        ).first()
-
-        if document is None:
-            return CustomResponse.errorResponse(
-                description="Document not found.",
-            )
-
-        title = request.data.get(
-            "title",
-            document.title,
+        application_logger.info(
+            "school_document_update_started",
+            user_id=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            document_id=str(document_id),
         )
 
-        description = request.data.get(
-            "description",
-            document.description,
-        )
+        try:
 
-        remarks = request.data.get(
-            "remarks",
-            document.remarks,
-        )
+            if school is None:
 
-        status_value = request.data.get(
-            "status",
-            document.status,
-        )
-
-        if not title:
-            return CustomResponse.errorResponse(
-                description="Title is required.",
-            )
-
-        if status_value not in SchoolDocument.Status.values:
-            return CustomResponse.errorResponse(
-                description="Invalid status.",
-            )
-
-        if "document_type_id" in request.data:
-
-            document_type_id = request.data.get(
-                "document_type_id"
-            )
-
-            document_type = SchoolDocumentType.objects.filter(
-                id=document_type_id,
-                school=school,
-                status=SchoolDocumentType.Status.ACTIVE,
-            ).first()
-
-            if document_type is None:
-                return CustomResponse.errorResponse(
-                    description="Document type not found.",
+                application_logger.warning(
+                    "school_document_update_failed",
+                    user_id=str(request.user.id),
+                    document_id=str(document_id),
+                    reason="school_not_found",
                 )
 
-            document.document_type = document_type
+                return CustomResponse.errorResponse(
+                    description="School not found.",
+                )
 
-        if "branch_id" in request.data:
+            document = SchoolDocument.objects.filter(
+                id=document_id,
+                school=school,
+            ).first()
 
-            branch_id = request.data.get("branch_id")
+            if document is None:
 
-            if branch_id in [None, ""]:
+                application_logger.warning(
+                    "school_document_update_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    document_id=str(document_id),
+                    reason="document_not_found",
+                )
 
-                document.branch = None
+                return CustomResponse.errorResponse(
+                    description="Document not found.",
+                )
 
-            else:
-
-                branch = Branch.objects.filter(
-                    id=branch_id,
-                    school=school,
-                ).first()
-
-                if branch is None:
-                    return CustomResponse.errorResponse(
-                        description="Branch not found.",
-                    )
-
-                document.branch = branch
-
-        if "academic_year_id" in request.data:
-
-            academic_year_id = request.data.get(
-                "academic_year_id"
+            title = request.data.get(
+                "title",
+                document.title,
             )
 
-            if academic_year_id in [None, ""]:
+            description = request.data.get(
+                "description",
+                document.description,
+            )
 
-                document.academic_year = None
+            remarks = request.data.get(
+                "remarks",
+                document.remarks,
+            )
 
-            else:
+            status_value = request.data.get(
+                "status",
+                document.status,
+            )
 
-                academic_year = AcademicYear.objects.filter(
-                    id=academic_year_id,
+            if not title:
+
+                application_logger.warning(
+                    "school_document_update_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    document_id=str(document.id),
+                    reason="title_required",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Title is required.",
+                )
+
+            if status_value not in SchoolDocument.Status.values:
+
+                application_logger.warning(
+                    "school_document_update_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    document_id=str(document.id),
+                    status=status_value,
+                    reason="invalid_status",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Invalid status.",
+                )
+
+            if "document_type_id" in request.data:
+
+                document_type_id = request.data.get(
+                    "document_type_id"
+                )
+
+                document_type = SchoolDocumentType.objects.filter(
+                    id=document_type_id,
                     school=school,
+                    status=SchoolDocumentType.Status.ACTIVE,
                 ).first()
 
-                if academic_year is None:
-                    return CustomResponse.errorResponse(
-                        description="Academic year not found.",
+                if document_type is None:
+
+                    application_logger.warning(
+                        "school_document_update_failed",
+                        user_id=str(request.user.id),
+                        school_id=str(school.id),
+                        document_id=str(document.id),
+                        document_type_id=document_type_id,
+                        reason="document_type_not_found",
                     )
 
-                document.academic_year = academic_year
+                    return CustomResponse.errorResponse(
+                        description="Document type not found.",
+                    )
 
-        document.title = title.strip()
-        document.description = description
-        document.remarks = remarks
-        document.status = status_value
+                document.document_type = document_type
 
-        document.save()
+            if "branch_id" in request.data:
 
-        return CustomResponse.successResponse(
-            description="School document updated successfully.",
-            data={
-                "id": str(document.id),
-                "title": document.title,
-                "file_url": document.file_url,
-                "status": document.status,
-            },
-        )
+                branch_id = request.data.get("branch_id")
+
+                if branch_id in [None, ""]:
+
+                    document.branch = None
+
+                else:
+
+                    branch = Branch.objects.filter(
+                        id=branch_id,
+                        school=school,
+                    ).first()
+
+                    if branch is None:
+
+                        application_logger.warning(
+                            "school_document_update_failed",
+                            user_id=str(request.user.id),
+                            school_id=str(school.id),
+                            document_id=str(document.id),
+                            branch_id=branch_id,
+                            reason="branch_not_found",
+                        )
+
+                        return CustomResponse.errorResponse(
+                            description="Branch not found.",
+                        )
+
+                    document.branch = branch
+
+            if "academic_year_id" in request.data:
+
+                academic_year_id = request.data.get(
+                    "academic_year_id"
+                )
+
+                if academic_year_id in [None, ""]:
+
+                    document.academic_year = None
+
+                else:
+
+                    academic_year = AcademicYear.objects.filter(
+                        id=academic_year_id,
+                        school=school,
+                    ).first()
+
+                    if academic_year is None:
+
+                        application_logger.warning(
+                            "school_document_update_failed",
+                            user_id=str(request.user.id),
+                            school_id=str(school.id),
+                            document_id=str(document.id),
+                            academic_year_id=academic_year_id,
+                            reason="academic_year_not_found",
+                        )
+
+                        return CustomResponse.errorResponse(
+                            description="Academic year not found.",
+                        )
+
+                    document.academic_year = academic_year
+
+            document.title = title.strip()
+            document.description = description
+            document.remarks = remarks
+            document.status = status_value
+
+            document.save()
+
+            application_logger.info(
+                "school_document_updated",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                document_id=str(document.id),
+                document_type_id=str(
+                    document.document_type_id
+                ),
+                branch_id=str(
+                    document.branch_id
+                ) if document.branch_id else None,
+                academic_year_id=str(
+                    document.academic_year_id
+                ) if document.academic_year_id else None,
+                status=document.status,
+            )
+
+            return CustomResponse.successResponse(
+                description="School document updated successfully.",
+                data={
+                    "id": str(document.id),
+                    "title": document.title,
+                    "file_url": document.file_url,
+                    "status": document.status,
+                },
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "school_document_update_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id) if school else None,
+                document_id=str(document_id),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while updating school document.",
+            )
