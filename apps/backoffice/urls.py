@@ -29,7 +29,8 @@ from apps.backoffice.views.school import AcademicYearListAPIView, CreateAcademic
     UpdateSectionAPIView, CreateStudentAPIView, BulkUploadStudentAPIView, StudentListAPIView, \
     CreateStudentDocumentAPIView, StudentDocumentListAPIView, UpdateStudentDocumentAPIView, \
     DownloadStudentTemplateAPIView, CreateStaffAPIView, GetStaffAPIView, UpdateStaffAPIView, CreateStaffDocumentAPIView, \
-    StaffDocumentListAPIView, UpdateStaffDocumentAPIView, CreateSubjectAPIView, SubjectListAPIView, SubjectUpdateAPIView
+    StaffDocumentListAPIView, UpdateStaffDocumentAPIView, CreateSubjectAPIView, SubjectListAPIView, \
+    SubjectUpdateAPIView, SchoolAPIView, SchoolUpdateAPIView, BranchAPIView, BranchLISTAPIView, BranchUpdateAPIView
 from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdminRequestOTPAPIView, \
     SuperAdminVerifyOTPAPIView, SchoolLeadUpdateAPIView, OrganizationListAPIView, CreateOrganizationAPIView, \
     UpdateOrganizationAPIView, SchoolListAPIView, CreateSchoolAPIView, UpdateSchoolAPIView, CreateBranchAPIView, \
@@ -115,6 +116,18 @@ urlpatterns = [
     path("configuration/update",UpdateSchoolConfigurationAPIView.as_view(),),
 
     path("client-info/<str:identifier>",GetSchoolClientInfoAPIView.as_view(),),
+
+    path("school",SchoolAPIView.as_view()),
+
+    path("school/<uuid:school_id>",SchoolUpdateAPIView.as_view()),
+
+    path("branch/create",BranchAPIView.as_view()),
+
+    path("branch",BranchLISTAPIView.as_view()),
+
+    path("branch/<uuid:branch_id>",BranchUpdateAPIView.as_view()),
+
+
 
     # ====================================
     # Branch APIs

@@ -42,6 +42,608 @@ from rest_framework.permissions import IsAuthenticated
 from shared.utils.logger import audit_logger, application_logger
 
 
+
+class SchoolAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "school.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        application_logger.info(
+            "school_list_started",
+            user_id=str(request.user.id),
+            school_id=str(school.id) if school else None,
+        )
+
+        if school is None:
+
+            application_logger.warning(
+                "school_list_failed",
+                reason="school_not_found",
+                user_id=str(request.user.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="School not found.",
+            )
+
+        try:
+
+            check_permission(
+                request,
+                "school.view",
+                school.id,
+            )
+
+            school = (
+                School.objects
+                .select_related("organization")
+                .prefetch_related("branches")
+                .filter(id=school.id)
+                .first()
+            )
+
+            if school is None:
+
+                application_logger.warning(
+                    "school_list_failed",
+                    reason="school_not_found",
+                    school_id=str(request.school.id),
+                    user_id=str(request.user.id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="School not found.",
+                )
+
+            branches = []
+
+            for branch in school.branches.all():
+
+                branches.append({
+                    "id": str(branch.id),
+                    "name": branch.name,
+                    "code": branch.code,
+                    "status": branch.status,
+                })
+
+            data = {
+                "id": str(school.id),
+                "name": school.name,
+                "code": school.code,
+                "organization_name": (
+                    school.organization.name
+                    if school.organization
+                    else None
+                ),
+                "address": school.address,
+                "logo": school.logo,
+                "city": school.city,
+                "primary_color": school.primary_color,
+                "secondary_color": school.secondary_color,
+                "board": school.board,
+                "email": school.email,
+                "phone_number": school.phone_number,
+                "principal_name": school.principal_name,
+                "principal_email": school.principal_email,
+                "established_year": school.established_year,
+                "pincode": school.pincode,
+                "website": school.website,
+                "state": school.state,
+                "country": school.country,
+                "is_email_verified": school.is_email_verified,
+                "is_phone_verified": school.is_phone_verified,
+                "status": school.status,
+                "branches": branches,
+            }
+
+            application_logger.info(
+                "school_list_fetched",
+                user_id=str(request.user.id),
+                school_id=str(school.id),
+                branch_count=len(branches),
+            )
+
+            return CustomResponse.successResponse(
+                data=data,
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "school_list_failed",
+                user_id=str(request.user.id),
+                school_id=str(school.id) if school else None,
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Something went wrong while fetching school.",
+            )
+
+class SchoolUpdateAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "school.update"
+
+    def put(self, request):
+
+        school = request.school
+
+        application_logger.info(
+            "school_update_requested",
+            requested_by=str(request.user.id),
+            school_id=str(school.id) if school else None,
+        )
+
+        if school is None:
+
+            application_logger.warning(
+                "school_update_failed",
+                requested_by=str(request.user.id),
+                reason="school_not_found",
+            )
+
+            return CustomResponse.errorResponse(
+                description="School not found.",
+            )
+
+        try:
+
+            check_permission(
+                request,
+                "school.update",
+                school.id,
+            )
+
+            school = School.objects.filter(
+                id=school.id,
+            ).first()
+
+            if school is None:
+
+                application_logger.warning(
+                    "school_update_failed",
+                    requested_by=str(request.user.id),
+                    reason="school_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="School not found.",
+                )
+
+            school.name = request.data.get(
+                "name",
+                school.name,
+            )
+
+            school.address = request.data.get(
+                "address",
+                school.address,
+            )
+
+            school.city = request.data.get(
+                "city",
+                school.city,
+            )
+
+            school.state = request.data.get(
+                "state",
+                school.state,
+            )
+
+            school.status = request.data.get(
+                "status",
+                school.status,
+            )
+
+            school.primary_color = request.data.get(
+                "primary_color",
+                school.primary_color,
+            )
+
+            school.secondary_color = request.data.get(
+                "secondary_color",
+                school.secondary_color,
+            )
+
+            school.principal_name = request.data.get(
+                "principal_name",
+                school.principal_name,
+            )
+
+            school.principal_email = request.data.get(
+                "principal_email",
+                school.principal_email,
+            )
+
+            school.email = request.data.get(
+                "email",
+                school.email,
+            )
+
+            school.logo = request.data.get(
+                "logo",
+                school.logo,
+            )
+
+            school.board = request.data.get(
+                "board",
+                school.board,
+            )
+
+            school.website = request.data.get(
+                "website",
+                school.website,
+            )
+
+            school.country = request.data.get(
+                "country",
+                school.country,
+            )
+
+            school.pincode = request.data.get(
+                "pincode",
+                school.pincode,
+            )
+
+            school.save()
+
+            application_logger.info(
+                "school_updated",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                school_name=school.name,
+            )
+
+            return CustomResponse.successResponse(
+                description="School updated successfully.",
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "school_update_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id) if school else None,
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(e),
+            )
+
+
+class BranchAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "branch.create"
+
+    def post(self, request):
+
+        school = request.school
+
+        application_logger.info(
+            "branch_create_requested",
+            requested_by=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            branch_name=request.data.get("name"),
+        )
+
+        if school is None:
+
+            application_logger.warning(
+                "branch_create_failed",
+                requested_by=str(request.user.id),
+                reason="school_not_found",
+            )
+
+            return CustomResponse.errorResponse(
+                description="School not found.",
+            )
+
+        try:
+
+            check_permission(
+                request,
+                "branch.create",
+                school.id,
+            )
+
+            branch = Branch.objects.create(
+                school=school,
+                name=request.data.get("name"),
+                code=request.data.get("code"),
+                email=request.data.get("email"),
+                phone_number=request.data.get("phone_number"),
+                address=request.data.get("address"),
+                city=request.data.get("city"),
+                state=request.data.get("state"),
+                country=request.data.get("country", "India"),
+                pincode=request.data.get("pincode"),
+                branch_head_name=request.data.get("branch_head_name"),
+                status=request.data.get(
+                    "status",
+                    Branch.Status.ACTIVE,
+                ),
+            )
+
+            application_logger.info(
+                "branch_created",
+                requested_by=str(request.user.id),
+                branch_id=str(branch.id),
+                branch_name=branch.name,
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.successResponse(
+                description="Branch created successfully.",
+                data={
+                    "id": str(branch.id),
+                },
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "branch_create_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                branch_name=request.data.get("name"),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(e),
+            )
+
+class BranchLISTAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "branch.view"
+
+    def get(self, request):
+
+        school = request.school
+        search = request.query_params.get("search")
+
+        application_logger.info(
+            "branch_list_requested",
+            requested_by=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            search=search,
+        )
+
+        if school is None:
+
+            return CustomResponse.errorResponse(
+                description="School not found.",
+            )
+
+        try:
+
+            check_permission(
+                request,
+                "branch.view",
+                school.id,
+            )
+
+            queryset = Branch.objects.filter(
+                school=school,
+            ).select_related(
+                "school",
+            )
+
+            if search:
+
+                queryset = queryset.filter(
+                    name__icontains=search,
+                )
+
+            data = []
+
+            for branch in queryset:
+
+                data.append({
+                    "id": str(branch.id),
+                    "school_id": str(branch.school_id),
+                    "school_name": branch.school.name,
+                    "name": branch.name,
+                    "code": branch.code,
+                    "email": branch.email,
+                    "phone_number": branch.phone_number,
+                    "city": branch.city,
+                    "address": branch.address,
+                    "state": branch.state,
+                    "country": branch.country,
+                    "pincode": branch.pincode,
+                    "branch_head_name": branch.branch_head_name,
+                    "status": branch.status,
+                })
+
+            application_logger.info(
+                "branch_list_fetched",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                search=search,
+                returned_count=len(data),
+            )
+
+            return CustomResponse.successResponse(
+                description="Branch list fetched successfully.",
+                data=data,
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "branch_list_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                search=search,
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(e),
+            )
+
+
+class BranchUpdateAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "branch.update"
+
+    def put(
+        self,
+        request,
+        branch_id,
+    ):
+
+        school = request.school
+
+        application_logger.info(
+            "branch_update_requested",
+            requested_by=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            branch_id=str(branch_id),
+        )
+
+        if school is None:
+
+            return CustomResponse.errorResponse(
+                description="School not found.",
+            )
+
+        try:
+
+            check_permission(
+                request,
+                "branch.update",
+                school.id,
+            )
+
+            branch = Branch.objects.filter(
+                id=branch_id,
+                school=school,
+            ).first()
+
+            if branch is None:
+
+                application_logger.warning(
+                    "branch_update_failed",
+                    requested_by=str(request.user.id),
+                    school_id=str(school.id),
+                    branch_id=str(branch_id),
+                    reason="branch_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Branch not found.",
+                )
+
+            branch.name = request.data.get(
+                "name",
+                branch.name,
+            )
+
+            branch.address = request.data.get(
+                "address",
+                branch.address,
+            )
+
+            branch.city = request.data.get(
+                "city",
+                branch.city,
+            )
+
+            branch.state = request.data.get(
+                "state",
+                branch.state,
+            )
+
+            branch.country = request.data.get(
+                "country",
+                branch.country,
+            )
+
+            branch.pincode = request.data.get(
+                "pincode",
+                branch.pincode,
+            )
+
+            branch.email = request.data.get(
+                "email",
+                branch.email,
+            )
+
+            branch.phone_number = request.data.get(
+                "phone_number",
+                branch.phone_number,
+            )
+
+            branch.branch_head_name = request.data.get(
+                "branch_head_name",
+                branch.branch_head_name,
+            )
+
+            branch.status = request.data.get(
+                "status",
+                branch.status,
+            )
+
+            branch.save()
+
+            application_logger.info(
+                "branch_updated",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                branch_id=str(branch.id),
+                branch_name=branch.name,
+            )
+
+            return CustomResponse.successResponse(
+                description="Branch updated successfully.",
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "branch_update_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                branch_id=str(branch_id),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(e),
+            )
+
+
 class CreateAcademicYearAPIView(APIView):
 
     permission_classes = [IsAuthenticated, HasPermission]

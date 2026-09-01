@@ -879,9 +879,12 @@ class SchoolListAPIView(APIView):
 
     def get(self, request):
 
+        school_id = request.query_params.get("school_id")
+
         application_logger.info(
             "school_list_started",
             user_id=str(request.user.id),
+            school_id=school_id,
         )
 
         try:
@@ -891,6 +894,25 @@ class SchoolListAPIView(APIView):
             ).prefetch_related(
                 "branches",
             )
+
+            if school_id:
+
+                queryset = queryset.filter(
+                    id=school_id,
+                )
+
+                if not queryset.exists():
+
+                    application_logger.warning(
+                        "school_list_failed",
+                        reason="school_not_found",
+                        school_id=school_id,
+                        user_id=str(request.user.id),
+                    )
+
+                    return CustomResponse.errorResponse(
+                        description="School not found.",
+                    )
 
             data = []
 
@@ -940,6 +962,7 @@ class SchoolListAPIView(APIView):
             application_logger.info(
                 "school_list_fetched",
                 user_id=str(request.user.id),
+                school_id=school_id,
                 total_count=len(data),
             )
 
@@ -952,6 +975,7 @@ class SchoolListAPIView(APIView):
             application_logger.exception(
                 "school_list_failed",
                 user_id=str(request.user.id),
+                school_id=school_id,
                 error=str(e),
             )
 
