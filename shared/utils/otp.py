@@ -29,29 +29,10 @@ def generate_school_code():
 
 
 
+
+
+
 def send_otp_to_mobile(otp, mobile):
-    """
-    Send OTP using Full2Ads.
-
-    If Full2Ads fails, automatically send using Lifeboat SMS.
-    """
-
-    # if _send_full2ads_sms(otp, mobile):
-    #
-    #     return True
-
-    auth_logger.warning(
-        "full2ads_sms_failed_fallback_to_lifeboat",
-        mobile=mobile,
-    )
-
-    return _send_lifeboat_sms(
-        otp,
-        mobile,
-    )
-
-
-def _send_lifeboat_sms(otp, mobile):
 
     try:
 
