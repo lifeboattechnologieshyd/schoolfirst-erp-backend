@@ -1268,7 +1268,6 @@ class SchoolDocumentType(AuditModel):
 
     name = models.CharField(
         max_length=100,
-        unique=True,
     )
     school = models.ForeignKey(
         School,
@@ -1292,7 +1291,16 @@ class SchoolDocumentType(AuditModel):
         db_table = "school_document_types"
 
         ordering = [
-            "name",
+            "created_at",
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "school",
+                    "name",
+                ],
+                name="unique_school_document_type_name",
+            ),
         ]
 
         indexes = [
