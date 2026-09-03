@@ -542,7 +542,7 @@ class StudentCompletedPTMAPIView(APIView):
                         "meeting_mode": meeting.meeting_mode,
                         "location": meeting.location,
                         "meeting_link": meeting.meeting_link,
-                        # "response_status": meeting.response_status,
+                        "response_status": meeting.parent_responses.response_status,
                         "attendance_status": (
                             response.attendance_status
                             if response
