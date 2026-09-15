@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 
 from apps.school.models.school import Branch, Staff, Student, AcademicYear
 from apps.transport.models import Vehicle, VehicleDocument, Route, RouteStop, VehicleAssignment, StudentTransport, Stop, \
-    Trip, TripAttendance, LiveLocation, TripEvent
+    Trip, TripAttendance, LiveLocation, TripEvent, LocationHistory
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger, audit_logger
