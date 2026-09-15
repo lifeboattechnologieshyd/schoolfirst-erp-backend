@@ -413,9 +413,9 @@ urlpatterns = [
 
     path("location/history",LocationHistoryAPIView.as_view(),),
 
-    path("trip/start",StartTripAPIView.as_view(),),
+    path("trip/start/<uuid:trip_id>",StartTripAPIView.as_view(),),
 
-    path("trip/end",EndTripAPIView.as_view(),),
+    path("trip/end/<uuid:trip_id>",EndTripAPIView.as_view(),),
 
     path("school/document/type/create",CreateSchoolDocumentTypeAPIView.as_view(),),
 
