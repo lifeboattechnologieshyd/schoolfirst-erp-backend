@@ -7,26 +7,29 @@ from shared.mixins import CustomResponse
 from shared.utils.logger import application_logger
 
 
-
 class StudentBusAPIView(APIView):
-
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-
         user = request.user
         student_id = request.query_params.get("student_id")
 
-        application_logger.info(
-            "student_bus_started",
-            user_id=str(user.id),
-            student_id=str(student_id) if student_id else None,
-        )
-
         try:
+            school = request.school
+
+            application_logger.info(
+                "student_bus_started",
+                user_id=str(user.id),
+                student_id=str(student_id) if student_id else None,
+                school_id=str(school.id) if school else None,
+            )
+
+            if not school:
+                return CustomResponse.errorResponse(
+                    description="School is required."
+                )
 
             if not student_id:
-
                 return CustomResponse.errorResponse(
                     description="student_id is required."
                 )
@@ -40,37 +43,23 @@ class StudentBusAPIView(APIView):
                 )
                 .filter(
                     id=student_id,
+                    school=school,
                     status=Student.Status.ACTIVE,
                 )
                 .first()
             )
 
             if student is None:
-
                 application_logger.warning(
                     "student_bus_failed",
                     user_id=str(user.id),
                     student_id=str(student_id),
+                    school_id=str(school.id),
                     reason="student_not_found",
                 )
 
                 return CustomResponse.errorResponse(
                     description="Student not found."
-                )
-
-            school = student.school
-
-            if school is None:
-
-                application_logger.warning(
-                    "student_bus_failed",
-                    user_id=str(user.id),
-                    student_id=str(student.id),
-                    reason="school_not_found",
-                )
-
-                return CustomResponse.errorResponse(
-                    description="School not found for this student."
                 )
 
             student_transport = (
@@ -90,7 +79,6 @@ class StudentBusAPIView(APIView):
             )
 
             if student_transport is None:
-
                 application_logger.warning(
                     "student_bus_failed",
                     user_id=str(user.id),
@@ -106,7 +94,6 @@ class StudentBusAPIView(APIView):
             vehicle_assignment = student_transport.vehicle_assignment
 
             if vehicle_assignment is None:
-
                 return CustomResponse.errorResponse(
                     description="Vehicle assignment not found."
                 )
@@ -116,7 +103,6 @@ class StudentBusAPIView(APIView):
             attendant = vehicle_assignment.attendant
 
             if vehicle is None:
-
                 return CustomResponse.errorResponse(
                     description="Vehicle not found."
                 )
@@ -154,11 +140,11 @@ class StudentBusAPIView(APIView):
             )
 
         except Exception as e:
-
             application_logger.exception(
                 "student_bus_failed",
                 user_id=str(user.id),
                 student_id=str(student_id) if student_id else None,
+                school_id=str(school.id) if school else None,
                 error=str(e),
             )
 
@@ -168,24 +154,28 @@ class StudentBusAPIView(APIView):
 
 
 class StudentRouteAPIView(APIView):
-
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-
         user = request.user
         student_id = request.query_params.get("student_id")
 
-        application_logger.info(
-            "student_route_started",
-            user_id=str(user.id),
-            student_id=str(student_id) if student_id else None,
-        )
-
         try:
+            school = request.school
+
+            application_logger.info(
+                "student_route_started",
+                user_id=str(user.id),
+                student_id=str(student_id) if student_id else None,
+                school_id=str(school.id) if school else None,
+            )
+
+            if not school:
+                return CustomResponse.errorResponse(
+                    description="School is required."
+                )
 
             if not student_id:
-
                 return CustomResponse.errorResponse(
                     description="student_id is required."
                 )
@@ -199,37 +189,23 @@ class StudentRouteAPIView(APIView):
                 )
                 .filter(
                     id=student_id,
+                    school=school,
                     status=Student.Status.ACTIVE,
                 )
                 .first()
             )
 
             if student is None:
-
                 application_logger.warning(
                     "student_route_failed",
                     user_id=str(user.id),
                     student_id=str(student_id),
+                    school_id=str(school.id),
                     reason="student_not_found",
                 )
 
                 return CustomResponse.errorResponse(
                     description="Student not found."
-                )
-
-            school = student.school
-
-            if school is None:
-
-                application_logger.warning(
-                    "student_route_failed",
-                    user_id=str(user.id),
-                    student_id=str(student.id),
-                    reason="school_not_found",
-                )
-
-                return CustomResponse.errorResponse(
-                    description="School not found for this student."
                 )
 
             student_transport = (
@@ -249,7 +225,6 @@ class StudentRouteAPIView(APIView):
             )
 
             if student_transport is None:
-
                 application_logger.warning(
                     "student_route_failed",
                     user_id=str(user.id),
@@ -265,7 +240,6 @@ class StudentRouteAPIView(APIView):
             vehicle_assignment = student_transport.vehicle_assignment
 
             if vehicle_assignment is None:
-
                 return CustomResponse.errorResponse(
                     description="Vehicle assignment not found."
                 )
@@ -273,7 +247,6 @@ class StudentRouteAPIView(APIView):
             route = vehicle_assignment.route
 
             if route is None:
-
                 application_logger.warning(
                     "student_route_failed",
                     user_id=str(user.id),
@@ -312,63 +285,34 @@ class StudentRouteAPIView(APIView):
                         "shift": route.shift,
                         "status": route.status,
                     },
-
                     "pickup_stop": {
-                        "id": str(pickup_stop.id)
-                        if pickup_stop else None,
-
-                        "stop_name": pickup_stop.stop_name
-                        if pickup_stop else None,
-
-                        "stop_code": pickup_stop.stop_code
-                        if pickup_stop else None,
-
-                        "landmark": pickup_stop.landmark
-                        if pickup_stop else None,
-
-                        "address": pickup_stop.address
-                        if pickup_stop else None,
-
-                        "latitude": pickup_stop.latitude
-                        if pickup_stop else None,
-
-                        "longitude": pickup_stop.longitude
-                        if pickup_stop else None,
+                        "id": str(pickup_stop.id) if pickup_stop else None,
+                        "stop_name": pickup_stop.stop_name if pickup_stop else None,
+                        "stop_code": pickup_stop.stop_code if pickup_stop else None,
+                        "landmark": pickup_stop.landmark if pickup_stop else None,
+                        "address": pickup_stop.address if pickup_stop else None,
+                        "latitude": pickup_stop.latitude if pickup_stop else None,
+                        "longitude": pickup_stop.longitude if pickup_stop else None,
                     },
-
                     "drop_stop": {
-                        "id": str(drop_stop.id)
-                        if drop_stop else None,
-
-                        "stop_name": drop_stop.stop_name
-                        if drop_stop else None,
-
-                        "stop_code": drop_stop.stop_code
-                        if drop_stop else None,
-
-                        "landmark": drop_stop.landmark
-                        if drop_stop else None,
-
-                        "address": drop_stop.address
-                        if drop_stop else None,
-
-                        "latitude": drop_stop.latitude
-                        if drop_stop else None,
-
-                        "longitude": drop_stop.longitude
-                        if drop_stop else None,
+                        "id": str(drop_stop.id) if drop_stop else None,
+                        "stop_name": drop_stop.stop_name if drop_stop else None,
+                        "stop_code": drop_stop.stop_code if drop_stop else None,
+                        "landmark": drop_stop.landmark if drop_stop else None,
+                        "address": drop_stop.address if drop_stop else None,
+                        "latitude": drop_stop.latitude if drop_stop else None,
+                        "longitude": drop_stop.longitude if drop_stop else None,
                     },
-
                     "trip_type": student_transport.trip_type,
                 },
             )
 
         except Exception as e:
-
             application_logger.exception(
                 "student_route_failed",
                 user_id=str(user.id),
                 student_id=str(student_id) if student_id else None,
+                school_id=str(school.id) if school else None,
                 error=str(e),
             )
 
@@ -377,25 +321,30 @@ class StudentRouteAPIView(APIView):
             )
 
 
-class StudentLiveLocationAPIView(APIView):
 
+class StudentLiveLocationAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-
         user = request.user
         student_id = request.query_params.get("student_id")
 
-        application_logger.info(
-            "student_live_location_started",
-            user_id=str(user.id),
-            student_id=str(student_id) if student_id else None,
-        )
-
         try:
+            school = request.school
+
+            application_logger.info(
+                "student_live_location_started",
+                user_id=str(user.id),
+                student_id=str(student_id) if student_id else None,
+                school_id=str(school.id) if school else None,
+            )
+
+            if not school:
+                return CustomResponse.errorResponse(
+                    description="School is required."
+                )
 
             if not student_id:
-
                 return CustomResponse.errorResponse(
                     description="student_id is required."
                 )
@@ -408,37 +357,23 @@ class StudentLiveLocationAPIView(APIView):
                 )
                 .filter(
                     id=student_id,
+                    school=school,
                     status=Student.Status.ACTIVE,
                 )
                 .first()
             )
 
             if student is None:
-
                 application_logger.warning(
                     "student_live_location_failed",
                     user_id=str(user.id),
                     student_id=str(student_id),
+                    school_id=str(school.id),
                     reason="student_not_found",
                 )
 
                 return CustomResponse.errorResponse(
                     description="Student not found."
-                )
-
-            school = student.school
-
-            if school is None:
-
-                application_logger.warning(
-                    "student_live_location_failed",
-                    user_id=str(user.id),
-                    student_id=str(student.id),
-                    reason="school_not_found",
-                )
-
-                return CustomResponse.errorResponse(
-                    description="School not found for this student."
                 )
 
             student_transport = (
@@ -456,7 +391,6 @@ class StudentLiveLocationAPIView(APIView):
             )
 
             if student_transport is None:
-
                 application_logger.warning(
                     "student_live_location_failed",
                     user_id=str(user.id),
@@ -472,7 +406,6 @@ class StudentLiveLocationAPIView(APIView):
             vehicle_assignment = student_transport.vehicle_assignment
 
             if vehicle_assignment is None:
-
                 return CustomResponse.errorResponse(
                     description="Vehicle assignment not found."
                 )
@@ -480,7 +413,6 @@ class StudentLiveLocationAPIView(APIView):
             vehicle = vehicle_assignment.vehicle
 
             if vehicle is None:
-
                 return CustomResponse.errorResponse(
                     description="Vehicle not found."
                 )
@@ -498,7 +430,6 @@ class StudentLiveLocationAPIView(APIView):
             )
 
             if live_location is None:
-
                 application_logger.warning(
                     "student_live_location_failed",
                     user_id=str(user.id),
@@ -557,11 +488,11 @@ class StudentLiveLocationAPIView(APIView):
             )
 
         except Exception as e:
-
             application_logger.exception(
                 "student_live_location_failed",
                 user_id=str(user.id),
                 student_id=str(student_id) if student_id else None,
+                school_id=str(school.id) if school else None,
                 error=str(e),
             )
 
