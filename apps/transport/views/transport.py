@@ -129,12 +129,12 @@ class StudentBusAPIView(APIView):
                     "driver": {
                         "id": str(driver.id) if driver else None,
                         "name": driver.name if driver else None,
-                        "phone": driver.phone if driver else None,
+                        "mobile": driver.mobile if driver else None,
                     },
                     "attendant": {
                         "id": str(attendant.id) if attendant else None,
                         "name": attendant.name if attendant else None,
-                        "phone": attendant.phone if attendant else None,
+                        "phone": attendant.mobile if attendant else None,
                     },
                 },
             )
