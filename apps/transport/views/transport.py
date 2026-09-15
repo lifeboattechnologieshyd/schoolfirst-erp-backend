@@ -2,7 +2,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.school.models.school import Student
-from apps.transport.models import StudentTransport
+from apps.transport.models import StudentTransport, LiveLocation
 from shared.mixins import CustomResponse
 from shared.utils.logger import application_logger
 
@@ -367,6 +367,199 @@ class StudentRouteAPIView(APIView):
 
             application_logger.exception(
                 "student_route_failed",
+                user_id=str(user.id),
+                student_id=str(student_id) if student_id else None,
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Internal server error.",
+            )
+
+
+class StudentLiveLocationAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        user = request.user
+        student_id = request.query_params.get("student_id")
+
+        application_logger.info(
+            "student_live_location_started",
+            user_id=str(user.id),
+            student_id=str(student_id) if student_id else None,
+        )
+
+        try:
+
+            if not student_id:
+
+                return CustomResponse.errorResponse(
+                    description="student_id is required."
+                )
+
+            student = (
+                Student.objects
+                .select_related(
+                    "school",
+                    "branch",
+                )
+                .filter(
+                    id=student_id,
+                    status=Student.Status.ACTIVE,
+                )
+                .first()
+            )
+
+            if student is None:
+
+                application_logger.warning(
+                    "student_live_location_failed",
+                    user_id=str(user.id),
+                    student_id=str(student_id),
+                    reason="student_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Student not found."
+                )
+
+            school = student.school
+
+            if school is None:
+
+                application_logger.warning(
+                    "student_live_location_failed",
+                    user_id=str(user.id),
+                    student_id=str(student.id),
+                    reason="school_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="School not found for this student."
+                )
+
+            student_transport = (
+                StudentTransport.objects
+                .select_related(
+                    "vehicle_assignment",
+                    "vehicle_assignment__vehicle",
+                )
+                .filter(
+                    student=student,
+                    school=school,
+                    status=StudentTransport.Status.ACTIVE,
+                )
+                .first()
+            )
+
+            if student_transport is None:
+
+                application_logger.warning(
+                    "student_live_location_failed",
+                    user_id=str(user.id),
+                    student_id=str(student.id),
+                    school_id=str(school.id),
+                    reason="transport_assignment_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Transport assignment not found for this student."
+                )
+
+            vehicle_assignment = student_transport.vehicle_assignment
+
+            if vehicle_assignment is None:
+
+                return CustomResponse.errorResponse(
+                    description="Vehicle assignment not found."
+                )
+
+            vehicle = vehicle_assignment.vehicle
+
+            if vehicle is None:
+
+                return CustomResponse.errorResponse(
+                    description="Vehicle not found."
+                )
+
+            # Get the latest live location for the assigned vehicle
+            live_location = (
+                LiveLocation.objects
+                .select_related("trip")
+                .filter(
+                    school=school,
+                    vehicle=vehicle,
+                )
+                .order_by("-device_timestamp")
+                .first()
+            )
+
+            if live_location is None:
+
+                application_logger.warning(
+                    "student_live_location_failed",
+                    user_id=str(user.id),
+                    student_id=str(student.id),
+                    school_id=str(school.id),
+                    vehicle_id=str(vehicle.id),
+                    reason="live_location_not_found",
+                )
+
+                return CustomResponse.successResponse(
+                    description="Live location not available.",
+                    data={
+                        "vehicle": {
+                            "id": str(vehicle.id),
+                            "vehicle_number": vehicle.vehicle_number,
+                        },
+                        "is_available": False,
+                        "location": None,
+                    },
+                )
+
+            trip = live_location.trip
+
+            application_logger.info(
+                "student_live_location_retrieved",
+                user_id=str(user.id),
+                student_id=str(student.id),
+                school_id=str(school.id),
+                vehicle_id=str(vehicle.id),
+                trip_id=str(trip.id) if trip else None,
+                live_location_id=str(live_location.id),
+            )
+
+            return CustomResponse.successResponse(
+                description="Live location retrieved successfully.",
+                data={
+                    "vehicle": {
+                        "id": str(vehicle.id),
+                        "vehicle_number": vehicle.vehicle_number,
+                    },
+                    "trip": {
+                        "id": str(trip.id) if trip else None,
+                        "status": trip.status if trip else None,
+                    },
+                    "is_available": True,
+                    "location": {
+                        "latitude": live_location.latitude,
+                        "longitude": live_location.longitude,
+                        "speed": live_location.speed,
+                        "heading": live_location.heading,
+                        "altitude": live_location.altitude,
+                        "accuracy": live_location.accuracy,
+                        "device_timestamp": live_location.device_timestamp,
+                    },
+                },
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "student_live_location_failed",
                 user_id=str(user.id),
                 student_id=str(student_id) if student_id else None,
                 error=str(e),
