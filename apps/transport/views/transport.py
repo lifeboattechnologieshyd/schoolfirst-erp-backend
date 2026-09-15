@@ -1,0 +1,377 @@
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+
+from apps.school.models.school import Student
+from apps.transport.models import StudentTransport
+from shared.mixins import CustomResponse
+from shared.utils.logger import application_logger
+
+
+
+class StudentBusAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        user = request.user
+        student_id = request.query_params.get("student_id")
+
+        application_logger.info(
+            "student_bus_started",
+            user_id=str(user.id),
+            student_id=str(student_id) if student_id else None,
+        )
+
+        try:
+
+            if not student_id:
+
+                return CustomResponse.errorResponse(
+                    description="student_id is required."
+                )
+
+            student = (
+                Student.objects
+                .select_related(
+                    "school",
+                    "branch",
+                    "academic_year",
+                )
+                .filter(
+                    id=student_id,
+                    status=Student.Status.ACTIVE,
+                )
+                .first()
+            )
+
+            if student is None:
+
+                application_logger.warning(
+                    "student_bus_failed",
+                    user_id=str(user.id),
+                    student_id=str(student_id),
+                    reason="student_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Student not found."
+                )
+
+            school = student.school
+
+            if school is None:
+
+                application_logger.warning(
+                    "student_bus_failed",
+                    user_id=str(user.id),
+                    student_id=str(student.id),
+                    reason="school_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="School not found for this student."
+                )
+
+            student_transport = (
+                StudentTransport.objects
+                .select_related(
+                    "vehicle_assignment",
+                    "vehicle_assignment__vehicle",
+                    "vehicle_assignment__driver",
+                    "vehicle_assignment__attendant",
+                )
+                .filter(
+                    student=student,
+                    school=school,
+                    status=StudentTransport.Status.ACTIVE,
+                )
+                .first()
+            )
+
+            if student_transport is None:
+
+                application_logger.warning(
+                    "student_bus_failed",
+                    user_id=str(user.id),
+                    student_id=str(student.id),
+                    school_id=str(school.id),
+                    reason="transport_assignment_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Transport assignment not found for this student."
+                )
+
+            vehicle_assignment = student_transport.vehicle_assignment
+
+            if vehicle_assignment is None:
+
+                return CustomResponse.errorResponse(
+                    description="Vehicle assignment not found."
+                )
+
+            vehicle = vehicle_assignment.vehicle
+            driver = vehicle_assignment.driver
+            attendant = vehicle_assignment.attendant
+
+            if vehicle is None:
+
+                return CustomResponse.errorResponse(
+                    description="Vehicle not found."
+                )
+
+            application_logger.info(
+                "student_bus_retrieved",
+                user_id=str(user.id),
+                student_id=str(student.id),
+                school_id=str(school.id),
+                vehicle_id=str(vehicle.id),
+                vehicle_assignment_id=str(vehicle_assignment.id),
+            )
+
+            return CustomResponse.successResponse(
+                description="Student bus details retrieved successfully.",
+                data={
+                    "bus": {
+                        "id": str(vehicle.id),
+                        "vehicle_number": vehicle.vehicle_number,
+                        "vehicle_type": vehicle.vehicle_type,
+                        "capacity": vehicle.capacity,
+                        "status": vehicle.status,
+                    },
+                    "driver": {
+                        "id": str(driver.id) if driver else None,
+                        "name": driver.name if driver else None,
+                        "phone": driver.phone if driver else None,
+                    },
+                    "attendant": {
+                        "id": str(attendant.id) if attendant else None,
+                        "name": attendant.name if attendant else None,
+                        "phone": attendant.phone if attendant else None,
+                    },
+                },
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "student_bus_failed",
+                user_id=str(user.id),
+                student_id=str(student_id) if student_id else None,
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Internal server error.",
+            )
+
+
+class StudentRouteAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        user = request.user
+        student_id = request.query_params.get("student_id")
+
+        application_logger.info(
+            "student_route_started",
+            user_id=str(user.id),
+            student_id=str(student_id) if student_id else None,
+        )
+
+        try:
+
+            if not student_id:
+
+                return CustomResponse.errorResponse(
+                    description="student_id is required."
+                )
+
+            student = (
+                Student.objects
+                .select_related(
+                    "school",
+                    "branch",
+                    "academic_year",
+                )
+                .filter(
+                    id=student_id,
+                    status=Student.Status.ACTIVE,
+                )
+                .first()
+            )
+
+            if student is None:
+
+                application_logger.warning(
+                    "student_route_failed",
+                    user_id=str(user.id),
+                    student_id=str(student_id),
+                    reason="student_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Student not found."
+                )
+
+            school = student.school
+
+            if school is None:
+
+                application_logger.warning(
+                    "student_route_failed",
+                    user_id=str(user.id),
+                    student_id=str(student.id),
+                    reason="school_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="School not found for this student."
+                )
+
+            student_transport = (
+                StudentTransport.objects
+                .select_related(
+                    "vehicle_assignment",
+                    "vehicle_assignment__route",
+                    "pickup_stop",
+                    "drop_stop",
+                )
+                .filter(
+                    student=student,
+                    school=school,
+                    status=StudentTransport.Status.ACTIVE,
+                )
+                .first()
+            )
+
+            if student_transport is None:
+
+                application_logger.warning(
+                    "student_route_failed",
+                    user_id=str(user.id),
+                    student_id=str(student.id),
+                    school_id=str(school.id),
+                    reason="transport_assignment_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Transport assignment not found for this student."
+                )
+
+            vehicle_assignment = student_transport.vehicle_assignment
+
+            if vehicle_assignment is None:
+
+                return CustomResponse.errorResponse(
+                    description="Vehicle assignment not found."
+                )
+
+            route = vehicle_assignment.route
+
+            if route is None:
+
+                application_logger.warning(
+                    "student_route_failed",
+                    user_id=str(user.id),
+                    student_id=str(student.id),
+                    school_id=str(school.id),
+                    reason="route_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Route not found."
+                )
+
+            pickup_stop = student_transport.pickup_stop
+            drop_stop = student_transport.drop_stop
+
+            application_logger.info(
+                "student_route_retrieved",
+                user_id=str(user.id),
+                student_id=str(student.id),
+                school_id=str(school.id),
+                route_id=str(route.id),
+                student_transport_id=str(student_transport.id),
+            )
+
+            return CustomResponse.successResponse(
+                description="Student route details retrieved successfully.",
+                data={
+                    "route": {
+                        "id": str(route.id),
+                        "route_code": route.route_code,
+                        "route_name": route.route_name,
+                        "source": route.source,
+                        "destination": route.destination,
+                        "total_distance": route.total_distance,
+                        "estimated_duration": route.estimated_duration,
+                        "shift": route.shift,
+                        "status": route.status,
+                    },
+
+                    "pickup_stop": {
+                        "id": str(pickup_stop.id)
+                        if pickup_stop else None,
+
+                        "stop_name": pickup_stop.stop_name
+                        if pickup_stop else None,
+
+                        "stop_code": pickup_stop.stop_code
+                        if pickup_stop else None,
+
+                        "landmark": pickup_stop.landmark
+                        if pickup_stop else None,
+
+                        "address": pickup_stop.address
+                        if pickup_stop else None,
+
+                        "latitude": pickup_stop.latitude
+                        if pickup_stop else None,
+
+                        "longitude": pickup_stop.longitude
+                        if pickup_stop else None,
+                    },
+
+                    "drop_stop": {
+                        "id": str(drop_stop.id)
+                        if drop_stop else None,
+
+                        "stop_name": drop_stop.stop_name
+                        if drop_stop else None,
+
+                        "stop_code": drop_stop.stop_code
+                        if drop_stop else None,
+
+                        "landmark": drop_stop.landmark
+                        if drop_stop else None,
+
+                        "address": drop_stop.address
+                        if drop_stop else None,
+
+                        "latitude": drop_stop.latitude
+                        if drop_stop else None,
+
+                        "longitude": drop_stop.longitude
+                        if drop_stop else None,
+                    },
+
+                    "trip_type": student_transport.trip_type,
+                },
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "student_route_failed",
+                user_id=str(user.id),
+                student_id=str(student_id) if student_id else None,
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Internal server error.",
+            )
