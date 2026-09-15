@@ -131,12 +131,14 @@ class StudentBusAPIView(APIView):
                         "name": driver.name if driver else None,
                         "mobile": driver.mobile if driver else None,
                         "experience": driver.experience if driver else None,
+                        "profile_image": driver.profile_image if driver else None,
                     },
                     "attendant": {
                         "id": str(attendant.id) if attendant else None,
                         "name": attendant.name if attendant else None,
                         "mobile": attendant.mobile if attendant else None,
                         "experience": attendant.experience if attendant else None,
+                        "profile_image": attendant.profile_image if attendant else None,
                     },
                 },
             )
@@ -422,10 +424,14 @@ class StudentLiveLocationAPIView(APIView):
             # Get the latest live location for the assigned vehicle
             live_location = (
                 LiveLocation.objects
-                .select_related("trip")
+                .select_related(
+                    "trip",
+                    "trip__vehicle_assignment",
+                    "trip__vehicle_assignment__vehicle",
+                )
                 .filter(
                     school=school,
-                    vehicle=vehicle,
+                    trip__vehicle_assignment__vehicle=vehicle,
                 )
                 .order_by("-device_timestamp")
                 .first()
