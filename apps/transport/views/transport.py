@@ -2,7 +2,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.school.models.school import Student
-from apps.transport.models import StudentTransport, LiveLocation
+from apps.transport.models import StudentTransport, LiveLocation, RouteStop
 from shared.mixins import CustomResponse
 from shared.utils.logger import application_logger
 
@@ -156,7 +156,6 @@ class StudentBusAPIView(APIView):
                 description="Internal server error.",
             )
 
-
 class StudentRouteAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -266,6 +265,39 @@ class StudentRouteAPIView(APIView):
             pickup_stop = student_transport.pickup_stop
             drop_stop = student_transport.drop_stop
 
+            # Get all stops belonging to this route
+            route_stops = (
+                RouteStop.objects
+                .select_related("stop")
+                .filter(
+                    route=route,
+                )
+                .order_by("stop_order")
+            )
+
+            route_stops_data = [
+                {
+                    "id": str(route_stop.stop.id),
+                    "stop_name": route_stop.stop.stop_name,
+                    "stop_code": route_stop.stop.stop_code,
+                    "stop_type": route_stop.stop.stop_type,
+                    "stop_order": route_stop.stop_order,
+                    "landmark": route_stop.stop.landmark,
+                    "address": route_stop.stop.address,
+                    "latitude": route_stop.stop.latitude,
+                    "longitude": route_stop.stop.longitude,
+                    "pickup_time": route_stop.pickup_time,
+                    "drop_time": route_stop.drop_time,
+                    "distance_from_previous_stop": (
+                        route_stop.distance_from_previous_stop
+                    ),
+                    "estimated_travel_time": (
+                        route_stop.estimated_travel_time
+                    ),
+                }
+                for route_stop in route_stops
+            ]
+
             application_logger.info(
                 "student_route_retrieved",
                 user_id=str(user.id),
@@ -273,6 +305,7 @@ class StudentRouteAPIView(APIView):
                 school_id=str(school.id),
                 route_id=str(route.id),
                 student_transport_id=str(student_transport.id),
+                route_stop_count=len(route_stops_data),
             )
 
             return CustomResponse.successResponse(
@@ -289,26 +322,47 @@ class StudentRouteAPIView(APIView):
                         "shift": route.shift,
                         "status": route.status,
                     },
+
                     "pickup_stop": {
-                        "id": str(pickup_stop.id) if pickup_stop else None,
-                        "stop_name": pickup_stop.stop_name if pickup_stop else None,
-                        "stop_code": pickup_stop.stop_code if pickup_stop else None,
-                        "landmark": pickup_stop.landmark if pickup_stop else None,
-                        "address": pickup_stop.address if pickup_stop else None,
-                        "latitude": pickup_stop.latitude if pickup_stop else None,
-                        "longitude": pickup_stop.longitude if pickup_stop else None,
-                        "pickup_time": pickup_stop.pickup_time if pickup_stop else None,
+                        "id": str(pickup_stop.id)
+                        if pickup_stop else None,
+                        "stop_name": pickup_stop.stop_name
+                        if pickup_stop else None,
+                        "stop_code": pickup_stop.stop_code
+                        if pickup_stop else None,
+                        "landmark": pickup_stop.landmark
+                        if pickup_stop else None,
+                        "address": pickup_stop.address
+                        if pickup_stop else None,
+                        "latitude": pickup_stop.latitude
+                        if pickup_stop else None,
+                        "longitude": pickup_stop.longitude
+                        if pickup_stop else None,
+                        "pickup_time": pickup_stop.pickup_time
+                        if pickup_stop else None,
                     },
+
                     "drop_stop": {
-                        "id": str(drop_stop.id) if drop_stop else None,
-                        "stop_name": drop_stop.stop_name if drop_stop else None,
-                        "stop_code": drop_stop.stop_code if drop_stop else None,
-                        "landmark": drop_stop.landmark if drop_stop else None,
-                        "address": drop_stop.address if drop_stop else None,
-                        "latitude": drop_stop.latitude if drop_stop else None,
-                        "longitude": drop_stop.longitude if drop_stop else None,
-                        "drop_time": drop_stop.drop_time if drop_stop else None,
+                        "id": str(drop_stop.id)
+                        if drop_stop else None,
+                        "stop_name": drop_stop.stop_name
+                        if drop_stop else None,
+                        "stop_code": drop_stop.stop_code
+                        if drop_stop else None,
+                        "landmark": drop_stop.landmark
+                        if drop_stop else None,
+                        "address": drop_stop.address
+                        if drop_stop else None,
+                        "latitude": drop_stop.latitude
+                        if drop_stop else None,
+                        "longitude": drop_stop.longitude
+                        if drop_stop else None,
+                        "drop_time": drop_stop.drop_time
+                        if drop_stop else None,
                     },
+
+                    "route_stops": route_stops_data,
+
                     "trip_type": student_transport.trip_type,
                 },
             )
