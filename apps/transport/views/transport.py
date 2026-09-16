@@ -18,7 +18,7 @@ class StudentBusAPIView(APIView):
             school = request.school
 
             application_logger.info(
-                "student_bus_started",
+                "student_transport_details_started",
                 user_id=str(user.id),
                 student_id=str(student_id) if student_id else None,
                 school_id=str(school.id) if school else None,
@@ -34,6 +34,7 @@ class StudentBusAPIView(APIView):
                     description="student_id is required."
                 )
 
+            # Get student
             student = (
                 Student.objects
                 .select_related(
@@ -51,7 +52,7 @@ class StudentBusAPIView(APIView):
 
             if student is None:
                 application_logger.warning(
-                    "student_bus_failed",
+                    "student_transport_details_failed",
                     user_id=str(user.id),
                     student_id=str(student_id),
                     school_id=str(school.id),
@@ -62,6 +63,7 @@ class StudentBusAPIView(APIView):
                     description="Student not found."
                 )
 
+            # Get complete transport assignment
             student_transport = (
                 StudentTransport.objects
                 .select_related(
@@ -69,6 +71,9 @@ class StudentBusAPIView(APIView):
                     "vehicle_assignment__vehicle",
                     "vehicle_assignment__driver",
                     "vehicle_assignment__attendant",
+                    "vehicle_assignment__route",
+                    "pickup_stop",
+                    "drop_stop",
                 )
                 .filter(
                     student=student,
@@ -80,7 +85,7 @@ class StudentBusAPIView(APIView):
 
             if student_transport is None:
                 application_logger.warning(
-                    "student_bus_failed",
+                    "student_transport_details_failed",
                     user_id=str(user.id),
                     student_id=str(student.id),
                     school_id=str(school.id),
@@ -101,24 +106,81 @@ class StudentBusAPIView(APIView):
             vehicle = vehicle_assignment.vehicle
             driver = vehicle_assignment.driver
             attendant = vehicle_assignment.attendant
+            route = vehicle_assignment.route
 
             if vehicle is None:
                 return CustomResponse.errorResponse(
                     description="Vehicle not found."
                 )
 
+            if route is None:
+                application_logger.warning(
+                    "student_transport_details_failed",
+                    user_id=str(user.id),
+                    student_id=str(student.id),
+                    school_id=str(school.id),
+                    reason="route_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Route not found."
+                )
+
+            # Get all stops belonging to the route
+            route_stops = (
+                RouteStop.objects
+                .select_related("stop")
+                .filter(
+                    route=route,
+                )
+                .order_by("stop_order")
+            )
+
+            route_stops_data = [
+                {
+                    "id": str(route_stop.stop.id),
+                    "stop_name": route_stop.stop.stop_name,
+                    "stop_code": route_stop.stop.stop_code,
+                    "stop_type": route_stop.stop.stop_type,
+                    "stop_order": route_stop.stop_order,
+                    "landmark": route_stop.stop.landmark,
+                    "address": route_stop.stop.address,
+                    "latitude": route_stop.stop.latitude,
+                    "longitude": route_stop.stop.longitude,
+                    "pickup_time": route_stop.pickup_time,
+                    "drop_time": route_stop.drop_time,
+                    "distance_from_previous_stop": (
+                        route_stop.distance_from_previous_stop
+                    ),
+                    "estimated_travel_time": (
+                        route_stop.estimated_travel_time
+                    ),
+                }
+                for route_stop in route_stops
+            ]
+
+            pickup_stop = student_transport.pickup_stop
+            drop_stop = student_transport.drop_stop
+
             application_logger.info(
-                "student_bus_retrieved",
+                "student_transport_details_retrieved",
                 user_id=str(user.id),
                 student_id=str(student.id),
                 school_id=str(school.id),
                 vehicle_id=str(vehicle.id),
                 vehicle_assignment_id=str(vehicle_assignment.id),
+                route_id=str(route.id),
+                route_stop_count=len(route_stops_data),
             )
 
             return CustomResponse.successResponse(
-                description="Student bus details retrieved successfully.",
+                description="Student transport details retrieved successfully.",
                 data={
+                    "student": {
+                        "id": str(student.id),
+                        "name": student.name,
+                    },
+
                     "bus": {
                         "id": str(vehicle.id),
                         "vehicle_number": vehicle.vehicle_number,
@@ -126,29 +188,153 @@ class StudentBusAPIView(APIView):
                         "capacity": vehicle.capacity,
                         "status": vehicle.status,
                     },
+
                     "driver": {
                         "id": str(driver.id) if driver else None,
                         "name": driver.name if driver else None,
                         "mobile": driver.mobile if driver else None,
                         "experience": driver.experience if driver else None,
-                        "profile_image": driver.profile_image if driver else None,
+                        "profile_image": (
+                            driver.profile_image
+                            if driver
+                            else None
+                        ),
                     },
+
                     "attendant": {
                         "id": str(attendant.id) if attendant else None,
                         "name": attendant.name if attendant else None,
                         "mobile": attendant.mobile if attendant else None,
-                        "experience": attendant.experience if attendant else None,
-                        "profile_image": attendant.profile_image if attendant else None,
+                        "experience": (
+                            attendant.experience
+                            if attendant
+                            else None
+                        ),
+                        "profile_image": (
+                            attendant.profile_image
+                            if attendant
+                            else None
+                        ),
                     },
+
+                    "route": {
+                        "id": str(route.id),
+                        "route_code": route.route_code,
+                        "route_name": route.route_name,
+                        "source": route.source,
+                        "destination": route.destination,
+                        "total_distance": route.total_distance,
+                        "estimated_duration": route.estimated_duration,
+                        "shift": route.shift,
+                        "status": route.status,
+                    },
+
+                    "pickup_stop": {
+                        "id": (
+                            str(pickup_stop.id)
+                            if pickup_stop
+                            else None
+                        ),
+                        "stop_name": (
+                            pickup_stop.stop_name
+                            if pickup_stop
+                            else None
+                        ),
+                        "stop_code": (
+                            pickup_stop.stop_code
+                            if pickup_stop
+                            else None
+                        ),
+                        "landmark": (
+                            pickup_stop.landmark
+                            if pickup_stop
+                            else None
+                        ),
+                        "address": (
+                            pickup_stop.address
+                            if pickup_stop
+                            else None
+                        ),
+                        "latitude": (
+                            pickup_stop.latitude
+                            if pickup_stop
+                            else None
+                        ),
+                        "longitude": (
+                            pickup_stop.longitude
+                            if pickup_stop
+                            else None
+                        ),
+                        "pickup_time": (
+                            pickup_stop.pickup_time
+                            if pickup_stop
+                            else None
+                        ),
+                    },
+
+                    "drop_stop": {
+                        "id": (
+                            str(drop_stop.id)
+                            if drop_stop
+                            else None
+                        ),
+                        "stop_name": (
+                            drop_stop.stop_name
+                            if drop_stop
+                            else None
+                        ),
+                        "stop_code": (
+                            drop_stop.stop_code
+                            if drop_stop
+                            else None
+                        ),
+                        "landmark": (
+                            drop_stop.landmark
+                            if drop_stop
+                            else None
+                        ),
+                        "address": (
+                            drop_stop.address
+                            if drop_stop
+                            else None
+                        ),
+                        "latitude": (
+                            drop_stop.latitude
+                            if drop_stop
+                            else None
+                        ),
+                        "longitude": (
+                            drop_stop.longitude
+                            if drop_stop
+                            else None
+                        ),
+                        "drop_time": (
+                            drop_stop.drop_time
+                            if drop_stop
+                            else None
+                        ),
+                    },
+
+                    "route_stops": route_stops_data,
+
+                    "trip_type": student_transport.trip_type,
                 },
             )
 
         except Exception as e:
             application_logger.exception(
-                "student_bus_failed",
+                "student_transport_details_failed",
                 user_id=str(user.id),
-                student_id=str(student_id) if student_id else None,
-                school_id=str(school.id) if school else None,
+                student_id=(
+                    str(student_id)
+                    if student_id
+                    else None
+                ),
+                school_id=(
+                    str(school.id)
+                    if school
+                    else None
+                ),
                 error=str(e),
             )
 
