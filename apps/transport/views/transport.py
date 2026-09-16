@@ -297,6 +297,7 @@ class StudentRouteAPIView(APIView):
                         "address": pickup_stop.address if pickup_stop else None,
                         "latitude": pickup_stop.latitude if pickup_stop else None,
                         "longitude": pickup_stop.longitude if pickup_stop else None,
+                        "pickup_time": pickup_stop.pickup_time if pickup_stop else None,
                     },
                     "drop_stop": {
                         "id": str(drop_stop.id) if drop_stop else None,
@@ -306,6 +307,7 @@ class StudentRouteAPIView(APIView):
                         "address": drop_stop.address if drop_stop else None,
                         "latitude": drop_stop.latitude if drop_stop else None,
                         "longitude": drop_stop.longitude if drop_stop else None,
+                        "drop_time": drop_stop.drop_time if drop_stop else None,
                     },
                     "trip_type": student_transport.trip_type,
                 },

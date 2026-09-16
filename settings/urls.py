@@ -90,6 +90,8 @@ if "apps.homework" in settings.INSTALLED_APPS:
     urlpatterns.append(path("homework/", include("apps.homework.urls")))
 if "apps.transport" in settings.INSTALLED_APPS:
     urlpatterns.append(path("transport/", include("apps.transport.urls")))
+if "apps.examination" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("examination/", include("apps.examination.urls")))
 
 
 ####################################
