@@ -146,7 +146,7 @@ class VehicleDocument(AuditModel):
     )
 
     document_number = models.CharField(
-        max_length=100
+        max_length=100,null=True
     )
 
     issue_date = models.DateField(
