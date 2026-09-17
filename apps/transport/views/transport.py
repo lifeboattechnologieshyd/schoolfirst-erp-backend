@@ -1,8 +1,9 @@
+from django.db.models import Prefetch
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.school.models.school import Student
-from apps.transport.models import StudentTransport, LiveLocation, RouteStop
+from apps.transport.models import StudentTransport, LiveLocation, RouteStop, VehicleDocument
 from shared.mixins import CustomResponse
 from shared.utils.logger import application_logger
 
@@ -75,6 +76,15 @@ class StudentBusAPIView(APIView):
                     "pickup_stop",
                     "drop_stop",
                 )
+                .prefetch_related(
+                    Prefetch(
+                        "vehicle_assignment__vehicle__documents",
+                        queryset=VehicleDocument.objects.filter(
+                            document_type=VehicleDocument.DocumentType.PHOTO,
+                        ),
+                        to_attr="photo_documents",
+                    )
+                )
                 .filter(
                     student=student,
                     school=school,
@@ -96,6 +106,7 @@ class StudentBusAPIView(APIView):
                     description="Transport assignment not found for this student."
                 )
 
+
             vehicle_assignment = student_transport.vehicle_assignment
 
             if vehicle_assignment is None:
@@ -112,6 +123,14 @@ class StudentBusAPIView(APIView):
                 return CustomResponse.errorResponse(
                     description="Vehicle not found."
                 )
+            vehicle = vehicle_assignment.vehicle
+
+            bus_photo = (
+                vehicle.photo_documents[0].document.url
+                if vehicle.photo_documents
+                   and vehicle.photo_documents[0].document
+                else None
+            )
 
             if route is None:
                 application_logger.warning(
@@ -187,6 +206,7 @@ class StudentBusAPIView(APIView):
                         "vehicle_type": vehicle.vehicle_type,
                         "capacity": vehicle.capacity,
                         "status": vehicle.status,
+                        "photo":bus_photo
                     },
 
                     "driver": {

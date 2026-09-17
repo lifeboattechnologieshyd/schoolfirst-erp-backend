@@ -2442,6 +2442,7 @@ class StudentListAPIView(APIView):
                     "date_of_birth": student.date_of_birth,
                     "blood_group": student.blood_group,
                     "status": student.status,
+                    "photo_url": student.photo_url,
                     "school": {
                         "id": str(student.school.id),
                         "name": student.school.name,
