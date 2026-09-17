@@ -126,9 +126,9 @@ class StudentBusAPIView(APIView):
             vehicle = vehicle_assignment.vehicle
 
             bus_photo = (
-                vehicle.photo_documents[0].document.url
+                vehicle.photo_documents[0].document_file.url
                 if vehicle.photo_documents
-                   and vehicle.photo_documents[0].document
+                   and vehicle.photo_documents[0].document_file
                 else None
             )
 
