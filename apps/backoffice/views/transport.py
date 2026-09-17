@@ -732,7 +732,7 @@ class CreateVehicleDocumentAPIView(APIView):
                 document = VehicleDocument.objects.create(
                     vehicle=vehicle,
                     document_type=document_type,
-                    document_number=request.data.get("document_number").strip(),
+                    document_number=request.data.get("document_number"),
                     issue_date=issue_date,
                     expiry_date=expiry_date,
                     issued_by=request.data.get("issued_by"),
