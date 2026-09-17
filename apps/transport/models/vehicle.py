@@ -121,6 +121,7 @@ class VehicleDocument(AuditModel):
         POLLUTION = "POLLUTION", "Pollution Certificate"
         PERMIT = "PERMIT", "Permit"
         ROAD_TAX = "ROAD_TAX", "Road Tax"
+        PHOTO = "PHOTO", "Photo"
         OTHER = "OTHER", "Other"
 
     class Status(models.TextChoices):
