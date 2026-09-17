@@ -637,7 +637,6 @@ class CreateVehicleDocumentAPIView(APIView):
         required_fields = [
             "vehicle_id",
             "document_type",
-            "document_number",
         ]
 
         for field in required_fields:
