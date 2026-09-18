@@ -338,14 +338,7 @@ class ExaminationTypeUpdateAPIView(APIView):
             return CustomResponse.successResponse(
                 data={
                     "id": examination_type.id,
-                    "name": examination_type.name,
-                    "description": examination_type.description,
-                    "branch_id": examination_type.branch_id,
-                    "weightage": examination_type.weightage,
-                    "max_marks": examination_type.max_marks,
-                    "frequency": examination_type.frequency,
-                    "duration": examination_type.duration,
-                    "status": examination_type.status,
+
                 },
                 description="Examination type updated successfully.",
             )

@@ -6,7 +6,10 @@ from apps.backoffice.views.events import CreateCalendarEventAPIView, CalendarEve
     UpdateCalendarEventAPIView
 from apps.backoffice.views.examination import ExaminationTypeCreateAPIView, ExaminationTypeListAPIView, \
     ExaminationTypeUpdateAPIView, ExaminationCreateAPIView, ExaminationListAPIView, ExaminationUpdateAPIView, \
-    ExaminationGradeCreateAPIView, ExaminationGradeListAPIView, ExaminationGradeUpdateAPIView
+    ExaminationGradeCreateAPIView, ExaminationGradeListAPIView, ExaminationGradeUpdateAPIView, \
+    ExaminationGradeSubjectListAPIView, ExaminationScheduleCreateAPIView, ExaminationScheduleListAPIView, \
+    ExaminationScheduleUpdateAPIView, ExaminationStatusUpdateAPIView, ExaminationMarksUploadAPIView, \
+    ExaminationResultListAPIView
 from apps.backoffice.views.fee import CreateFeeTypeAPIView, FeeTypeListAPIView, UpdateFeeTypeAPIView, \
     DeleteFeeTypeAPIView, CreateFeeTemplateAPIView, FeeTemplateListAPIView, FeeTemplateDetailAPIView, \
     UpdateFeeTemplateAPIView, DeleteFeeTemplateAPIView, CreateFeeTemplateItemAPIView, FeeTemplateItemListAPIView, \
@@ -26,7 +29,7 @@ from apps.backoffice.views.ptm import CreateParentTeacherMeetingAPIView, ParentT
     UpdateParentTeacherMeetingAPIView, BulkPTMAttendanceAPIView
 from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCreateAPIView, RoleListCreateAPIView, \
     AssignPermissionsToRoleAPIView, AssignRoleToUserAPIView, RBACDashboardAPIView, UserAccessAPIView, ModulesAPIView, \
-    ModulePermissionsAPIView, RolesAPIView, RoleAccessAPIView
+    ModulePermissionsAPIView, RolesAPIView, RoleAccessAPIView, UpdateRoleToUserAPIView
 from apps.backoffice.views.school import AcademicYearListAPIView, CreateAcademicYearAPIView, UpdateAcademicYearAPIView, \
     CreateGradeAPIView, GradeListAPIView, UpdateGradeAPIView, CreateSectionAPIView, SectionListAPIView, \
     UpdateSectionAPIView, CreateStudentAPIView, BulkUploadStudentAPIView, StudentListAPIView, \
@@ -81,6 +84,8 @@ urlpatterns = [
     path("roles/<uuid:role_id>/assign-permissions", AssignPermissionsToRoleAPIView.as_view(), name="role-assign-permissions"),
 
     path("user-roles/assign", AssignRoleToUserAPIView.as_view(), name="assign-role-to-user"),
+
+    path("user-role/update/<uuid:user_id>",UpdateRoleToUserAPIView.as_view(), name="update-role-to-user"),
 
     path("rbac/dashboard", RBACDashboardAPIView.as_view(), name="rbac-dashboard"),
 
@@ -462,6 +467,20 @@ urlpatterns = [
     path("exam/grade",ExaminationGradeListAPIView.as_view(),),
 
     path("exam/grade/<uuid:grade_id>",ExaminationGradeUpdateAPIView.as_view(),),
+
+    path("exam/grade-subject",ExaminationGradeSubjectListAPIView.as_view(),),
+
+    path("exam/schedule/create",ExaminationScheduleCreateAPIView.as_view()),
+
+    path("exam/schedule",ExaminationScheduleListAPIView.as_view(),),
+
+    path("exam/schedule/<uuid:schedule_id>",ExaminationScheduleUpdateAPIView.as_view(),),
+
+    path("exam/status/update",ExaminationStatusUpdateAPIView.as_view(),),
+
+    path("exam/marks/upload",ExaminationMarksUploadAPIView.as_view(),),
+
+    path("exam/results",ExaminationResultListAPIView.as_view(),),
 
 
 

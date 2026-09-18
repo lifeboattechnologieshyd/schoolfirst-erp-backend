@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
 from apps.core.models import Modules, Permissions, Roles, RolePermissions, UserMaster, UserRoles, UserPermissions
+from shared.helpers import clear_user_access_cache
 from shared.mixins import CustomResponse
 from shared.permissions import HasRole
 from shared.enums.roles import RolesEnum
@@ -572,6 +573,257 @@ class AssignRoleToUserAPIView(APIView):
             description="Role assigned successfully.",
         )
 
+class UpdateRoleToUserAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasRole,
+    ]
+
+    required_roles = [
+        RolesEnum.SUPERADMIN,
+    ]
+
+    @transaction.atomic
+    def put(self, request, user_id):
+
+        role_ids = request.data.get("role_ids", [])
+        school_id = request.data.get("school_id")
+
+        # -----------------------------------------
+        # Validate role_ids
+        # -----------------------------------------
+
+        if not isinstance(role_ids, list):
+            return CustomResponse.errorResponse(
+                description="role_ids must be an array.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not role_ids:
+            return CustomResponse.errorResponse(
+                description="At least one role is required.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Remove duplicate role IDs
+        role_ids = list(set(role_ids))
+
+        audit_logger.info(
+            "user_roles_edit_started",
+            performed_by=str(request.user.id),
+            target_user_id=str(user_id),
+            role_ids=role_ids,
+            school_id=(
+                str(school_id)
+                if school_id
+                else None
+            ),
+        )
+
+        # -----------------------------------------
+        # Get User
+        # -----------------------------------------
+
+        user = UserMaster.objects.filter(
+            id=user_id
+        ).first()
+
+        if not user:
+
+            audit_logger.warning(
+                "user_roles_edit_failed",
+                performed_by=str(request.user.id),
+                reason="user_not_found",
+                target_user_id=str(user_id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="User not found.",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # -----------------------------------------
+        # Get Roles
+        # -----------------------------------------
+
+        roles = Roles.objects.filter(
+            id__in=role_ids
+        )
+
+        found_role_ids = {
+            str(role.id)
+            for role in roles
+        }
+
+        missing_role_ids = [
+            role_id
+            for role_id in role_ids
+            if str(role_id) not in found_role_ids
+        ]
+
+        if missing_role_ids:
+
+            return CustomResponse.errorResponse(
+                description="One or more roles were not found.",
+                data={
+                    "missing_role_ids": missing_role_ids,
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # -----------------------------------------
+        # Existing Assignments
+        # -----------------------------------------
+
+        existing_user_roles = list(
+            UserRoles.objects
+            .filter(
+                user=user,
+                school_id=school_id,
+            )
+            .select_related("role")
+        )
+
+        existing_role_map = {
+            str(user_role.role_id): user_role
+            for user_role in existing_user_roles
+        }
+
+        requested_role_ids = {
+            str(role_id)
+            for role_id in role_ids
+        }
+
+        existing_role_ids = set(
+            existing_role_map.keys()
+        )
+
+        # -----------------------------------------
+        # Roles to Add
+        # -----------------------------------------
+
+        roles_to_add = requested_role_ids - existing_role_ids
+
+        # -----------------------------------------
+        # Roles to Remove
+        # -----------------------------------------
+
+        roles_to_remove = existing_role_ids - requested_role_ids
+
+        # -----------------------------------------
+        # Add New Roles
+        # -----------------------------------------
+
+        created_roles = []
+
+        for role in roles:
+
+            if str(role.id) in roles_to_add:
+
+                user_role = UserRoles.objects.create(
+                    user=user,
+                    role=role,
+                    school_id=school_id,
+                )
+
+                created_roles.append(
+                    {
+                        "id": str(user_role.id),
+                        "role_id": str(role.id),
+                        "role_name": role.role_name,
+                    }
+                )
+
+        # -----------------------------------------
+        # Remove Roles
+        # -----------------------------------------
+
+        removed_roles = []
+
+        if roles_to_remove:
+
+            roles_to_remove_qs = (
+                UserRoles.objects
+                .filter(
+                    user=user,
+                    school_id=school_id,
+                    role_id__in=roles_to_remove,
+                )
+            )
+
+            removed_roles = [
+                {
+                    "id": str(user_role.id),
+                    "role_id": str(user_role.role_id),
+                    "role_name": user_role.role.role_name,
+                }
+                for user_role in roles_to_remove_qs.select_related(
+                    "role"
+                )
+            ]
+
+            roles_to_remove_qs.delete()
+
+        # -----------------------------------------
+        # Clear RBAC Cache
+        # -----------------------------------------
+
+        clear_user_access_cache(user)
+
+        # -----------------------------------------
+        # Final Roles
+        # -----------------------------------------
+
+        final_user_roles = (
+            UserRoles.objects
+            .filter(
+                user=user,
+                school_id=school_id,
+            )
+            .select_related("role")
+        )
+
+        final_roles = [
+            {
+                "id": str(user_role.id),
+                "role_id": str(user_role.role_id),
+                "role_name": user_role.role.role_name,
+            }
+            for user_role in final_user_roles
+        ]
+
+        # -----------------------------------------
+        # Audit Log
+        # -----------------------------------------
+
+        audit_logger.info(
+            "user_roles_updated",
+            performed_by=str(request.user.id),
+            target_user_id=str(user.id),
+            school_id=(
+                str(school_id)
+                if school_id
+                else None
+            ),
+            added_role_ids=list(roles_to_add),
+            removed_role_ids=list(roles_to_remove),
+        )
+
+        return CustomResponse.successResponse(
+            data={
+                "user_id": str(user.id),
+                "school_id": (
+                    str(school_id)
+                    if school_id
+                    else None
+                ),
+                "roles": final_roles,
+                "added_roles": created_roles,
+                "removed_roles": removed_roles,
+            },
+            description="User roles updated successfully.",
+        )
 
 class RBACDashboardAPIView(APIView):
 
