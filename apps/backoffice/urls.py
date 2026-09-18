@@ -462,7 +462,7 @@ urlpatterns = [
 
     path("exam/<uuid:examination_id>",ExaminationUpdateAPIView.as_view(),),
 
-    path("exam/grade/create",ExaminationGradeCreateAPIView.as_view(),),
+    path("exam/grade/create/<uuid:examination_id>",ExaminationGradeCreateAPIView.as_view(),),
 
     path("exam/grade",ExaminationGradeListAPIView.as_view(),),
 

@@ -7,11 +7,15 @@ from apps.examination.models import ExaminationType, Examination, ExaminationGra
     ExaminationResult
 from apps.school.models.school import Branch, AcademicYear, Grade, Subject, SubjectGrade, Student
 from shared.mixins import CustomResponse
+from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
 
 
 class ExaminationTypeCreateAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,HasPermission]
+
+    required_permission = "examination_type.create"
+
 
     def post(self, request):
         school = request.school
@@ -138,7 +142,9 @@ class ExaminationTypeCreateAPIView(APIView):
 
 
 class ExaminationTypeListAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,HasPermission,]
+
+    required_permission = "examination_type.view"
 
     def get(self, request):
         school = request.school
@@ -210,7 +216,9 @@ class ExaminationTypeListAPIView(APIView):
 
 
 class ExaminationTypeUpdateAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,HasPermission,]
+
+    required_permission = "examination_type.update"
 
     def put(self, request, examination_type_id):
         school = request.school
@@ -362,7 +370,9 @@ class ExaminationTypeUpdateAPIView(APIView):
 
 
 class ExaminationCreateAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,HasPermission,]
+
+    required_permission = "examination.create"
 
     def post(self, request):
         school = request.school
@@ -499,21 +509,7 @@ class ExaminationCreateAPIView(APIView):
             return CustomResponse.successResponse(
                 data={
                     "id": examination.id,
-                    "name": examination.name,
-                    "examination_type_id": examination.examination_type_id,
-                    "examination_type_name": examination.examination_type.name,
-                    "academic_year_id": examination.academic_year_id,
-                    "academic_year_name": examination.academic_year.name,
-                    "branch_id": examination.branch_id,
-                    "branch_name": (
-                        examination.branch.name
-                        if examination.branch
-                        else None
-                    ),
-                    "start_date": examination.start_date,
-                    "end_date": examination.end_date,
-                    "status": examination.status,
-                    "description": examination.description,
+
                 },
                 description="Examination created successfully.",
             )
@@ -531,7 +527,9 @@ class ExaminationCreateAPIView(APIView):
 
 
 class ExaminationListAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,HasPermission,]
+
+    required_permission = "examination.view"
 
     def get(self, request):
         school = request.school
@@ -615,7 +613,9 @@ class ExaminationListAPIView(APIView):
 
 
 class ExaminationUpdateAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasPermission,]
+
+    required_permission = "examination.update"
 
     def put(self, request, examination_id):
         school = request.school
@@ -721,14 +721,7 @@ class ExaminationUpdateAPIView(APIView):
             return CustomResponse.successResponse(
                 data={
                     "id": examination.id,
-                    "name": examination.name,
-                    "examination_type_id": examination.examination_type_id,
-                    "academic_year_id": examination.academic_year_id,
-                    "branch_id": examination.branch_id,
-                    "start_date": examination.start_date,
-                    "end_date": examination.end_date,
-                    "description": examination.description,
-                    "status": examination.status,
+
                 },
                 description="Examination updated successfully.",
             )
@@ -747,7 +740,9 @@ class ExaminationUpdateAPIView(APIView):
 
 
 class ExaminationGradeCreateAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,HasPermission,]
+
+    required_permission = "examination_grade.create"
 
     def post(self, request, examination_id):
         school = request.school
@@ -836,7 +831,10 @@ class ExaminationGradeCreateAPIView(APIView):
             )
 
 class ExaminationGradeListAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasPermission,]
+
+    required_permission = "examination_grade.view"
+
 
     def get(self, request, examination_id):
         school = request.school
@@ -932,7 +930,9 @@ class ExaminationGradeListAPIView(APIView):
 
 
 class ExaminationGradeUpdateAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasPermission,]
+
+    required_permission = "examination_grade.update"
 
     def put(self, request, examination_id, examination_grade_id):
         school = request.school
@@ -1034,7 +1034,9 @@ class ExaminationGradeUpdateAPIView(APIView):
             )
 
 class ExaminationGradeSubjectListAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,HasPermission,]
+
+    required_permission = "examination_subject.view"
 
     def get(self, request, examination_id, grade_id):
         school = request.school
@@ -1128,7 +1130,9 @@ class ExaminationGradeSubjectListAPIView(APIView):
 
 
 class ExaminationScheduleCreateAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasPermission,]
+
+    required_permission = "examination_schedule.create"
 
     def post(self, request, examination_id):
         school = request.school
@@ -1404,221 +1408,13 @@ class ExaminationScheduleCreateAPIView(APIView):
             )
 
 
-# class ExaminationScheduleUpdateAPIView(APIView):
-#     permission_classes = [IsAuthenticated]
-#
-#     def put(self, request, schedule_id):
-#         school = request.school
-#
-#         if not school:
-#             return CustomResponse.errorResponse(
-#                 description="School is required."
-#             )
-#
-#         try:
-#             schedule = (
-#                 ExaminationSchedule.objects
-#                 .select_related(
-#                     "examination",
-#                     "grade",
-#                     "subject",
-#                 )
-#                 .filter(
-#                     id=schedule_id,
-#                     examination__school=school,
-#                 )
-#                 .first()
-#             )
-#
-#             if not schedule:
-#                 return CustomResponse.errorResponse(
-#                     description="Examination schedule not found."
-#                 )
-#
-#             examination = schedule.examination
-#
-#             if examination.status != Examination.Status.DRAFT:
-#                 return CustomResponse.errorResponse(
-#                     description=(
-#                         "Schedule can only be updated "
-#                         "for a draft examination."
-#                     )
-#                 )
-#
-#             exam_date = request.data.get(
-#                 "exam_date",
-#                 schedule.exam_date,
-#             )
-#
-#             start_time = request.data.get(
-#                 "start_time",
-#                 schedule.start_time,
-#             )
-#
-#             end_time = request.data.get(
-#                 "end_time",
-#                 schedule.end_time,
-#             )
-#
-#             room_number = request.data.get(
-#                 "room_number",
-#                 schedule.room_number,
-#             )
-#
-#             maximum_marks = request.data.get(
-#                 "maximum_marks",
-#                 schedule.maximum_marks,
-#             )
-#
-#             passing_marks = request.data.get(
-#                 "passing_marks",
-#                 schedule.passing_marks,
-#             )
-#
-#             instructions = request.data.get(
-#                 "instructions",
-#                 schedule.instructions,
-#             )
-#
-#             # -------------------------
-#             # Validate date
-#             # -------------------------
-#
-#             if not (
-#                 examination.start_date
-#                 <= exam_date
-#                 <= examination.end_date
-#             ):
-#                 return CustomResponse.errorResponse(
-#                     description=(
-#                         "Exam date must be within the "
-#                         "examination start and end dates."
-#                     )
-#                 )
-#
-#             # -------------------------
-#             # Validate time
-#             # -------------------------
-#
-#             if start_time >= end_time:
-#                 return CustomResponse.errorResponse(
-#                     description="Start time must be before end time."
-#                 )
-#
-#             # -------------------------
-#             # Validate marks
-#             # -------------------------
-#
-#             try:
-#                 maximum_marks = float(maximum_marks)
-#                 passing_marks = float(passing_marks)
-#             except (TypeError, ValueError):
-#                 return CustomResponse.errorResponse(
-#                     description="Invalid marks value."
-#                 )
-#
-#             if maximum_marks <= 0:
-#                 return CustomResponse.errorResponse(
-#                     description="Maximum marks must be greater than 0."
-#                 )
-#
-#             if passing_marks < 0:
-#                 return CustomResponse.errorResponse(
-#                     description="Passing marks cannot be negative."
-#                 )
-#
-#             if passing_marks > maximum_marks:
-#                 return CustomResponse.errorResponse(
-#                     description=(
-#                         "Passing marks cannot exceed maximum marks."
-#                     )
-#                 )
-#
-#             # -------------------------
-#             # Check overlapping schedule
-#             # -------------------------
-#
-#             overlapping_schedule = (
-#                 ExaminationSchedule.objects
-#                 .filter(
-#                     examination=examination,
-#                     grade=schedule.grade,
-#                     exam_date=exam_date,
-#                     start_time__lt=end_time,
-#                     end_time__gt=start_time,
-#                 )
-#                 .exclude(
-#                     id=schedule.id
-#                 )
-#                 .exists()
-#             )
-#
-#             if overlapping_schedule:
-#                 return CustomResponse.errorResponse(
-#                     description=(
-#                         "Another subject is already scheduled "
-#                         "during this time for this grade."
-#                     )
-#                 )
-#
-#             schedule.exam_date = exam_date
-#             schedule.start_time = start_time
-#             schedule.end_time = end_time
-#             schedule.room_number = room_number
-#             schedule.maximum_marks = maximum_marks
-#             schedule.passing_marks = passing_marks
-#             schedule.instructions = instructions
-#
-#             schedule.save()
-#
-#             application_logger.info(
-#                 "examination_schedule_updated",
-#                 schedule_id=str(schedule.id),
-#                 examination_id=str(examination.id),
-#                 school_id=str(school.id),
-#             )
-#
-#             return CustomResponse.successResponse(
-#                 data={
-#                     "id": schedule.id,
-#                     "examination_id": schedule.examination_id,
-#                     "examination_name": examination.name,
-#
-#                     "grade_id": schedule.grade_id,
-#                     "grade_name": schedule.grade.name,
-#
-#                     "subject_id": schedule.subject_id,
-#                     "subject_name": schedule.subject.name,
-#
-#                     "exam_date": schedule.exam_date,
-#                     "start_time": schedule.start_time,
-#                     "end_time": schedule.end_time,
-#
-#                     "room_number": schedule.room_number,
-#
-#                     "maximum_marks": schedule.maximum_marks,
-#                     "passing_marks": schedule.passing_marks,
-#
-#                     "instructions": schedule.instructions,
-#                 },
-#                 description="Examination schedule updated successfully.",
-#             )
-#
-#         except Exception as e:
-#             application_logger.exception(
-#                 "examination_schedule_update_failed",
-#                 error=str(e),
-#                 schedule_id=str(schedule_id),
-#                 school_id=str(school.id),
-#             )
-#
-#             return CustomResponse.errorResponse(
-#                 description="Failed to update examination schedule."
-#             )
+
 
 
 class ExaminationScheduleListAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,HasPermission,]
+
+    required_permission = "examination_schedule.view"
 
     def get(self, request, examination_id):
         school = request.school
@@ -1768,7 +1564,9 @@ class ExaminationScheduleListAPIView(APIView):
 
 
 class ExaminationScheduleUpdateAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,HasPermission,]
+
+    required_permission = "examination_schedule.update"
 
     def put(self, request, schedule_id):
         school = request.school
@@ -1972,7 +1770,8 @@ class ExaminationScheduleUpdateAPIView(APIView):
 
 
 class ExaminationStatusUpdateAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,HasPermission,]
+
 
     def patch(self, request, examination_id):
         school = request.school
@@ -2114,7 +1913,9 @@ class ExaminationStatusUpdateAPIView(APIView):
 
 
 class ExaminationMarksUploadAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,HasPermission,]
+
+    required_permission = "examination_result.create"
 
     def post(self, request, schedule_id):
         school = request.school
@@ -2440,7 +2241,9 @@ class ExaminationMarksUploadAPIView(APIView):
 
 
 class ExaminationResultListAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,HasPermission,]
+
+    required_permission = "examination_result.view"
 
     def get(self, request, examination_id):
         school = request.school
