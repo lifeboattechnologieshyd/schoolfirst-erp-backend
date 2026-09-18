@@ -4,6 +4,9 @@ from apps.backoffice.views.assignment import CreateAssignmentAPIView, Assignment
     TeacherAssignmentSubmissionListAPIView, TeacherCheckAssignmentAPIView
 from apps.backoffice.views.events import CreateCalendarEventAPIView, CalendarEventListAPIView, \
     UpdateCalendarEventAPIView
+from apps.backoffice.views.examination import ExaminationTypeCreateAPIView, ExaminationTypeListAPIView, \
+    ExaminationTypeUpdateAPIView, ExaminationCreateAPIView, ExaminationListAPIView, ExaminationUpdateAPIView, \
+    ExaminationGradeCreateAPIView, ExaminationGradeListAPIView, ExaminationGradeUpdateAPIView
 from apps.backoffice.views.fee import CreateFeeTypeAPIView, FeeTypeListAPIView, UpdateFeeTypeAPIView, \
     DeleteFeeTypeAPIView, CreateFeeTemplateAPIView, FeeTemplateListAPIView, FeeTemplateDetailAPIView, \
     UpdateFeeTemplateAPIView, DeleteFeeTemplateAPIView, CreateFeeTemplateItemAPIView, FeeTemplateItemListAPIView, \
@@ -131,6 +134,23 @@ urlpatterns = [
     path("branch",BranchLISTAPIView.as_view()),
 
     path("branch/<uuid:branch_id>",BranchUpdateAPIView.as_view()),
+
+    # ====================================
+    # School Document APIs
+    # ====================================
+
+
+    path("school/document/type/create",CreateSchoolDocumentTypeAPIView.as_view(),),
+
+    path("school/document/type",SchoolDocumentTypeListAPIView.as_view(),),
+
+    path("school/document/type/<uuid:document_type_id>",UpdateSchoolDocumentTypeAPIView.as_view(),),
+
+    path("school/documents/create",CreateSchoolDocumentAPIView.as_view(),),
+
+    path("school/documents",SchoolDocumentListAPIView.as_view(),),
+
+    path("school/documents/<uuid:document_id>",UpdateSchoolDocumentAPIView.as_view(),),
 
 
 
@@ -417,17 +437,31 @@ urlpatterns = [
 
     path("trip/end/<uuid:trip_id>",EndTripAPIView.as_view(),),
 
-    path("school/document/type/create",CreateSchoolDocumentTypeAPIView.as_view(),),
 
-    path("school/document/type",SchoolDocumentTypeListAPIView.as_view(),),
 
-    path("school/document/type/<uuid:document_type_id>",UpdateSchoolDocumentTypeAPIView.as_view(),),
 
-    path("school/documents/create",CreateSchoolDocumentAPIView.as_view(),),
+    # ====================================
+    #  Examination   APIs
+    # ====================================
 
-    path("school/documents",SchoolDocumentListAPIView.as_view(),),
 
-    path("school/documents/<uuid:document_id>",UpdateSchoolDocumentAPIView.as_view(),),
+    path("exam-types/create",ExaminationTypeCreateAPIView.as_view(),),
+
+    path("exam-type",ExaminationTypeListAPIView.as_view(),),
+
+    path("exam-type/<uuid:examination_type_id>",ExaminationTypeUpdateAPIView.as_view(),),
+
+    path("exam/create",ExaminationCreateAPIView.as_view(),),
+
+    path("exam",ExaminationListAPIView.as_view(),),
+
+    path("exam/<uuid:examination_id>",ExaminationUpdateAPIView.as_view(),),
+
+    path("exam/grade/create",ExaminationGradeCreateAPIView.as_view(),),
+
+    path("exam/grade",ExaminationGradeListAPIView.as_view(),),
+
+    path("exam/grade/<uuid:grade_id>",ExaminationGradeUpdateAPIView.as_view(),),
 
 
 

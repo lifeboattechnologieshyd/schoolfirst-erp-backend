@@ -10,6 +10,7 @@ from apps.school.models.school import AcademicYear, Grade, Student
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from shared.utils.fee import generate_student_fees
+from shared.utils.logger import application_logger
 
 
 class CreateFeeTypeAPIView(APIView):
@@ -2332,36 +2333,51 @@ class StudentFeeAssignmentListAPIView(APIView):
         )
 
 class StudentFeeListAPIView(APIView):
-
-    permission_classes = [IsAuthenticated, HasPermission,]
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
 
     required_permission = "student_fee.view"
 
     pagination_class = CustomPageNumberPagination
 
     def get(self, request):
-
         try:
-
-            print("=" * 80)
-            print("StudentFeeListAPIView Started")
-            print("=" * 80)
-
             school = request.school
 
-            print("School :", school)
+            if not school:
+                return CustomResponse.errorResponse(
+                    description="School is required."
+                )
 
-            queryset = StudentFee.objects.select_related(
-                "student",
-                "installment_item",
-                "installment_item__installment",
-                "installment_item__fee_template_item",
-                "installment_item__fee_template_item__fee_type",
-            ).filter(
-                student__school=school,
+            queryset = (
+                StudentFee.objects
+                .select_related(
+                    # Student
+                    "student",
+
+                    # Installment hierarchy
+                    "installment_item",
+                    "installment_item__installment",
+                    "installment_item__installment__collection_plan",
+                    "installment_item__installment__collection_plan__fee_template",
+
+                    # Template item / fee type
+                    "installment_item__fee_template_item",
+                    "installment_item__fee_template_item__fee_type",
+                )
+                .prefetch_related(
+                    "payments",
+                )
+                .filter(
+                    student__school=school,
+                )
+                .order_by(
+                    "due_date",
+                    "student__name",
+                )
             )
-
-            print("Initial Count :", queryset.count())
 
             student_id = request.query_params.get(
                 "student_id"
@@ -2371,30 +2387,88 @@ class StudentFeeListAPIView(APIView):
                 "status"
             )
 
-            print("student_id :", student_id)
-            print("status :", status)
+            grade_id = request.query_params.get(
+                "grade_id"
+            )
+
+            fee_template_id = request.query_params.get(
+                "fee_template_id"
+            )
+
+            fee_type_id = request.query_params.get(
+                "fee_type_id"
+            )
+
+            installment_id = request.query_params.get(
+                "installment_id"
+            )
+
+            search = request.query_params.get(
+                "search"
+            )
+
+            # -----------------------------------------
+            # Filters
+            # -----------------------------------------
 
             if student_id:
-
                 queryset = queryset.filter(
-                    student_id=student_id,
-                )
-
-                print(
-                    "After student filter :",
-                    queryset.count(),
+                    student_id=student_id
                 )
 
             if status:
+                queryset = queryset.filter(
+                    status=status
+                )
+
+            if grade_id:
+                queryset = queryset.filter(
+                    student__grade_id=grade_id
+                )
+
+            if fee_template_id:
+                queryset = queryset.filter(
+                    installment_item__installment__collection_plan__fee_template_id=fee_template_id
+                )
+
+            if fee_type_id:
+                queryset = queryset.filter(
+                    installment_item__fee_template_item__fee_type_id=fee_type_id
+                )
+
+            if installment_id:
+                queryset = queryset.filter(
+                    installment_item__installment_id=installment_id
+                )
+
+            if search:
+                search = search.strip()
 
                 queryset = queryset.filter(
-                    status=status,
+                    Q(student__name__icontains=search)
+                    |
+                    Q(
+                        student__admission_number__icontains=search
+                    )
+                    |
+                    Q(
+                        installment_item__fee_template_item__fee_type__name__icontains=search
+                    )
+                    |
+                    Q(
+                        installment_item__installment__name__icontains=search
+                    )
+                    |
+                    Q(
+                        installment_item__installment__collection_plan__fee_template__name__icontains=search
+                    )
                 )
 
-                print(
-                    "After status filter :",
-                    queryset.count(),
-                )
+            # -----------------------------------------
+            # Pagination
+            # -----------------------------------------
+
+            total_count = queryset.count()
 
             paginator = self.pagination_class()
 
@@ -2403,98 +2477,402 @@ class StudentFeeListAPIView(APIView):
                 request,
             )
 
-            print(
-                "Page Count :",
-                len(page) if page else 0,
+            # -----------------------------------------
+            # Get assignments for current page
+            # Avoid N+1 query from concession_amount property
+            # -----------------------------------------
+
+            student_ids = {
+                fee.student_id
+                for fee in page
+            }
+
+            fee_template_ids = {
+                fee.installment_item
+                .installment
+                .collection_plan
+                .fee_template_id
+                for fee in page
+            }
+
+            assignments = (
+                StudentFeeAssignment.objects
+                .filter(
+                    student_id__in=student_ids,
+                    fee_template_id__in=fee_template_ids,
+                )
+                .select_related(
+                    "concession",
+                    "assigned_by",
+                    "fee_template",
+                )
             )
+
+            assignment_map = {
+                (
+                    assignment.student_id,
+                    assignment.fee_template_id,
+                ): assignment
+                for assignment in assignments
+            }
+
+            # -----------------------------------------
+            # Get late fee rules for current page
+            # -----------------------------------------
+
+            collection_plan_ids = {
+                fee.installment_item
+                .installment
+                .collection_plan_id
+                for fee in page
+            }
+
+            late_fee_rules = (
+                LateFeeRule.objects
+                .filter(
+                    collection_plan_id__in=collection_plan_ids,
+                )
+                .order_by(
+                    "collection_plan_id",
+                    "from_day",
+                )
+            )
+
+            late_fee_rule_map = {}
+
+            for rule in late_fee_rules:
+                late_fee_rule_map.setdefault(
+                    rule.collection_plan_id,
+                    []
+                ).append(rule)
+
+            # -----------------------------------------
+            # Response Data
+            # -----------------------------------------
 
             data = []
 
             for fee in page:
 
-                print("-" * 50)
-                print("Fee ID :", fee.id)
-
-                print(
-                    "Student :",
-                    fee.student.name,
+                installment_item = (
+                    fee.installment_item
                 )
 
-                print(
-                    "Fee Type :",
-                    fee.installment_item.fee_template_item.fee_type.name,
+                installment = (
+                    installment_item.installment
                 )
 
-                print(
-                    "Installment :",
-                    fee.installment_item.installment.name,
+                collection_plan = (
+                    installment.collection_plan
                 )
 
-                print(
-                    "Amount :",
-                    fee.amount,
+                fee_template = (
+                    collection_plan.fee_template
                 )
 
-                print(
-                    "Calculating concession_amount..."
+                template_item = (
+                    installment_item.fee_template_item
                 )
 
-                print(
-                    "Concession Amount :",
-                    fee.concession_amount,
+                fee_type = (
+                    template_item.fee_type
                 )
 
-                print(
-                    "Calculating payable_amount..."
+                assignment = assignment_map.get(
+                    (
+                        fee.student_id,
+                        fee_template.id,
+                    )
                 )
 
-                print(
-                    "Payable Amount :",
-                    fee.payable_amount,
+                # -------------------------------------
+                # Concession
+                # -------------------------------------
+
+                concession_data = None
+                concession_amount = 0
+
+                if assignment and assignment.concession:
+
+                    concession = assignment.concession
+
+                    concession_data = {
+                        "id": str(concession.id),
+                        "name": concession.name,
+                        "type": concession.concession_type,
+                        "value": concession.value,
+                    }
+
+                    if (
+                        concession.concession_type
+                        == FeeConcession.Type.PERCENTAGE
+                    ):
+                        concession_amount = (
+                            fee.amount * concession.value
+                        ) / 100
+
+                    else:
+                        concession_amount = (
+                            concession.value
+                        )
+
+                # -------------------------------------
+                # Late Fee Rules
+                # -------------------------------------
+
+                late_fee_rules_data = [
+                    {
+                        "id": str(rule.id),
+                        "from_day": rule.from_day,
+                        "to_day": rule.to_day,
+                        "rule_type": rule.rule_type,
+                        "value": rule.value,
+                    }
+                    for rule in late_fee_rule_map.get(
+                        collection_plan.id,
+                        []
+                    )
+                ]
+
+                # -------------------------------------
+                # Payments
+                # -------------------------------------
+
+                payments_data = []
+
+                for payment in fee.payments.all():
+
+                    payments_data.append(
+                        {
+                            "id": str(payment.id),
+                            "receipt_number": (
+                                payment.receipt_number
+                            ),
+                            "amount": payment.amount,
+                            "payment_mode": (
+                                payment.payment_mode
+                            ),
+                            "payment_date": (
+                                payment.payment_date
+                            ),
+                            "transaction_id": (
+                                payment.transaction_id
+                            ),
+                            "gateway_name": (
+                                payment.gateway_name
+                            ),
+                            "remarks": payment.remarks,
+                            "collected_by": (
+                                str(payment.collected_by_id)
+                                if payment.collected_by_id
+                                else None
+                            ),
+                            "is_cancelled": (
+                                payment.is_cancelled
+                            ),
+                        }
+                    )
+
+                # -------------------------------------
+                # Balance
+                # -------------------------------------
+
+                balance = (
+                    fee.amount
+                    - concession_amount
+                    + fee.late_fee
+                    - fee.paid_amount
                 )
 
-                data.append({
+                # -------------------------------------
+                # Assignment Details
+                # -------------------------------------
 
-                    "id": str(fee.id),
+                assignment_data = None
 
-                    "student": fee.student.name,
+                if assignment:
 
-                    "fee_type": fee.installment_item.fee_template_item.fee_type.name,
+                    assignment_data = {
+                        "id": str(assignment.id),
+                        "assigned_date": (
+                            assignment.assigned_date
+                        ),
+                        "assigned_by": (
+                            {
+                                "id": str(
+                                    assignment.assigned_by_id
+                                ),
+                                "name": (
+                                    assignment.assigned_by.name
+                                    if assignment.assigned_by
+                                    else None
+                                ),
+                            }
+                            if assignment.assigned_by_id
+                            else None
+                        ),
+                    }
 
-                    "installment": fee.installment_item.installment.name,
+                # -------------------------------------
+                # Final Response
+                # -------------------------------------
 
-                    "amount": fee.amount,
+                data.append(
+                    {
+                        # =============================
+                        # Student
+                        # =============================
 
-                    "concession_amount": fee.concession_amount,
+                        "student": {
+                            "id": str(fee.student.id),
+                            "name": fee.student.name,
+                            "admission_number": (
+                                fee.student.admission_number
+                            ),
+                        },
 
-                    "late_fee": fee.late_fee,
+                        # =============================
+                        # Assignment
+                        # =============================
 
-                    "paid_amount": fee.paid_amount,
+                        "assignment": assignment_data,
 
-                    "balance": fee.payable_amount,
+                        # =============================
+                        # Fee Template
+                        # =============================
 
-                    "due_date": fee.due_date,
+                        "fee_template": {
+                            "id": str(fee_template.id),
+                            "name": fee_template.name,
+                            "academic_year_id": str(
+                                fee_template.academic_year_id
+                            ),
+                            "grade_id": str(
+                                fee_template.grade_id
+                            ),
+                            "is_active": (
+                                fee_template.is_active
+                            ),
+                        },
 
-                    "status": fee.status,
+                        # =============================
+                        # Fee Template Item
+                        # =============================
 
-                })
+                        "fee_template_item": {
+                            "id": str(template_item.id),
+                            "amount": template_item.amount,
+                            "is_mandatory": (
+                                template_item.is_mandatory
+                            ),
+                        },
 
-            print("Response Count :", len(data))
+                        # =============================
+                        # Fee Type
+                        # =============================
+
+                        "fee_type": {
+                            "id": str(fee_type.id),
+                            "name": fee_type.name,
+                            "is_optional": (
+                                fee_type.is_optional
+                            ),
+                            "description": (
+                                fee_type.description
+                            ),
+                        },
+
+                        # =============================
+                        # Collection Plan
+                        # =============================
+
+                        "collection_plan": {
+                            "id": str(collection_plan.id),
+                            "plan_type": (
+                                collection_plan.plan_type
+                            ),
+                        },
+
+                        # =============================
+                        # Installment
+                        # =============================
+
+                        "installment": {
+                            "id": str(installment.id),
+                            "name": installment.name,
+                            "due_date": installment.due_date,
+                            "order": installment.order,
+                        },
+
+                        # =============================
+                        # Installment Item
+                        # =============================
+
+                        "installment_item": {
+                            "id": str(installment_item.id),
+                            "amount": installment_item.amount,
+                        },
+
+                        # =============================
+                        # Student Fee
+                        # =============================
+
+                        "student_fee": {
+                            "id": str(fee.id),
+                            "due_date": fee.due_date,
+                            "amount": fee.amount,
+                            "late_fee": fee.late_fee,
+                            "paid_amount": fee.paid_amount,
+                            "concession_amount": (
+                                concession_amount
+                            ),
+                            "balance": balance,
+                            "status": fee.status,
+                        },
+
+                        # =============================
+                        # Concession
+                        # =============================
+
+                        "concession": concession_data,
+
+                        # =============================
+                        # Late Fee Rules
+                        # =============================
+
+                        "late_fee_rules": (
+                            late_fee_rules_data
+                        ),
+
+                        # =============================
+                        # Payments
+                        # =============================
+
+                        "payments": payments_data,
+                    }
+                )
 
             return CustomResponse.successResponse(
                 data=data,
-                total=queryset.count(),
+                total=total_count,
+                description=(
+                    "Student fees fetched successfully."
+                ),
             )
 
         except Exception as e:
 
-            print("=" * 80)
-            print("StudentFeeListAPIView Exception")
-            print(type(e))
-            print(str(e))
-            print("=" * 80)
+            application_logger.exception(
+                "student_fee_list_failed",
+                error=str(e),
+            )
 
-            raise
+            return CustomResponse.errorResponse(
+                description="Internal server error."
+            )
+
+
+
 class StudentFeeDetailAPIView(APIView):
 
     permission_classes = [
