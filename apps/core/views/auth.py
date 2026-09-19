@@ -125,7 +125,10 @@ class ADMINSendOTPAPIView(APIView):
 
         try:
 
-            otp = generate_otp()
+            if settings.DEBUG:
+                otp = "1234"
+            else:
+                otp = generate_otp()
 
             send_otp_to_mobile(
                 otp,
@@ -515,7 +518,10 @@ class SendOTPAPIView(APIView):
                 invalidated_count=invalidated_count,
             )
 
-            otp = generate_otp()
+            if settings.DEBUG:
+                otp = "1234"
+            else:
+                otp = generate_otp()
 
             user = UserMaster.objects.filter(
                 mobile=mobile,
