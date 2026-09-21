@@ -211,6 +211,10 @@ class FeeCollectionPlan(AuditModel):
         choices=PlanType.choices,
     )
 
+    is_active = models.BooleanField(
+        default=True,
+    )
+
     class Meta:
         db_table = "fee_collection_plans"
 
@@ -245,6 +249,11 @@ class FeeInstallment(AuditModel):
 
     order = models.PositiveIntegerField(
         default=1,
+    )
+    allocation_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
     )
 
     class Meta:

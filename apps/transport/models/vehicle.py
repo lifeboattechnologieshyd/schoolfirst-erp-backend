@@ -420,6 +420,12 @@ class RouteStop(AuditModel):
         default=0,
         help_text="Distance in kilometres",
     )
+    distance_from_school = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=0,
+        help_text="Distance from school in kilometres",
+    )
 
     estimated_travel_time = models.PositiveIntegerField(
         null=True,

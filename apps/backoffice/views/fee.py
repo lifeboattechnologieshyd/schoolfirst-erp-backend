@@ -1,6 +1,7 @@
 import uuid
 from decimal import Decimal
 
+from django.utils.dateparse import parse_date
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
@@ -11,7 +12,8 @@ from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from shared.utils.fee import generate_student_fees
 from shared.utils.logger import application_logger
-
+from decimal import Decimal, InvalidOperation
+from django.db import transaction
 
 class CreateFeeTypeAPIView(APIView):
 
@@ -898,6 +900,66 @@ class DeleteFeeTemplateItemAPIView(APIView):
             description="Fee template item deleted successfully.",
         )
 
+# class CreateFeeCollectionPlanAPIView(APIView):
+#
+#     permission_classes = [
+#         IsAuthenticated,
+#         HasPermission,
+#     ]
+#
+#     required_permission = "fee_collection_plan.create"
+#
+#     def post(self, request):
+#
+#         school = request.school
+#
+#         fee_template = FeeTemplate.objects.filter(
+#             id=request.data.get("fee_template_id"),
+#             school=school,
+#         ).first()
+#
+#         if fee_template is None:
+#
+#             return CustomResponse.errorResponse(
+#                 description="Fee template not found.",
+#             )
+#
+#         if FeeCollectionPlan.objects.filter(
+#             fee_template=fee_template,
+#         ).exists():
+#
+#             return CustomResponse.errorResponse(
+#                 description="Collection plan already exists.",
+#             )
+#
+#         plan_type = request.data.get(
+#             "plan_type",
+#         )
+#
+#         if plan_type not in FeeCollectionPlan.PlanType.values:
+#
+#             return CustomResponse.errorResponse(
+#                 description="Invalid plan type.",
+#             )
+#
+#         collection_plan = FeeCollectionPlan.objects.create(
+#
+#             fee_template=fee_template,
+#
+#             plan_type=plan_type,
+#
+#         )
+#
+#         return CustomResponse.successResponse(
+#
+#             description="Fee collection plan created successfully.",
+#
+#             data={
+#                 "id": str(collection_plan.id),
+#             },
+#
+#         )
+
 class CreateFeeCollectionPlanAPIView(APIView):
 
     permission_classes = [
@@ -907,56 +969,428 @@ class CreateFeeCollectionPlanAPIView(APIView):
 
     required_permission = "fee_collection_plan.create"
 
+    @transaction.atomic
     def post(self, request):
 
         school = request.school
 
-        fee_template = FeeTemplate.objects.filter(
-            id=request.data.get("fee_template_id"),
-            school=school,
-        ).first()
-
-        if fee_template is None:
-
+        if not school:
             return CustomResponse.errorResponse(
-                description="Fee template not found.",
+                description="School is required.",
             )
 
-        if FeeCollectionPlan.objects.filter(
-            fee_template=fee_template,
-        ).exists():
+        try:
+            # ---------------------------------------------------------
+            # 1. Validate Fee Template
+            # ---------------------------------------------------------
 
-            return CustomResponse.errorResponse(
-                description="Collection plan already exists.",
+            fee_template_id = request.data.get(
+                "fee_template_id",
             )
 
-        plan_type = request.data.get(
-            "plan_type",
-        )
+            if not fee_template_id:
+                return CustomResponse.errorResponse(
+                    description="Fee template is required.",
+                )
 
-        if plan_type not in FeeCollectionPlan.PlanType.values:
-
-            return CustomResponse.errorResponse(
-                description="Invalid plan type.",
+            fee_template = (
+                FeeTemplate.objects
+                .filter(
+                    id=fee_template_id,
+                    school=school,
+                    is_active=True,
+                )
+                .first()
             )
 
-        collection_plan = FeeCollectionPlan.objects.create(
+            if not fee_template:
+                return CustomResponse.errorResponse(
+                    description="Fee template not found.",
+                )
 
-            fee_template=fee_template,
+            # ---------------------------------------------------------
+            # 2. Check Collection Plan
+            # ---------------------------------------------------------
 
-            plan_type=plan_type,
+            if FeeCollectionPlan.objects.filter(
+                fee_template=fee_template,
+            ).exists():
 
-        )
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Collection plan already exists "
+                        "for this fee template."
+                    ),
+                )
 
-        return CustomResponse.successResponse(
+            # ---------------------------------------------------------
+            # 3. Validate Name
+            # ---------------------------------------------------------
 
-            description="Fee collection plan created successfully.",
+            name = str(
+                request.data.get(
+                    "name",
+                    "",
+                )
+            ).strip()
 
-            data={
-                "id": str(collection_plan.id),
-            },
+            if not name:
+                return CustomResponse.errorResponse(
+                    description="Collection plan name is required.",
+                )
 
-        )
+            # ---------------------------------------------------------
+            # 4. Validate Plan Type
+            # ---------------------------------------------------------
+
+            plan_type = request.data.get(
+                "plan_type",
+            )
+
+            if plan_type not in FeeCollectionPlan.PlanType.values:
+
+                return CustomResponse.errorResponse(
+                    description="Invalid plan type.",
+                )
+
+            # ---------------------------------------------------------
+            # 5. Validate Active Status
+            # ---------------------------------------------------------
+
+            is_active = request.data.get(
+                "is_active",
+                True,
+            )
+
+            if not isinstance(
+                is_active,
+                bool,
+            ):
+
+                return CustomResponse.errorResponse(
+                    description="Invalid active status.",
+                )
+
+            # ---------------------------------------------------------
+            # 6. Validate Installments
+            # ---------------------------------------------------------
+
+            installments_data = request.data.get(
+                "installments",
+                [],
+            )
+
+            if not isinstance(
+                installments_data,
+                list,
+            ) or not installments_data:
+
+                return CustomResponse.errorResponse(
+                    description="At least one installment is required.",
+                )
+
+            total_allocation = Decimal("0")
+
+            installment_names = set()
+            installment_orders = set()
+
+            validated_installments = []
+
+            for index, installment_data in enumerate(
+                installments_data,
+                start=1,
+            ):
+
+                if not isinstance(
+                    installment_data,
+                    dict,
+                ):
+
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Invalid installment data at position {index}."
+                        ),
+                    )
+
+                # -----------------------------------------------------
+                # Installment name
+                # -----------------------------------------------------
+
+                installment_name = str(
+                    installment_data.get(
+                        "name",
+                        "",
+                    )
+                ).strip()
+
+                if not installment_name:
+
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "name is required."
+                        ),
+                    )
+
+                name_key = installment_name.lower()
+
+                if name_key in installment_names:
+
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "duplicate installment name."
+                        ),
+                    )
+
+                installment_names.add(
+                    name_key,
+                )
+
+                # -----------------------------------------------------
+                # Due date
+                # -----------------------------------------------------
+
+                due_date = installment_data.get(
+                    "due_date",
+                )
+
+                if not due_date:
+
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "due date is required."
+                        ),
+                    )
+
+                parsed_due_date = parse_date(
+                    str(due_date),
+                )
+
+                if not parsed_due_date:
+
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "invalid due date."
+                        ),
+                    )
+
+                # -----------------------------------------------------
+                # Order
+                # -----------------------------------------------------
+
+                order = installment_data.get(
+                    "order",
+                    index,
+                )
+
+                try:
+                    order = int(order)
+                except (TypeError, ValueError):
+
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "invalid order."
+                        ),
+                    )
+
+                if order <= 0:
+
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "order must be greater than 0."
+                        ),
+                    )
+
+                if order in installment_orders:
+
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "duplicate order."
+                        ),
+                    )
+
+                installment_orders.add(
+                    order,
+                )
+
+                # -----------------------------------------------------
+                # Allocation percentage
+                # -----------------------------------------------------
+
+                allocation = installment_data.get(
+                    "allocation_percentage",
+                    0,
+                )
+
+                try:
+                    allocation = Decimal(
+                        str(allocation)
+                    )
+                except (InvalidOperation, ValueError):
+
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "invalid allocation percentage."
+                        ),
+                    )
+
+                if allocation < 0 or allocation > 100:
+
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "allocation percentage must be "
+                            "between 0 and 100."
+                        ),
+                    )
+
+                total_allocation += allocation
+
+                validated_installments.append(
+                    {
+                        "name": installment_name,
+                        "due_date": parsed_due_date,
+                        "order": order,
+                        "allocation_percentage": allocation,
+                    }
+                )
+
+            # ---------------------------------------------------------
+            # 7. Allocation must be exactly 100%
+            # ---------------------------------------------------------
+
+            if total_allocation != Decimal("100"):
+
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Total installment allocation must be 100%. "
+                        f"Current allocation is {total_allocation}%."
+                    ),
+                )
+
+            # ---------------------------------------------------------
+            # 8. Get Fee Template Items
+            # ---------------------------------------------------------
+
+            template_items = list(
+                fee_template.items.all()
+            )
+
+            if not template_items:
+
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Fee template does not contain "
+                        "any fee items."
+                    ),
+                )
+
+            # ---------------------------------------------------------
+            # 9. Create Collection Plan
+            # ---------------------------------------------------------
+
+            collection_plan = FeeCollectionPlan.objects.create(
+                fee_template=fee_template,
+                name=name,
+                plan_type=plan_type,
+                is_active=is_active,
+            )
+
+            # ---------------------------------------------------------
+            # 10. Create Installments
+            #     + Installment Items
+            # ---------------------------------------------------------
+
+            created_installments = []
+
+            for installment_data in validated_installments:
+
+                installment = FeeInstallment.objects.create(
+                    collection_plan=collection_plan,
+                    name=installment_data["name"],
+                    due_date=installment_data["due_date"],
+                    order=installment_data["order"],
+                    allocation_percentage=(
+                        installment_data[
+                            "allocation_percentage"
+                        ]
+                    ),
+                )
+
+                created_installments.append(
+                    installment
+                )
+
+                # -----------------------------------------------------
+                # Create FeeInstallmentItems
+                # -----------------------------------------------------
+
+                for template_item in template_items:
+
+                    amount = (
+                        template_item.amount
+                        * installment_data[
+                            "allocation_percentage"
+                        ]
+                        / Decimal("100")
+                    )
+
+                    FeeInstallmentItem.objects.create(
+                        installment=installment,
+                        fee_template_item=template_item,
+                        amount=amount,
+                    )
+
+            # ---------------------------------------------------------
+            # 11. Response
+            # ---------------------------------------------------------
+
+            return CustomResponse.successResponse(
+                description=(
+                    "Fee collection plan created successfully."
+                ),
+                data={
+                    "id": str(collection_plan.id),
+                    "name": collection_plan.name,
+                    "plan_type": collection_plan.plan_type,
+                    "is_active": collection_plan.is_active,
+                    "installments": [
+                        {
+                            "id": str(installment.id),
+                            "name": installment.name,
+                            "due_date": installment.due_date,
+                            "order": installment.order,
+                            "allocation_percentage": (
+                                installment.allocation_percentage
+                            ),
+                        }
+                        for installment in created_installments
+                    ],
+                },
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "fee_collection_plan_create_failed",
+                error=str(e),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Failed to create fee collection plan."
+                ),
+            )
+
+
 
 class FeeCollectionPlanListAPIView(APIView):
 
@@ -3295,3 +3729,4 @@ class PendingStudentFeeAPIView(APIView):
             }
 
         )
+
