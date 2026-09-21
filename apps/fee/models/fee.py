@@ -205,6 +205,9 @@ class FeeCollectionPlan(AuditModel):
         on_delete=models.CASCADE,
         related_name="collection_plan",
     )
+    name = models.CharField(
+        max_length=100,
+    )
 
     plan_type = models.CharField(
         max_length=20,
