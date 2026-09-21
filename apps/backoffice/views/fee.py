@@ -346,9 +346,15 @@ class FeeTemplateListAPIView(APIView):
 
         school = request.school
 
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required.",
+            )
+
         queryset = FeeTemplate.objects.select_related(
             "academic_year",
             "grade",
+            "collection_plan",
         ).filter(
             school=school,
         )
@@ -366,33 +372,41 @@ class FeeTemplateListAPIView(APIView):
         )
 
         if academic_year_id:
-
             queryset = queryset.filter(
                 academic_year_id=academic_year_id,
             )
 
         if grade_id:
-
             queryset = queryset.filter(
                 grade_id=grade_id,
             )
 
         if search:
-
             queryset = queryset.filter(
                 name__icontains=search,
             )
 
+        total = queryset.count()
+
         paginator = CustomPageNumberPagination()
 
         page = paginator.paginate_queryset(
-            queryset.order_by("grade__display_order"),
+            queryset.order_by(
+                "grade__display_order",
+                "name",
+            ),
             request,
         )
 
         data = []
 
         for obj in page:
+
+            collection_plan = getattr(
+                obj,
+                "collection_plan",
+                None,
+            )
 
             data.append({
 
@@ -401,32 +415,32 @@ class FeeTemplateListAPIView(APIView):
                 "name": obj.name,
 
                 "academic_year": {
-
                     "id": str(obj.academic_year.id),
-
                     "name": obj.academic_year.name,
-
                 },
 
                 "grade": {
-
                     "id": str(obj.grade.id),
-
                     "name": obj.grade.name,
-
                 },
 
                 "is_active": obj.is_active,
 
+                "collection_plan": (
+                    {
+                        "id": str(collection_plan.id),
+                        "name": collection_plan.name,
+                        "plan_type": collection_plan.plan_type,
+                        "is_active": collection_plan.is_active,
+                    }
+                    if collection_plan
+                    else None
+                ),
             })
 
         return CustomResponse.successResponse(
-            total=queryset.count(),
-
-
-            data=data
-
-
+            total=total,
+            data=data,
         )
 
 class FeeTemplateDetailAPIView(APIView):
@@ -1391,7 +1405,6 @@ class CreateFeeCollectionPlanAPIView(APIView):
             )
 
 
-
 class FeeCollectionPlanListAPIView(APIView):
 
     permission_classes = [
@@ -1405,10 +1418,17 @@ class FeeCollectionPlanListAPIView(APIView):
 
         school = request.school
 
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required.",
+            )
+
         queryset = FeeCollectionPlan.objects.select_related(
             "fee_template",
             "fee_template__grade",
             "fee_template__academic_year",
+        ).prefetch_related(
+            "installments__items__fee_template_item__fee_type",
         ).filter(
             fee_template__school=school,
         )
@@ -1421,22 +1441,34 @@ class FeeCollectionPlanListAPIView(APIView):
             "grade_id",
         )
 
-        if academic_year_id:
+        search = request.GET.get(
+            "search",
+        )
 
+        if academic_year_id:
             queryset = queryset.filter(
                 fee_template__academic_year_id=academic_year_id,
             )
 
         if grade_id:
-
             queryset = queryset.filter(
                 fee_template__grade_id=grade_id,
             )
 
+        if search:
+            queryset = queryset.filter(
+                name__icontains=search,
+            )
+
+        total = queryset.count()
+
         paginator = CustomPageNumberPagination()
 
         page = paginator.paginate_queryset(
-            queryset,
+            queryset.order_by(
+                "fee_template__grade__display_order",
+                "name",
+            ),
             request,
         )
 
@@ -1444,30 +1476,88 @@ class FeeCollectionPlanListAPIView(APIView):
 
         for obj in page:
 
+            installments = []
+
+            for installment in obj.installments.all():
+
+                items = []
+
+                for item in installment.items.all():
+
+                    items.append({
+                        "id": str(item.id),
+
+                        "fee_template_item_id": str(
+                            item.fee_template_item.id
+                        ),
+
+                        "fee_type": {
+                            "id": str(
+                                item.fee_template_item.fee_type.id
+                            ),
+                            "name": (
+                                item.fee_template_item.fee_type.name
+                            ),
+                        },
+
+                        "amount": item.amount,
+                    })
+
+                installments.append({
+                    "id": str(installment.id),
+
+                    "name": installment.name,
+
+                    "due_date": installment.due_date,
+
+                    "order": installment.order,
+
+                    "allocation_percentage": (
+                        installment.allocation_percentage
+                    ),
+
+                    "items": items,
+                })
+
             data.append({
 
                 "id": str(obj.id),
 
+                "name": obj.name,
+
                 "plan_type": obj.plan_type,
 
+                "is_active": obj.is_active,
+
                 "fee_template": {
-
                     "id": str(obj.fee_template.id),
-
                     "name": obj.fee_template.name,
-
                 },
 
-                "grade": obj.fee_template.grade.name,
+                "grade": {
+                    "id": str(obj.fee_template.grade.id),
+                    "name": obj.fee_template.grade.name,
+                },
 
-                "academic_year": obj.fee_template.academic_year.name,
+                "academic_year": {
+                    "id": str(
+                        obj.fee_template.academic_year.id
+                    ),
+                    "name": (
+                        obj.fee_template.academic_year.name
+                    ),
+                },
 
+                "installments": installments,
             })
 
         return CustomResponse.successResponse(
             data=data,
-            total=queryset.count(),
+            total=total,
         )
+
+
+
 class FeeCollectionPlanDetailAPIView(APIView):
 
     permission_classes = [
@@ -1544,6 +1634,7 @@ class UpdateFeeCollectionPlanAPIView(APIView):
 
     required_permission = "fee_collection_plan.update"
 
+    @transaction.atomic
     def put(
         self,
         request,
@@ -1552,37 +1643,385 @@ class UpdateFeeCollectionPlanAPIView(APIView):
 
         school = request.school
 
-        collection_plan = FeeCollectionPlan.objects.select_related(
-            "fee_template",
-        ).filter(
-            id=collection_plan_id,
-            fee_template__school=school,
-        ).first()
-
-        if collection_plan is None:
-
+        if not school:
             return CustomResponse.errorResponse(
-                description="Collection plan not found.",
+                description="School is required.",
             )
 
-        plan_type = request.data.get(
-            "plan_type",
-            collection_plan.plan_type,
-        )
+        try:
 
-        if plan_type not in FeeCollectionPlan.PlanType.values:
+            collection_plan = FeeCollectionPlan.objects.select_related(
+                "fee_template",
+            ).filter(
+                id=collection_plan_id,
+                fee_template__school=school,
+            ).first()
 
-            return CustomResponse.errorResponse(
-                description="Invalid plan type.",
+            if collection_plan is None:
+                return CustomResponse.errorResponse(
+                    description="Collection plan not found.",
+                )
+
+            # ---------------------------------
+            # Basic fields
+            # ---------------------------------
+
+            name = str(
+                request.data.get(
+                    "name",
+                    collection_plan.name,
+                )
+            ).strip()
+
+            if not name:
+                return CustomResponse.errorResponse(
+                    description="Collection plan name is required.",
+                )
+
+            plan_type = request.data.get(
+                "plan_type",
+                collection_plan.plan_type,
             )
 
-        collection_plan.plan_type = plan_type
+            if plan_type not in FeeCollectionPlan.PlanType.values:
+                return CustomResponse.errorResponse(
+                    description="Invalid plan type.",
+                )
 
-        collection_plan.save()
+            is_active = request.data.get(
+                "is_active",
+                collection_plan.is_active,
+            )
 
-        return CustomResponse.successResponse(
-            description="Collection plan updated successfully.",
-        )
+            if not isinstance(is_active, bool):
+                return CustomResponse.errorResponse(
+                    description="Invalid active status.",
+                )
+
+            # ---------------------------------
+            # Installments
+            # ---------------------------------
+
+            installments_data = request.data.get(
+                "installments",
+            )
+
+            if installments_data is None:
+                return CustomResponse.errorResponse(
+                    description="Installments are required.",
+                )
+
+            if (
+                not isinstance(installments_data, list)
+                or not installments_data
+            ):
+                return CustomResponse.errorResponse(
+                    description="At least one installment is required.",
+                )
+
+            total_allocation = Decimal("0")
+
+            installment_names = set()
+            installment_orders = set()
+
+            validated_installments = []
+
+            for index, installment_data in enumerate(
+                installments_data,
+                start=1,
+            ):
+
+                if not isinstance(
+                    installment_data,
+                    dict,
+                ):
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Invalid installment data at position {index}."
+                        ),
+                    )
+
+                # -------------------------
+                # Name
+                # -------------------------
+
+                installment_name = str(
+                    installment_data.get(
+                        "name",
+                        "",
+                    )
+                ).strip()
+
+                if not installment_name:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "name is required."
+                        ),
+                    )
+
+                name_key = installment_name.lower()
+
+                if name_key in installment_names:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "duplicate installment name."
+                        ),
+                    )
+
+                installment_names.add(name_key)
+
+                # -------------------------
+                # Due date
+                # -------------------------
+
+                due_date = installment_data.get(
+                    "due_date",
+                )
+
+                if not due_date:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "due date is required."
+                        ),
+                    )
+
+                parsed_due_date = parse_date(
+                    str(due_date),
+                )
+
+                if not parsed_due_date:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "invalid due date."
+                        ),
+                    )
+
+                # -------------------------
+                # Order
+                # -------------------------
+
+                order = installment_data.get(
+                    "order",
+                    index,
+                )
+
+                try:
+                    order = int(order)
+                except (TypeError, ValueError):
+
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "invalid order."
+                        ),
+                    )
+
+                if order <= 0:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "order must be greater than 0."
+                        ),
+                    )
+
+                if order in installment_orders:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "duplicate order."
+                        ),
+                    )
+
+                installment_orders.add(order)
+
+                # -------------------------
+                # Allocation
+                # -------------------------
+
+                allocation = installment_data.get(
+                    "allocation_percentage",
+                    0,
+                )
+
+                try:
+                    allocation = Decimal(
+                        str(allocation)
+                    )
+                except (
+                    InvalidOperation,
+                    ValueError,
+                ):
+
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "invalid allocation percentage."
+                        ),
+                    )
+
+                if allocation < 0 or allocation > 100:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Installment {index}: "
+                            "allocation percentage "
+                            "must be between 0 and 100."
+                        ),
+                    )
+
+                total_allocation += allocation
+
+                validated_installments.append(
+                    {
+                        "name": installment_name,
+                        "due_date": parsed_due_date,
+                        "order": order,
+                        "allocation_percentage": allocation,
+                    }
+                )
+
+            # ---------------------------------
+            # Allocation validation
+            # ---------------------------------
+
+            if total_allocation != Decimal("100"):
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Total installment allocation "
+                        "must be 100%. "
+                        f"Current allocation is "
+                        f"{total_allocation}%."
+                    ),
+                )
+
+            # ---------------------------------
+            # Fee template items
+            # ---------------------------------
+
+            template_items = list(
+                collection_plan
+                .fee_template
+                .items
+                .all()
+            )
+
+            if not template_items:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Fee template does not contain "
+                        "any fee items."
+                    ),
+                )
+
+            # ---------------------------------
+            # Update collection plan
+            # ---------------------------------
+
+            collection_plan.name = name
+            collection_plan.plan_type = plan_type
+            collection_plan.is_active = is_active
+
+            collection_plan.save(
+                update_fields=[
+                    "name",
+                    "plan_type",
+                    "is_active",
+                ]
+            )
+
+            # ---------------------------------
+            # Replace installments
+            # ---------------------------------
+
+            FeeInstallment.objects.filter(
+                collection_plan=collection_plan,
+            ).delete()
+
+            created_installments = []
+
+            for installment_data in validated_installments:
+
+                installment = FeeInstallment.objects.create(
+                    collection_plan=collection_plan,
+                    name=installment_data["name"],
+                    due_date=installment_data["due_date"],
+                    order=installment_data["order"],
+                    allocation_percentage=(
+                        installment_data[
+                            "allocation_percentage"
+                        ]
+                    ),
+                )
+
+                created_installments.append(
+                    installment
+                )
+
+                # -------------------------
+                # Create installment items
+                # -------------------------
+
+                for template_item in template_items:
+
+                    amount = (
+                        template_item.amount
+                        * installment_data[
+                            "allocation_percentage"
+                        ]
+                        / Decimal("100")
+                    )
+
+                    FeeInstallmentItem.objects.create(
+                        installment=installment,
+                        fee_template_item=template_item,
+                        amount=amount,
+                    )
+
+            return CustomResponse.successResponse(
+                description=(
+                    "Collection plan updated successfully."
+                ),
+                data={
+                    "id": str(collection_plan.id),
+                    "name": collection_plan.name,
+                    "plan_type": collection_plan.plan_type,
+                    "is_active": collection_plan.is_active,
+                    "installments": [
+                        {
+                            "id": str(installment.id),
+                            "name": installment.name,
+                            "due_date": installment.due_date,
+                            "order": installment.order,
+                            "allocation_percentage": (
+                                installment.allocation_percentage
+                            ),
+                        }
+                        for installment in created_installments
+                    ],
+                },
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "fee_collection_plan_update_failed",
+                error=str(e),
+                collection_plan_id=str(
+                    collection_plan_id
+                ),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Failed to update collection plan."
+                ),
+            )
+
+
 
 class CreateFeeInstallmentAPIView(APIView):
 
