@@ -1,6 +1,7 @@
 import uuid
 from decimal import Decimal
 
+from django.db.models import Q
 from django.utils.dateparse import parse_date
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -3576,7 +3577,7 @@ class StudentFeeListAPIView(APIView):
                                     assignment.assigned_by_id
                                 ),
                                 "name": (
-                                    assignment.assigned_by.name
+                                    assignment.assigned_by.first_name
                                     if assignment.assigned_by
                                     else None
                                 ),
