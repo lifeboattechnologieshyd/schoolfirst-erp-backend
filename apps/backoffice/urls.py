@@ -39,7 +39,7 @@ from apps.backoffice.views.school import AcademicYearListAPIView, CreateAcademic
     SubjectUpdateAPIView, SchoolAPIView, SchoolUpdateAPIView, BranchAPIView, BranchLISTAPIView, BranchUpdateAPIView, \
     CreateSchoolDocumentAPIView, SchoolDocumentListAPIView, UpdateSchoolDocumentAPIView, \
     CreateSchoolDocumentTypeAPIView, SchoolDocumentTypeListAPIView, UpdateSchoolDocumentTypeAPIView, \
-    UpdateStudentAPIView
+    UpdateStudentAPIView, GradeSubjectAssignAPIView
 from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdminRequestOTPAPIView, \
     SuperAdminVerifyOTPAPIView, SchoolLeadUpdateAPIView, OrganizationListAPIView, CreateOrganizationAPIView, \
     UpdateOrganizationAPIView, SchoolListAPIView, CreateSchoolAPIView, UpdateSchoolAPIView, CreateBranchAPIView, \
@@ -342,6 +342,8 @@ urlpatterns = [
     path("subject",SubjectListAPIView.as_view(),),
 
     path("subject/<uuid:subject_id>",SubjectUpdateAPIView.as_view(),),
+
+    path("subject-assign-grade",GradeSubjectAssignAPIView.as_view(),),
 
     # ====================================
     #  Homework   APIs

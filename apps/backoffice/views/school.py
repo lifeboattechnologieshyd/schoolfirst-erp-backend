@@ -7,7 +7,7 @@ from apps.core.models import Roles, UserMaster, UserRoles
 from apps.fee.models import FeeTemplate, StudentFeeAssignment, FeeConcession
 from apps.school.models import School
 from apps.school.models.school import AcademicYear, Grade, Section, Student, StudentDocument, Staff, StaffDocument, \
-    Branch, Subject, SchoolDocumentType, SchoolDocument
+    Branch, Subject, SchoolDocumentType, SchoolDocument, SubjectGrade
 from shared.enums.roles import RolesEnum
 from shared.helpers.rbac import check_permission
 from shared.helpers.student import get_or_create_parent
@@ -4617,7 +4617,104 @@ class SubjectUpdateAPIView(APIView):
                 description="Something went wrong while updating subject."
             )
 
+class GradeSubjectAssignAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
 
+    required_permission = "subject.assign"
+
+    def post(self, request):
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required."
+            )
+
+        grade_id = request.data.get("grade_id")
+        subject_ids = request.data.get("subject_ids", [])
+
+        if not grade_id:
+            return CustomResponse.errorResponse(
+                description="Grade is required."
+            )
+
+        if not subject_ids:
+            return CustomResponse.errorResponse(
+                description="At least one subject is required."
+            )
+
+        try:
+            grade = (
+                Grade.objects
+                .filter(
+                    id=grade_id,
+                    school=school,
+                    status=Grade.Status.ACTIVE,
+                )
+                .first()
+            )
+
+            if not grade:
+                return CustomResponse.errorResponse(
+                    description="Grade not found."
+                )
+
+            subjects = Subject.objects.filter(
+                id__in=subject_ids,
+                school=school,
+                academic_year=grade.academic_year,
+                status=Subject.Status.ACTIVE,
+            )
+
+            if subjects.count() != len(set(subject_ids)):
+                return CustomResponse.errorResponse(
+                    description="One or more subjects are invalid."
+                )
+
+            existing_subject_ids = set(
+                SubjectGrade.objects.filter(
+                    grade=grade,
+                    subject_id__in=subject_ids,
+                ).values_list("subject_id", flat=True)
+            )
+
+            subject_grade_objects = [
+                SubjectGrade(
+                    grade=grade,
+                    subject=subject,
+                )
+                for subject in subjects
+                if subject.id not in existing_subject_ids
+            ]
+
+            if subject_grade_objects:
+                SubjectGrade.objects.bulk_create(
+                    subject_grade_objects
+                )
+
+            return CustomResponse.successResponse(
+                data={
+                    "grade_id": grade.id,
+                    "grade_name": grade.name,
+                    "assigned_subjects": len(subject_grade_objects),
+                },
+                description="Subjects assigned to grade successfully.",
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "grade_subject_assignment_failed",
+                error=str(e),
+                school_id=str(school.id),
+                grade_id=str(grade_id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to assign subjects to grade."
+            )
 
 class CreateSchoolDocumentTypeAPIView(APIView):
 
