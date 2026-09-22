@@ -10,7 +10,12 @@ from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
 from django.db import transaction
+from io import BytesIO
 
+from django.http import HttpResponse
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill
+from openpyxl.utils import get_column_letter
 
 class ExaminationTypeCreateAPIView(APIView):
     permission_classes = [IsAuthenticated,HasPermission]
@@ -1016,6 +1021,7 @@ class ExaminationListAPIView(APIView):
                 )
                 .prefetch_related(
                     "examination_grades__grade",
+                    "examination_schedules__subject",
                 )
             )
 
@@ -1054,14 +1060,50 @@ class ExaminationListAPIView(APIView):
 
             for examination in queryset:
 
-                grades = [
-                    {
-                        "id": str(examination_grade.grade.id),
-                        "name": examination_grade.grade.name,
-                    }
-                    for examination_grade
-                    in examination.examination_grades.all()
-                ]
+                # -------------------------
+                # Grades
+                # -------------------------
+
+                grades = []
+
+                for examination_grade in examination.examination_grades.all():
+                    grade = examination_grade.grade
+
+                    subjects = [
+                        {
+                            "subject_id": str(schedule.subject_id),
+                            "subject_name": schedule.subject.name,
+
+                            "exam_date": schedule.exam_date,
+                            "start_time": schedule.start_time,
+                            "end_time": schedule.end_time,
+
+                            "room_number": schedule.room_number,
+
+                            "maximum_marks": schedule.maximum_marks,
+                            "passing_marks": schedule.passing_marks,
+
+                            "internal_percentage": schedule.internal_percentage,
+                            "external_percentage": schedule.external_percentage,
+                            "practical_percentage": schedule.practical_percentage,
+
+                            "instructions": schedule.instructions,
+                        }
+                        for schedule in examination.examination_schedules.all()
+                        if schedule.grade_id == grade.id
+                    ]
+
+                    grades.append({
+                        "id": str(grade.id),
+                        "name": grade.name,
+                        "subjects": subjects,
+                    })
+
+                    grades.append({
+                        "id": str(grade.id),
+                        "name": grade.name,
+                        "subjects": list(subject_map.values()),
+                    })
 
                 data.append({
                     "id": str(examination.id),
@@ -2168,6 +2210,9 @@ class ExaminationScheduleListAPIView(APIView):
                     "maximum_marks": schedule.maximum_marks,
                     "passing_marks": schedule.passing_marks,
 
+                    "internal_percentage":schedule.internal_percentage,
+
+
                     "instructions": schedule.instructions,
                 }
                 for schedule in schedules
@@ -2540,7 +2585,282 @@ class ExaminationStatusUpdateAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Failed to update examination status."
             )
+class ExaminationMarksTemplateAPIView(APIView):
 
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "examination_result.create"
+
+    def get(self, request, schedule_id):
+
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required."
+            )
+
+        try:
+            # --------------------------------
+            # Get examination schedule
+            # --------------------------------
+
+            schedule = (
+                ExaminationSchedule.objects
+                .select_related(
+                    "examination",
+                    "grade",
+                    "subject",
+                )
+                .filter(
+                    id=schedule_id,
+                    examination__school=school,
+                )
+                .first()
+            )
+
+            if not schedule:
+                return CustomResponse.errorResponse(
+                    description="Examination schedule not found."
+                )
+
+            examination = schedule.examination
+
+            if examination.status != Examination.Status.SCHEDULED:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Marks template can only be generated "
+                        "for a scheduled examination."
+                    )
+                )
+
+            # --------------------------------
+            # Get students
+            # --------------------------------
+
+            students = (
+                Student.objects
+                .filter(
+                    school=school,
+                    grade=schedule.grade,
+                )
+                .order_by("admission_number")
+            )
+
+            # --------------------------------
+            # Create workbook
+            # --------------------------------
+
+            workbook = Workbook()
+
+            worksheet = workbook.active
+            worksheet.title = "Marks"
+
+            # --------------------------------
+            # Headers
+            # --------------------------------
+
+            headers = [
+                "Admission No",
+                "Student Name",
+                "Marks Obtained",
+            ]
+
+            worksheet.append(headers)
+
+            # Header styling
+            header_fill = PatternFill(
+                fill_type="solid",
+                fgColor="1F4E78",
+            )
+
+            header_font = Font(
+                bold=True,
+                color="FFFFFF",
+            )
+
+            for cell in worksheet[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(
+                    horizontal="center"
+                )
+
+            # --------------------------------
+            # Student rows
+            # --------------------------------
+
+            for student in students:
+
+                worksheet.append([
+                    student.admission_number,
+                    student.name,
+                    None,
+                ])
+
+            # --------------------------------
+            # Column widths
+            # --------------------------------
+
+            column_widths = {
+                "A": 20,
+                "B": 30,
+                "C": 20,
+            }
+
+            for column, width in column_widths.items():
+                worksheet.column_dimensions[
+                    column
+                ].width = width
+
+            # --------------------------------
+            # Marks validation
+            # --------------------------------
+
+            if students.exists():
+
+                from openpyxl.worksheet.datavalidation import (
+                    DataValidation,
+                )
+
+                max_marks = schedule.maximum_marks
+
+                validation = DataValidation(
+                    type="decimal",
+                    operator="between",
+                    formula1="0",
+                    formula2=str(max_marks),
+                    allow_blank=True,
+                )
+
+                validation.error = (
+                    f"Marks must be between 0 and {max_marks}."
+                )
+
+                validation.errorTitle = "Invalid Marks"
+
+                validation.prompt = (
+                    f"Enter marks between 0 and {max_marks}."
+                )
+
+                validation.promptTitle = "Marks"
+
+                worksheet.add_data_validation(
+                    validation
+                )
+
+                validation.add(
+                    f"C2:C{students.count() + 1}"
+                )
+
+            # --------------------------------
+            # Freeze header
+            # --------------------------------
+
+            worksheet.freeze_panes = "A2"
+
+            # --------------------------------
+            # Add instructions sheet
+            # --------------------------------
+
+            instructions = workbook.create_sheet(
+                "Instructions"
+            )
+
+            instructions_data = [
+                ["Examination", examination.name],
+                ["Grade", schedule.grade.name],
+                ["Subject", schedule.subject.name],
+                ["Maximum Marks", schedule.maximum_marks],
+                ["Exam Date", schedule.exam_date],
+                [],
+                ["Instructions"],
+                [
+                    "Do not modify Admission No."
+                ],
+                [
+                    "Enter marks only in Marks Obtained column."
+                ],
+                [
+                    f"Marks must be between 0 and "
+                    f"{schedule.maximum_marks}."
+                ],
+                [
+                    "Do not change the column names in the Marks sheet."
+                ],
+            ]
+
+            for row in instructions_data:
+                instructions.append(row)
+
+            instructions.column_dimensions["A"].width = 35
+            instructions.column_dimensions["B"].width = 40
+
+            for cell in instructions["A"]:
+                cell.font = Font(bold=True)
+
+            # --------------------------------
+            # Generate Excel file
+            # --------------------------------
+
+            output = BytesIO()
+
+            workbook.save(output)
+
+            output.seek(0)
+
+            filename = (
+                f"{examination.name}_"
+                f"{schedule.grade.name}_"
+                f"{schedule.subject.name}_marks.xlsx"
+            )
+
+            # Remove unsafe filename characters
+            filename = (
+                filename
+                .replace("/", "_")
+                .replace("\\", "_")
+                .replace(" ", "_")
+            )
+
+            response = HttpResponse(
+                output.getvalue(),
+                content_type=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                ),
+            )
+
+            response[
+                "Content-Disposition"
+            ] = f'attachment; filename="{filename}"'
+
+            application_logger.info(
+                "examination_marks_template_generated",
+                school_id=str(school.id),
+                examination_id=str(examination.id),
+                schedule_id=str(schedule.id),
+                grade_id=str(schedule.grade_id),
+                subject_id=str(schedule.subject_id),
+            )
+
+            return response
+
+        except Exception as e:
+
+            application_logger.exception(
+                "examination_marks_template_generation_failed",
+                error=str(e),
+                schedule_id=str(schedule_id),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to generate marks template."
+            )
 
 class ExaminationMarksUploadAPIView(APIView):
     permission_classes = [IsAuthenticated,HasPermission,]
