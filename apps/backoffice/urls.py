@@ -474,7 +474,7 @@ urlpatterns = [
 
     path("exam/schedule/create",ExaminationScheduleCreateAPIView.as_view()),
 
-    path("exam/schedule",ExaminationScheduleListAPIView.as_view(),),
+    path("exam/schedule/<uuid:examination_id>",ExaminationScheduleListAPIView.as_view(),),
 
     path("exam/schedule/<uuid:schedule_id>",ExaminationScheduleUpdateAPIView.as_view(),),
 
