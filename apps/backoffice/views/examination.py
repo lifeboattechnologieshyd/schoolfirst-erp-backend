@@ -9,6 +9,7 @@ from apps.school.models.school import Branch, AcademicYear, Grade, Subject, Subj
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
+from django.db import transaction
 
 
 class ExaminationTypeCreateAPIView(APIView):
@@ -985,11 +986,16 @@ class ExaminationCreateAPIView(APIView):
 
 
 class ExaminationListAPIView(APIView):
-    permission_classes = [IsAuthenticated,HasPermission,]
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
 
     required_permission = "examination.view"
 
     def get(self, request):
+
         school = request.school
 
         if not school:
@@ -998,18 +1004,29 @@ class ExaminationListAPIView(APIView):
             )
 
         try:
-            queryset = Examination.objects.filter(
-                school=school
-            ).select_related(
-                "examination_type",
-                "academic_year",
-                "branch",
+            queryset = (
+                Examination.objects
+                .filter(
+                    school=school
+                )
+                .select_related(
+                    "examination_type",
+                    "academic_year",
+                    "branch",
+                )
+                .prefetch_related(
+                    "examination_grades__grade",
+                )
             )
 
             search = request.query_params.get("search")
             status = request.query_params.get("status")
-            academic_year_id = request.query_params.get("academic_year_id")
-            branch_id = request.query_params.get("branch_id")
+            academic_year_id = request.query_params.get(
+                "academic_year_id"
+            )
+            branch_id = request.query_params.get(
+                "branch_id"
+            )
 
             if search:
                 queryset = queryset.filter(
@@ -1017,7 +1034,9 @@ class ExaminationListAPIView(APIView):
                 )
 
             if status:
-                queryset = queryset.filter(status=status)
+                queryset = queryset.filter(
+                    status=status
+                )
 
             if academic_year_id:
                 queryset = queryset.filter(
@@ -1031,27 +1050,57 @@ class ExaminationListAPIView(APIView):
 
             queryset = queryset.order_by("-start_date")
 
-            data = [
-                {
-                    "id": examination.id,
+            data = []
+
+            for examination in queryset:
+
+                grades = [
+                    {
+                        "id": str(examination_grade.grade.id),
+                        "name": examination_grade.grade.name,
+                    }
+                    for examination_grade
+                    in examination.examination_grades.all()
+                ]
+
+                data.append({
+                    "id": str(examination.id),
                     "name": examination.name,
-                    "examination_type_id": examination.examination_type_id,
-                    "examination_type_name": examination.examination_type.name,
-                    "academic_year_id": examination.academic_year_id,
-                    "academic_year_name": examination.academic_year.name,
-                    "branch_id": examination.branch_id,
+
+                    "examination_type_id": str(
+                        examination.examination_type_id
+                    ),
+                    "examination_type_name": (
+                        examination.examination_type.name
+                    ),
+
+                    "academic_year_id": str(
+                        examination.academic_year_id
+                    ),
+                    "academic_year_name": (
+                        examination.academic_year.name
+                    ),
+
+                    "branch_id": (
+                        str(examination.branch_id)
+                        if examination.branch_id
+                        else None
+                    ),
                     "branch_name": (
                         examination.branch.name
                         if examination.branch
                         else None
                     ),
+
                     "start_date": examination.start_date,
                     "end_date": examination.end_date,
+                    "result_date": examination.result_date,
+
                     "description": examination.description,
                     "status": examination.status,
-                }
-                for examination in queryset
-            ]
+
+                    "grades": grades,
+                })
 
             return CustomResponse.successResponse(
                 data=data,
@@ -1059,6 +1108,7 @@ class ExaminationListAPIView(APIView):
             )
 
         except Exception as e:
+
             application_logger.exception(
                 "examination_list_failed",
                 error=str(e),
@@ -1070,12 +1120,19 @@ class ExaminationListAPIView(APIView):
             )
 
 
+
+
 class ExaminationUpdateAPIView(APIView):
-    permission_classes = [IsAuthenticated, HasPermission,]
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
 
     required_permission = "examination.update"
 
     def put(self, request, examination_id):
+
         school = request.school
 
         if not school:
@@ -1084,91 +1141,205 @@ class ExaminationUpdateAPIView(APIView):
             )
 
         try:
-            examination = Examination.objects.filter(
-                id=examination_id,
-                school=school,
-            ).first()
+            with transaction.atomic():
 
-            if not examination:
-                return CustomResponse.errorResponse(
-                    description="Examination not found."
+                examination = (
+                    Examination.objects
+                    .select_for_update()
+                    .filter(
+                        id=examination_id,
+                        school=school,
+                    )
+                    .first()
                 )
 
-            name = request.data.get("name")
-            examination_type_id = request.data.get("examination_type_id")
-            academic_year_id = request.data.get("academic_year_id")
-            branch_id = request.data.get("branch_id")
-            start_date = request.data.get("start_date")
-            end_date = request.data.get("end_date")
-            description = request.data.get("description")
-
-            if name is not None:
-                name = name.strip()
-
-                if not name:
+                if not examination:
                     return CustomResponse.errorResponse(
-                        description="Examination name is required."
+                        description="Examination not found."
                     )
 
-                examination.name = name
+                name = request.data.get("name")
+                examination_type_id = request.data.get(
+                    "examination_type_id"
+                )
+                academic_year_id = request.data.get(
+                    "academic_year_id"
+                )
+                branch_id = request.data.get("branch_id")
+                start_date = request.data.get("start_date")
+                end_date = request.data.get("end_date")
+                result_date = request.data.get("result_date")
+                description = request.data.get("description")
 
-            if examination_type_id is not None:
-                examination_type = ExaminationType.objects.filter(
-                    id=examination_type_id,
-                    school=school,
-                ).first()
+                # --------------------------------
+                # Name
+                # --------------------------------
 
-                if not examination_type:
-                    return CustomResponse.errorResponse(
-                        description="Invalid examination type."
-                    )
+                if name is not None:
 
-                examination.examination_type = examination_type
+                    name = name.strip()
 
-            if academic_year_id is not None:
-                academic_year = AcademicYear.objects.filter(
-                    id=academic_year_id,
-                    school=school,
-                ).first()
-
-                if not academic_year:
-                    return CustomResponse.errorResponse(
-                        description="Invalid academic year."
-                    )
-
-                examination.academic_year = academic_year
-
-            if branch_id is not None:
-                if branch_id:
-                    branch = Branch.objects.filter(
-                        id=branch_id,
-                        school=school,
-                    ).first()
-
-                    if not branch:
+                    if not name:
                         return CustomResponse.errorResponse(
-                            description="Invalid branch."
+                            description="Examination name is required."
                         )
 
-                    examination.branch = branch
-                else:
-                    examination.branch = None
+                    examination.name = name
 
-            if start_date is not None:
-                examination.start_date = start_date
+                # --------------------------------
+                # Examination Type
+                # --------------------------------
 
-            if end_date is not None:
-                examination.end_date = end_date
+                if examination_type_id is not None:
 
-            if examination.start_date > examination.end_date:
-                return CustomResponse.errorResponse(
-                    description="Start date cannot be after end date."
-                )
+                    examination_type = (
+                        ExaminationType.objects
+                        .filter(
+                            id=examination_type_id,
+                            school=school,
+                        )
+                        .first()
+                    )
 
-            if description is not None:
-                examination.description = description
+                    if not examination_type:
+                        return CustomResponse.errorResponse(
+                            description="Invalid examination type."
+                        )
 
-            examination.save()
+                    examination.examination_type = examination_type
+
+                # --------------------------------
+                # Academic Year
+                # --------------------------------
+
+                if academic_year_id is not None:
+
+                    academic_year = (
+                        AcademicYear.objects
+                        .filter(
+                            id=academic_year_id,
+                            school=school,
+                        )
+                        .first()
+                    )
+
+                    if not academic_year:
+                        return CustomResponse.errorResponse(
+                            description="Invalid academic year."
+                        )
+
+                    examination.academic_year = academic_year
+
+                # --------------------------------
+                # Branch
+                # --------------------------------
+
+                if branch_id is not None:
+
+                    if branch_id:
+
+                        branch = (
+                            Branch.objects
+                            .filter(
+                                id=branch_id,
+                                school=school,
+                            )
+                            .first()
+                        )
+
+                        if not branch:
+                            return CustomResponse.errorResponse(
+                                description="Invalid branch."
+                            )
+
+                        examination.branch = branch
+
+                    else:
+                        examination.branch = None
+
+                # --------------------------------
+                # Dates
+                # --------------------------------
+
+                if start_date is not None:
+                    examination.start_date = start_date
+
+                if end_date is not None:
+                    examination.end_date = end_date
+
+                if result_date is not None:
+                    examination.result_date = result_date
+
+                if examination.start_date > examination.end_date:
+                    return CustomResponse.errorResponse(
+                        description="Start date cannot be after end date."
+                    )
+
+                if result_date is not None:
+                    if examination.result_date < examination.end_date:
+                        return CustomResponse.errorResponse(
+                            description="Result date cannot be before examination end date."
+                        )
+
+                # --------------------------------
+                # Description
+                # --------------------------------
+
+                if description is not None:
+                    examination.description = description
+
+                # --------------------------------
+                # Grades
+                # --------------------------------
+
+                grade_ids = request.data.get("grade_ids")
+
+                if grade_ids is not None:
+
+                    if not isinstance(grade_ids, list):
+                        return CustomResponse.errorResponse(
+                            description="grade_ids must be an array."
+                        )
+
+                    grade_ids = list(set(grade_ids))
+
+                    if not grade_ids:
+                        return CustomResponse.errorResponse(
+                            description="At least one grade is required."
+                        )
+
+                    grades = Grade.objects.filter(
+                        id__in=grade_ids,
+                        school=school,
+                        academic_year=examination.academic_year,
+                        status=Grade.Status.ACTIVE,
+                    )
+
+                    if grades.count() != len(grade_ids):
+                        return CustomResponse.errorResponse(
+                            description="One or more grades are invalid."
+                        )
+
+                    # Replace existing grade mappings
+                    ExaminationGrade.objects.filter(
+                        examination=examination
+                    ).delete()
+
+                    ExaminationGrade.objects.bulk_create(
+                        [
+                            ExaminationGrade(
+                                examination=examination,
+                                grade=grade,
+                            )
+                            for grade in grades
+                        ]
+                    )
+
+                # --------------------------------
+                # Save Examination
+                # --------------------------------
+
+                examination.save()
 
             application_logger.info(
                 "examination_updated",
@@ -1179,12 +1350,12 @@ class ExaminationUpdateAPIView(APIView):
             return CustomResponse.successResponse(
                 data={
                     "id": examination.id,
-
                 },
                 description="Examination updated successfully.",
             )
 
         except Exception as e:
+
             application_logger.exception(
                 "examination_update_failed",
                 error=str(e),
@@ -1195,6 +1366,7 @@ class ExaminationUpdateAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Failed to update examination."
             )
+
 
 
 class ExaminationGradeCreateAPIView(APIView):
