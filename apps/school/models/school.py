@@ -1305,6 +1305,10 @@ class SchoolDocumentType(AuditModel):
                 ],
                 name="unique_school_document_type_name",
             ),
+            models.UniqueConstraint(
+                fields=["school", "color"],
+                name="unique_school_document_type_color",
+            ),
         ]
 
         indexes = [

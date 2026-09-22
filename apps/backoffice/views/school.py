@@ -4618,6 +4618,7 @@ class SubjectUpdateAPIView(APIView):
             )
 
 
+
 class CreateSchoolDocumentTypeAPIView(APIView):
 
     permission_classes = [
@@ -4669,6 +4670,12 @@ class CreateSchoolDocumentTypeAPIView(APIView):
 
             name = name.strip()
 
+            if not name:
+
+                return CustomResponse.errorResponse(
+                    description="Name cannot be empty.",
+                )
+
             if SchoolDocumentType.objects.filter(
                 school=school,
                 name__iexact=name,
@@ -4684,6 +4691,45 @@ class CreateSchoolDocumentTypeAPIView(APIView):
 
                 return CustomResponse.errorResponse(
                     description="Document type already exists.",
+                )
+
+            color = request.data.get(
+                "color",
+                "#FFFFFF",
+            )
+
+            if not color:
+
+                application_logger.warning(
+                    "school_document_type_create_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    name=name,
+                    reason="color_required",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Color is required.",
+                )
+
+            color = color.strip().upper()
+
+            if SchoolDocumentType.objects.filter(
+                school=school,
+                color__iexact=color,
+            ).exists():
+
+                application_logger.warning(
+                    "school_document_type_create_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    name=name,
+                    color=color,
+                    reason="color_already_exists",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="This color is already used by another document type.",
                 )
 
             status_value = request.data.get(
@@ -4710,6 +4756,7 @@ class CreateSchoolDocumentTypeAPIView(APIView):
                 school=school,
                 name=name,
                 description=request.data.get("description"),
+                color=color,
                 status=status_value,
             )
 
@@ -4719,6 +4766,7 @@ class CreateSchoolDocumentTypeAPIView(APIView):
                 school_id=str(school.id),
                 document_type_id=str(document_type.id),
                 name=document_type.name,
+                color=document_type.color,
                 status=document_type.status,
             )
 
@@ -4726,7 +4774,6 @@ class CreateSchoolDocumentTypeAPIView(APIView):
                 description="School document type created successfully.",
                 data={
                     "id": str(document_type.id),
-
                 },
             )
 
@@ -4737,12 +4784,17 @@ class CreateSchoolDocumentTypeAPIView(APIView):
                 user_id=str(request.user.id),
                 school_id=str(school.id) if school else None,
                 name=request.data.get("name"),
+                color=request.data.get("color"),
                 error=str(e),
             )
 
             return CustomResponse.errorResponse(
                 description="Something went wrong while creating document type.",
             )
+
+
+
+
 class SchoolDocumentTypeListAPIView(APIView):
 
     permission_classes = [
@@ -4787,6 +4839,7 @@ class SchoolDocumentTypeListAPIView(APIView):
                     "id": str(document_type.id),
                     "name": document_type.name,
                     "description": document_type.description,
+                    "color": document_type.color,
                     "status": document_type.status,
                 }
                 for document_type in queryset
@@ -4817,6 +4870,7 @@ class SchoolDocumentTypeListAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Something went wrong while fetching document types.",
             )
+
 class UpdateSchoolDocumentTypeAPIView(APIView):
 
     permission_classes = [
@@ -4881,11 +4935,17 @@ class UpdateSchoolDocumentTypeAPIView(APIView):
                 document_type.description,
             )
 
+            color = request.data.get(
+                "color",
+                document_type.color,
+            )
+
             status_value = request.data.get(
                 "status",
                 document_type.status,
             )
 
+            # Name validation
             if not name:
 
                 application_logger.warning(
@@ -4902,6 +4962,13 @@ class UpdateSchoolDocumentTypeAPIView(APIView):
 
             name = name.strip()
 
+            if not name:
+
+                return CustomResponse.errorResponse(
+                    description="Name cannot be empty.",
+                )
+
+            # Name uniqueness
             if SchoolDocumentType.objects.filter(
                 school=school,
                 name__iexact=name,
@@ -4922,6 +4989,45 @@ class UpdateSchoolDocumentTypeAPIView(APIView):
                     description="Document type already exists.",
                 )
 
+            # Color validation
+            if not color:
+
+                application_logger.warning(
+                    "school_document_type_update_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    document_type_id=str(document_type.id),
+                    reason="color_required",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Color is required.",
+                )
+
+            color = color.strip().upper()
+
+            # Color uniqueness within the same school
+            if SchoolDocumentType.objects.filter(
+                school=school,
+                color__iexact=color,
+            ).exclude(
+                id=document_type.id,
+            ).exists():
+
+                application_logger.warning(
+                    "school_document_type_update_failed",
+                    user_id=str(request.user.id),
+                    school_id=str(school.id),
+                    document_type_id=str(document_type.id),
+                    color=color,
+                    reason="color_already_exists",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="This color is already used by another document type.",
+                )
+
+            # Status validation
             if status_value not in SchoolDocumentType.Status.values:
 
                 application_logger.warning(
@@ -4939,6 +5045,7 @@ class UpdateSchoolDocumentTypeAPIView(APIView):
 
             document_type.name = name
             document_type.description = description
+            document_type.color = color
             document_type.status = status_value
 
             document_type.save()
@@ -4949,6 +5056,7 @@ class UpdateSchoolDocumentTypeAPIView(APIView):
                 school_id=str(school.id),
                 document_type_id=str(document_type.id),
                 name=document_type.name,
+                color=document_type.color,
                 status=document_type.status,
             )
 
@@ -4956,7 +5064,6 @@ class UpdateSchoolDocumentTypeAPIView(APIView):
                 description="School document type updated successfully.",
                 data={
                     "id": str(document_type.id),
-
                 },
             )
 
