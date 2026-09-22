@@ -11,10 +11,13 @@ from shared.mixins import AuditModel
 
 class FeeType(AuditModel):
     objects = SoftDeleteManager()
-
     all_objects = models.Manager()
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
 
     school = models.ForeignKey(
         School,
@@ -22,42 +25,399 @@ class FeeType(AuditModel):
         related_name="fee_types",
     )
 
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.PROTECT,
+        related_name="fee_types",
+    )
+
     name = models.CharField(
         max_length=100,
+    )
+
+    note = models.TextField(
+        null=True,
+        blank=True,
     )
 
     is_optional = models.BooleanField(
         default=False,
     )
 
-    description = models.TextField(
-        null=True,
-        blank=True,
+    is_active = models.BooleanField(
+        default=True,
     )
 
     class Meta:
         db_table = "fee_types"
 
         constraints = [
-
             models.UniqueConstraint(
-                fields=["school", "name"],
-                name="unique_fee_type_per_school",
+                fields=[
+                    "school",
+                    "academic_year",
+                    "name",
+                ],
+                name="unique_fee_type_school_academic_year_name",
             )
+        ]
 
+
+class FeePlan(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    class PlanType(models.TextChoices):
+        ANNUAL = "ANNUAL", "Annual"
+        TERM = "TERM", "Term"
+        MONTHLY = "MONTHLY", "Monthly"
+        CUSTOM = "CUSTOM", "Custom"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="fee_plans",
+    )
+
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.PROTECT,
+        related_name="fee_plans",
+    )
+
+
+
+    name = models.CharField(
+        max_length=255
+    )
+
+    total_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+    )
+
+    plan_type = models.CharField(
+        max_length=20,
+        choices=PlanType.choices,
+        default=PlanType.ANNUAL,
+    )
+
+    number_of_terms = models.PositiveSmallIntegerField(
+        default=1,
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+    )
+
+    class Meta:
+        db_table = "fee_plans"
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "school",
+                    "academic_year",
+                    "name",
+                ],
+                name="unique_fee_plan",
+            )
+        ]
+
+class FeePlanGrade(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    fee_plan = models.ForeignKey(
+        FeePlan,
+        on_delete=models.CASCADE,
+        related_name="grades",
+    )
+
+    grade = models.ForeignKey(
+        Grade,
+        on_delete=models.PROTECT,
+        related_name="fee_plans",
+    )
+
+    class Meta:
+        db_table = "fee_plan_grades"
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["fee_plan", "grade"],
+                name="unique_fee_plan_grade",
+            )
+        ]
+
+
+
+class FeePlanInstallment(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    fee_plan = models.ForeignKey(
+        FeePlan,
+        on_delete=models.CASCADE,
+        related_name="installments",
+    )
+
+    name = models.CharField(
+        max_length=100,
+    )
+
+    installment_number = models.PositiveSmallIntegerField()
+
+    allocation_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+    )
+
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+    )
+
+    due_date = models.DateField()
+
+    class Meta:
+        db_table = "fee_plan_installments"
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "fee_plan",
+                    "installment_number",
+                ],
+                name="unique_fee_plan_installment_number",
+            )
+        ]
+
+class StudentFee(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        PARTIAL = "PARTIAL", "Partial"
+        PAID = "PAID", "Paid"
+        OVERDUE = "OVERDUE", "Overdue"
+        WAIVED = "WAIVED", "Waived"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="student_fees",
+    )
+
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        related_name="student_fees",
+    )
+
+    fee_plan = models.ForeignKey(
+        FeePlan,
+        on_delete=models.PROTECT,
+        related_name="student_fees",
+    )
+
+    fee_type = models.ForeignKey(
+        FeeType,
+        on_delete=models.PROTECT,
+        related_name="student_fees",
+    )
+
+    concession = models.ForeignKey(
+        "FeeConcession",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="student_fees",
+    )
+
+    total_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+    )
+
+    concession_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+
+    late_fee = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+
+    paid_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+
+    due_date = models.DateField(
+        null=True,
+        blank=True,
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+
+    remarks = models.TextField(
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "student_fees"
+
+        indexes = [
+            models.Index(fields=["student"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["due_date"]),
+            models.Index(fields=["student", "status"]),
+        ]
+
+class StudentFeePayment(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    class PaymentMode(models.TextChoices):
+        CASH = "CASH", "Cash"
+        UPI = "UPI", "UPI"
+        CARD = "CARD", "Card"
+        CHEQUE = "CHEQUE", "Cheque"
+        ONLINE = "ONLINE", "Online"
+        NEFT = "NEFT", "NEFT"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="student_fee_payments",
+    )
+
+    student_fee = models.ForeignKey(
+        "StudentFee",
+        on_delete=models.PROTECT,
+        related_name="payments",
+    )
+
+    receipt_number = models.CharField(
+        max_length=50,
+    )
+
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+    )
+
+    payment_mode = models.CharField(
+        max_length=20,
+        choices=PaymentMode.choices,
+    )
+
+    payment_date = models.DateTimeField()
+
+    transaction_id = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
+
+    gateway_name = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+    )
+
+    gateway_response = models.JSONField(
+        null=True,
+        blank=True,
+    )
+
+    remarks = models.TextField(
+        null=True,
+        blank=True,
+    )
+
+    collected_by = models.ForeignKey(
+        UserMaster,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="collected_fee_payments",
+    )
+
+    is_cancelled = models.BooleanField(
+        default=False,
+    )
+
+    class Meta:
+        db_table = "student_fee_payments"
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "school",
+                    "receipt_number",
+                ],
+                name="unique_school_receipt_number",
+            )
         ]
 
         indexes = [
-
             models.Index(
-                fields=["school"],
+                fields=["student_fee"],
             ),
-
             models.Index(
-                fields=["school", "name"],
+                fields=["payment_date"],
             ),
-
+            models.Index(
+                fields=["transaction_id"],
+            ),
+            models.Index(
+                fields=["is_cancelled"],
+            ),
         ]
+
 
 class FeeTemplate(AuditModel):
     objects = SoftDeleteManager()
@@ -543,243 +903,243 @@ class StudentFeeAssignment(AuditModel):
 
         ]
 
-class StudentFee(AuditModel):
-    objects = SoftDeleteManager()
+# class StudentFee(AuditModel):
+#     objects = SoftDeleteManager()
+#
+#     all_objects = models.Manager()
+#
+#     class Status(models.TextChoices):
+#
+#         PENDING = "PENDING"
+#
+#         PARTIAL = "PARTIAL"
+#
+#         PAID = "PAID"
+#
+#         OVERDUE = "OVERDUE"
+#
+#         WAIVED = "WAIVED"
+#
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+#
+#
+#     student = models.ForeignKey(
+#         Student,
+#         on_delete=models.CASCADE,
+#     )
+#
+#     installment_item = models.ForeignKey(
+#         FeeInstallmentItem,
+#         on_delete=models.CASCADE,
+#     )
+#
+#     due_date = models.DateField()
+#
+#     amount = models.DecimalField(
+#         max_digits=10,
+#         decimal_places=2,
+#     )
+#
+#     # concession = models.ForeignKey(
+#     #     FeeConcession,
+#     #     on_delete=models.SET_NULL,
+#     #     null=True,
+#     #     blank=True,
+#     # )
+#
+#     # scholarship = models.DecimalField(
+#     #     max_digits=10,
+#     #     decimal_places=2,
+#     #     default=0,
+#     # )
+#
+#     late_fee = models.DecimalField(
+#         max_digits=10,
+#         decimal_places=2,
+#         default=0,
+#     )
+#
+#     paid_amount = models.DecimalField(
+#         max_digits=10,
+#         decimal_places=2,
+#         default=0,
+#     )
+#
+#     status = models.CharField(
+#         max_length=20,
+#         choices=Status.choices,
+#         default=Status.PENDING,
+#     )
+#
+#     class Meta:
+#         db_table = "student_fees"
+#
+#         constraints = [
+#
+#             models.UniqueConstraint(
+#                 fields=[
+#                     "student",
+#                     "installment_item",
+#                 ],
+#                 name="unique_student_installment_fee",
+#             )
+#
+#         ]
+#
+#         indexes = [
+#
+#             models.Index(
+#                 fields=[
+#                     "student",
+#                 ]
+#             ),
+#
+#             models.Index(
+#                 fields=[
+#                     "status",
+#                 ]
+#             ),
+#
+#             models.Index(
+#                 fields=[
+#                     "due_date",
+#                 ]
+#             ),
+#
+#             models.Index(
+#                 fields=[
+#                     "student",
+#                     "status",
+#                 ]
+#             ),
+#
+#         ]
+#
+#     @property
+#     def concession_amount(self):
+#         fee_template = (
+#         self.installment_item.installment
+#         .collection_plan.fee_template
+#         )
+#         assignment = StudentFeeAssignment.objects.filter(
+#         student=self.student,
+#         fee_template=fee_template,
+#     ).select_related(
+#         "concession",
+#     ).first()
+#         if not assignment:
+#                     return 0
+#         if not assignment.concession:
+#             return 0
+#         concession = assignment.concession
+#         if (
+#         concession.concession_type
+#         == FeeConcession.Type.PERCENTAGE):
+#             return (
+#             self.amount * concession.value
+#         ) / 100
+#         return concession.value
+#
+#
+#     @property
+#     def payable_amount(self):
+#
+#         return (
+#             self.amount
+#             - self.concession_amount
+#             + self.late_fee
+#             - self.paid_amount
+#         )
+#
+#     def __str__(self):
+#
+#         return f"{self.student.name}"
 
-    all_objects = models.Manager()
-
-    class Status(models.TextChoices):
-
-        PENDING = "PENDING"
-
-        PARTIAL = "PARTIAL"
-
-        PAID = "PAID"
-
-        OVERDUE = "OVERDUE"
-
-        WAIVED = "WAIVED"
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-
-
-    student = models.ForeignKey(
-        Student,
-        on_delete=models.CASCADE,
-    )
-
-    installment_item = models.ForeignKey(
-        FeeInstallmentItem,
-        on_delete=models.CASCADE,
-    )
-
-    due_date = models.DateField()
-
-    amount = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-    )
-
-    # concession = models.ForeignKey(
-    #     FeeConcession,
-    #     on_delete=models.SET_NULL,
-    #     null=True,
-    #     blank=True,
-    # )
-
-    # scholarship = models.DecimalField(
-    #     max_digits=10,
-    #     decimal_places=2,
-    #     default=0,
-    # )
-
-    late_fee = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=0,
-    )
-
-    paid_amount = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=0,
-    )
-
-    status = models.CharField(
-        max_length=20,
-        choices=Status.choices,
-        default=Status.PENDING,
-    )
-
-    class Meta:
-        db_table = "student_fees"
-
-        constraints = [
-
-            models.UniqueConstraint(
-                fields=[
-                    "student",
-                    "installment_item",
-                ],
-                name="unique_student_installment_fee",
-            )
-
-        ]
-
-        indexes = [
-
-            models.Index(
-                fields=[
-                    "student",
-                ]
-            ),
-
-            models.Index(
-                fields=[
-                    "status",
-                ]
-            ),
-
-            models.Index(
-                fields=[
-                    "due_date",
-                ]
-            ),
-
-            models.Index(
-                fields=[
-                    "student",
-                    "status",
-                ]
-            ),
-
-        ]
-
-    @property
-    def concession_amount(self):
-        fee_template = (
-        self.installment_item.installment
-        .collection_plan.fee_template
-        )
-        assignment = StudentFeeAssignment.objects.filter(
-        student=self.student,
-        fee_template=fee_template,
-    ).select_related(
-        "concession",
-    ).first()
-        if not assignment:
-                    return 0
-        if not assignment.concession:
-            return 0
-        concession = assignment.concession
-        if (
-        concession.concession_type
-        == FeeConcession.Type.PERCENTAGE):
-            return (
-            self.amount * concession.value
-        ) / 100
-        return concession.value
-
-
-    @property
-    def payable_amount(self):
-
-        return (
-            self.amount
-            - self.concession_amount
-            + self.late_fee
-            - self.paid_amount
-        )
-
-    def __str__(self):
-
-        return f"{self.student.name}"
-
-class StudentFeePayment(AuditModel):
-    objects = SoftDeleteManager()
-
-    all_objects = models.Manager()
-
-    class PaymentMode(models.TextChoices):
-
-        CASH = "CASH"
-
-        UPI = "UPI"
-
-        CARD = "CARD"
-
-        CHEQUE = "CHEQUE"
-
-        ONLINE = "ONLINE"
-
-        NEFT = "NEFT"
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-
-
-    student_fee = models.ForeignKey(
-        StudentFee,
-        on_delete=models.CASCADE,
-        related_name="payments",
-    )
-
-    receipt_number = models.CharField(
-        max_length=50,
-        unique=True,
-    )
-
-    amount = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-    )
-
-    payment_mode = models.CharField(
-        max_length=20,
-        choices=PaymentMode.choices,
-    )
-
-    payment_date = models.DateTimeField(
-        auto_now_add=True,
-    )
-
-    transaction_id = models.CharField(
-        max_length=100,
-        blank=True,
-        null=True,
-    )
-    gateway_name = models.CharField(
-        max_length=50,
-        null=True,
-        blank=True,
-    )
-
-    gateway_response = models.JSONField(
-        null=True,
-        blank=True,
-    )
-
-    remarks = models.TextField(
-        blank=True,
-        null=True,
-    )
-
-    collected_by = models.ForeignKey(
-        UserMaster,
-        on_delete=models.SET_NULL,
-        null=True,
-    )
-
-    is_cancelled = models.BooleanField(
-        default=False,
-    )
-
-    class Meta:
-        db_table = "student_fee_payments"
-
-        indexes = [models.Index(fields=["student_fee",]),
-            models.Index(fields=["payment_date",]),
-            models.Index(fields=["receipt_number",]),
-            models.Index(fields=["transaction_id",]),
-            models.Index(fields=["is_cancelled",]),]
+# class StudentFeePayment(AuditModel):
+#     objects = SoftDeleteManager()
+#
+#     all_objects = models.Manager()
+#
+#     class PaymentMode(models.TextChoices):
+#
+#         CASH = "CASH"
+#
+#         UPI = "UPI"
+#
+#         CARD = "CARD"
+#
+#         CHEQUE = "CHEQUE"
+#
+#         ONLINE = "ONLINE"
+#
+#         NEFT = "NEFT"
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+#
+#
+#     student_fee = models.ForeignKey(
+#         StudentFee,
+#         on_delete=models.CASCADE,
+#         related_name="payments",
+#     )
+#
+#     receipt_number = models.CharField(
+#         max_length=50,
+#         unique=True,
+#     )
+#
+#     amount = models.DecimalField(
+#         max_digits=10,
+#         decimal_places=2,
+#     )
+#
+#     payment_mode = models.CharField(
+#         max_length=20,
+#         choices=PaymentMode.choices,
+#     )
+#
+#     payment_date = models.DateTimeField(
+#         auto_now_add=True,
+#     )
+#
+#     transaction_id = models.CharField(
+#         max_length=100,
+#         blank=True,
+#         null=True,
+#     )
+#     gateway_name = models.CharField(
+#         max_length=50,
+#         null=True,
+#         blank=True,
+#     )
+#
+#     gateway_response = models.JSONField(
+#         null=True,
+#         blank=True,
+#     )
+#
+#     remarks = models.TextField(
+#         blank=True,
+#         null=True,
+#     )
+#
+#     collected_by = models.ForeignKey(
+#         UserMaster,
+#         on_delete=models.SET_NULL,
+#         null=True,
+#     )
+#
+#     is_cancelled = models.BooleanField(
+#         default=False,
+#     )
+#
+#     class Meta:
+#         db_table = "student_fee_payments"
+#
+#         indexes = [models.Index(fields=["student_fee",]),
+#             models.Index(fields=["payment_date",]),
+#             models.Index(fields=["receipt_number",]),
+#             models.Index(fields=["transaction_id",]),
+#             models.Index(fields=["is_cancelled",]),]
 
 
 

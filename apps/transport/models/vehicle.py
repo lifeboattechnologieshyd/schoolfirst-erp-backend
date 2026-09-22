@@ -3,6 +3,7 @@ import uuid
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 
+from apps.fee.models import FeeType
 from apps.school.models import School
 from apps.school.models.school import Branch, Staff, AcademicYear, Student
 from shared.managers import SoftDeleteManager
@@ -72,6 +73,7 @@ class Vehicle(AuditModel):
         max_length=100,
         unique=True
     )
+    # colour
 
 
 
@@ -1239,3 +1241,99 @@ class TripEvent(AuditModel):
 
     def __str__(self):
         return f"{self.trip} - {self.get_event_type_display()}"
+
+
+class TransportFeeConfiguration(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="transport_fee_configurations",
+    )
+
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.CASCADE,
+        related_name="transport_fee_configurations",
+    )
+
+    route = models.ForeignKey(
+        Route,
+        on_delete=models.CASCADE,
+        related_name="fee_configurations",
+    )
+
+    fee_type = models.ForeignKey(
+        FeeType,
+        on_delete=models.PROTECT,
+        related_name="transport_fee_configurations",
+    )
+
+    base_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+    )
+
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "transport_fee_configurations"
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "academic_year",
+                    "route",
+                    "fee_type",
+                ],
+                name="unique_transport_fee_route_type",
+            )
+        ]
+
+
+class TransportStopSurcharge(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    transport_fee_configuration = models.ForeignKey(
+        TransportFeeConfiguration,
+        on_delete=models.CASCADE,
+        related_name="stop_surcharges",
+    )
+
+    route_stop = models.ForeignKey(
+        RouteStop,
+        on_delete=models.CASCADE,
+        related_name="transport_fee_surcharges",
+    )
+
+    surcharge_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+    )
+
+    class Meta:
+        db_table = "transport_stop_surcharges"
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "transport_fee_configuration",
+                    "route_stop",
+                ],
+                name="unique_transport_stop_surcharge",
+            )
+        ]

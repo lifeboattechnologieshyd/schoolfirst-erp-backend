@@ -1,20 +1,22 @@
 import uuid
 from decimal import Decimal
 
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.utils.dateparse import parse_date
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.fee.models import FeeType, FeeTemplateItem, FeeTemplate, FeeCollectionPlan, FeeInstallment, \
-    FeeInstallmentItem, LateFeeRule, FeeConcession, StudentFeeAssignment, StudentFee, StudentFeePayment
+    FeeInstallmentItem, LateFeeRule, FeeConcession, StudentFeeAssignment, StudentFee, StudentFeePayment, FeePlan, \
+    FeePlanInstallment
 from apps.school.models.school import AcademicYear, Grade, Student
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from shared.utils.fee import generate_student_fees
 from shared.utils.logger import application_logger
 from decimal import Decimal, InvalidOperation
-from django.db import transaction
+from django.db import transaction, IntegrityError
+
 
 class CreateFeeTypeAPIView(APIView):
 
@@ -4170,3 +4172,844 @@ class PendingStudentFeeAPIView(APIView):
 
         )
 
+
+
+class FeePlanCreateAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_plan.create"
+
+    def post(self, request):
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required."
+            )
+
+        try:
+            academic_year_id = request.data.get("academic_year_id")
+            grade_id = request.data.get("grade_id")
+            name = request.data.get("name")
+            total_amount = request.data.get("total_amount")
+            plan_type = request.data.get("plan_type", FeePlan.PlanType.ANNUAL)
+            number_of_terms = request.data.get("number_of_terms", 1)
+
+            if not academic_year_id:
+                return CustomResponse.errorResponse(
+                    description="Academic year is required."
+                )
+
+            if not grade_id:
+                return CustomResponse.errorResponse(
+                    description="Grade is required."
+                )
+
+            if not name:
+                return CustomResponse.errorResponse(
+                    description="Plan name is required."
+                )
+
+            if total_amount is None:
+                return CustomResponse.errorResponse(
+                    description="Total amount is required."
+                )
+
+            try:
+                total_amount = Decimal(str(total_amount))
+            except (InvalidOperation, ValueError):
+                return CustomResponse.errorResponse(
+                    description="Invalid total amount."
+                )
+
+            if total_amount <= 0:
+                return CustomResponse.errorResponse(
+                    description="Total amount must be greater than zero."
+                )
+
+            try:
+                number_of_terms = int(number_of_terms)
+            except (TypeError, ValueError):
+                return CustomResponse.errorResponse(
+                    description="Invalid number of terms."
+                )
+
+            if number_of_terms <= 0:
+                return CustomResponse.errorResponse(
+                    description="Number of terms must be greater than zero."
+                )
+
+            if plan_type not in FeePlan.PlanType.values:
+                return CustomResponse.errorResponse(
+                    description="Invalid plan type."
+                )
+
+            academic_year = AcademicYear.objects.filter(
+                id=academic_year_id,
+                school=school,
+            ).first()
+
+            if not academic_year:
+                return CustomResponse.errorResponse(
+                    description="Academic year not found."
+                )
+
+            grade = Grade.objects.filter(
+                id=grade_id,
+                school=school,
+                academic_year=academic_year,
+            ).first()
+
+            if not grade:
+                return CustomResponse.errorResponse(
+                    description="Grade not found."
+                )
+
+            if FeePlan.objects.filter(
+                school=school,
+                academic_year=academic_year,
+                grade=grade,
+                name=name,
+            ).exists():
+                return CustomResponse.errorResponse(
+                    description="Fee plan already exists."
+                )
+
+            fee_plan = FeePlan.objects.create(
+                school=school,
+                academic_year=academic_year,
+                grade=grade,
+                name=name,
+                total_amount=total_amount,
+                plan_type=plan_type,
+                number_of_terms=number_of_terms,
+                is_active=True,
+            )
+
+            application_logger.info(
+                "fee_plan_created",
+                fee_plan_id=str(fee_plan.id),
+                school_id=str(school.id),
+                academic_year_id=str(academic_year.id),
+                grade_id=str(grade.id),
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "id": str(fee_plan.id),
+                    "name": fee_plan.name,
+                    "academic_year": {
+                        "id": str(academic_year.id),
+                        "name": academic_year.name,
+                    },
+                    "grade": {
+                        "id": str(grade.id),
+                        "name": grade.name,
+                    },
+                    "total_amount": fee_plan.total_amount,
+                    "plan_type": fee_plan.plan_type,
+                    "number_of_terms": fee_plan.number_of_terms,
+                    "is_active": fee_plan.is_active,
+                },
+                description="Fee plan created successfully.",
+            )
+
+        except IntegrityError:
+            return CustomResponse.errorResponse(
+                description="Fee plan already exists."
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "fee_plan_create_failed",
+                error=str(e),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to create fee plan."
+            )
+
+
+class FeePlanListAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_plan.view"
+
+    def get(self, request):
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required."
+            )
+
+        try:
+            queryset = (
+                FeePlan.objects
+                .select_related(
+                    "academic_year",
+                    "grade",
+                )
+                .prefetch_related(
+                    "installments"
+                )
+                .filter(
+                    school=school,
+                )
+                .order_by("-id")
+            )
+
+            academic_year_id = request.query_params.get(
+                "academic_year_id"
+            )
+            grade_id = request.query_params.get("grade_id")
+            plan_type = request.query_params.get("plan_type")
+            is_active = request.query_params.get("is_active")
+
+            if academic_year_id:
+                queryset = queryset.filter(
+                    academic_year_id=academic_year_id
+                )
+
+            if grade_id:
+                queryset = queryset.filter(
+                    grade_id=grade_id
+                )
+
+            if plan_type:
+                queryset = queryset.filter(
+                    plan_type=plan_type
+                )
+
+            if is_active is not None:
+                queryset = queryset.filter(
+                    is_active=is_active.lower() == "true"
+                )
+
+            total_count = queryset.count()
+
+            data = []
+
+            for plan in queryset:
+                installments = plan.installments.all()
+
+                scheduled_amount = sum(
+                    (
+                        installment.amount
+                        for installment in installments
+                    ),
+                    Decimal("0"),
+                )
+
+                remaining_schedule_amount = (
+                    plan.total_amount - scheduled_amount
+                )
+
+                data.append({
+                    "id": str(plan.id),
+
+                    "name": plan.name,
+
+                    "academic_year": {
+                        "id": str(
+                            plan.academic_year.id
+                        ),
+                        "name": (
+                            plan.academic_year.name
+                        ),
+                    },
+
+                    "grade": {
+                        "id": str(
+                            plan.grade.id
+                        ),
+                        "name": (
+                            plan.grade.name
+                        ),
+                    },
+
+                    "total_amount": plan.total_amount,
+
+                    "plan_type": plan.plan_type,
+
+                    "number_of_terms": (
+                        plan.number_of_terms
+                    ),
+
+                    "is_active": plan.is_active,
+
+                    "installment_summary": {
+                        "scheduled_amount": scheduled_amount,
+                        "remaining_amount": (
+                            remaining_schedule_amount
+                        ),
+                    },
+
+                    "installments": [
+                        {
+                            "id": str(
+                                installment.id
+                            ),
+                            "name": (
+                                installment.name
+                            ),
+                            "installment_number": (
+                                installment.installment_number
+                            ),
+                            "amount": (
+                                installment.amount
+                            ),
+                            "due_date": (
+                                installment.due_date
+                            ),
+                        }
+                        for installment in installments
+                    ],
+                })
+
+            return CustomResponse.successResponse(
+                data=data,
+                total=total_count,
+                description="Fee plans fetched successfully.",
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "fee_plan_list_failed",
+                error=str(e),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to fetch fee plans."
+            )
+
+
+class FeePlanUpdateAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_plan.update"
+
+    def put(self, request, fee_plan_id):
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required."
+            )
+
+        try:
+            fee_plan = FeePlan.objects.filter(
+                id=fee_plan_id,
+                school=school,
+            ).first()
+
+            if not fee_plan:
+                return CustomResponse.errorResponse(
+                    description="Fee plan not found."
+                )
+
+            name = request.data.get("name")
+            total_amount = request.data.get("total_amount")
+            plan_type = request.data.get("plan_type")
+            number_of_terms = request.data.get("number_of_terms")
+
+            if name is not None:
+                if not name.strip():
+                    return CustomResponse.errorResponse(
+                        description="Plan name cannot be empty."
+                    )
+                fee_plan.name = name.strip()
+
+            if total_amount is not None:
+                try:
+                    total_amount = Decimal(
+                        str(total_amount)
+                    )
+                except (InvalidOperation, ValueError):
+                    return CustomResponse.errorResponse(
+                        description="Invalid total amount."
+                    )
+
+                if total_amount <= 0:
+                    return CustomResponse.errorResponse(
+                        description="Total amount must be greater than zero."
+                    )
+
+                fee_plan.total_amount = total_amount
+
+            if plan_type is not None:
+                if plan_type not in FeePlan.PlanType.values:
+                    return CustomResponse.errorResponse(
+                        description="Invalid plan type."
+                    )
+
+                fee_plan.plan_type = plan_type
+
+            if number_of_terms is not None:
+                try:
+                    number_of_terms = int(number_of_terms)
+                except (TypeError, ValueError):
+                    return CustomResponse.errorResponse(
+                        description="Invalid number of terms."
+                    )
+
+                if number_of_terms <= 0:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Number of terms must be greater than zero."
+                        )
+                    )
+
+                fee_plan.number_of_terms = number_of_terms
+
+            fee_plan.save()
+
+            application_logger.info(
+                "fee_plan_updated",
+                fee_plan_id=str(fee_plan.id),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "id": str(fee_plan.id),
+                    "name": fee_plan.name,
+                    "total_amount": fee_plan.total_amount,
+                    "plan_type": fee_plan.plan_type,
+                    "number_of_terms": fee_plan.number_of_terms,
+                    "is_active": fee_plan.is_active,
+                },
+                description="Fee plan updated successfully.",
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "fee_plan_update_failed",
+                error=str(e),
+                fee_plan_id=str(fee_plan_id),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to update fee plan."
+            )
+
+
+class FeePlanInstallmentCreateAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_plan_installment.create"
+
+    def post(self, request, fee_plan_id):
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required."
+            )
+
+        try:
+            name = request.data.get("name")
+            installment_number = request.data.get(
+                "installment_number"
+            )
+            amount = request.data.get("amount")
+            due_date = request.data.get("due_date")
+
+            if not name:
+                return CustomResponse.errorResponse(
+                    description="Installment name is required."
+                )
+
+            if installment_number is None:
+                return CustomResponse.errorResponse(
+                    description="Installment number is required."
+                )
+
+            if amount is None:
+                return CustomResponse.errorResponse(
+                    description="Installment amount is required."
+                )
+
+            if not due_date:
+                return CustomResponse.errorResponse(
+                    description="Due date is required."
+                )
+
+            try:
+                installment_number = int(
+                    installment_number
+                )
+            except (TypeError, ValueError):
+                return CustomResponse.errorResponse(
+                    description="Invalid installment number."
+                )
+
+            if installment_number <= 0:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Installment number must be greater than zero."
+                    )
+                )
+
+            try:
+                amount = Decimal(str(amount))
+            except (InvalidOperation, ValueError):
+                return CustomResponse.errorResponse(
+                    description="Invalid installment amount."
+                )
+
+            if amount <= 0:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Installment amount must be greater than zero."
+                    )
+                )
+
+            fee_plan = FeePlan.objects.filter(
+                id=fee_plan_id,
+                school=school,
+            ).first()
+
+            if not fee_plan:
+                return CustomResponse.errorResponse(
+                    description="Fee plan not found."
+                )
+
+            if not fee_plan.is_active:
+                return CustomResponse.errorResponse(
+                    description="Cannot modify an inactive fee plan."
+                )
+
+            if FeePlanInstallment.objects.filter(
+                fee_plan=fee_plan,
+                installment_number=installment_number,
+            ).exists():
+                return CustomResponse.errorResponse(
+                    description="Installment number already exists."
+                )
+
+            existing_total = (
+                FeePlanInstallment.objects
+                .filter(fee_plan=fee_plan)
+                .aggregate(total=Sum("amount"))
+                ["total"]
+                or Decimal("0")
+            )
+
+            if existing_total + amount > fee_plan.total_amount:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Installment total cannot exceed "
+                        "the fee plan total amount."
+                    )
+                )
+
+            installment = FeePlanInstallment.objects.create(
+                school=school,
+                fee_plan=fee_plan,
+                name=name,
+                installment_number=installment_number,
+                amount=amount,
+                due_date=due_date,
+            )
+
+            application_logger.info(
+                "fee_plan_installment_created",
+                installment_id=str(installment.id),
+                fee_plan_id=str(fee_plan.id),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "id": str(installment.id),
+                    "fee_plan_id": str(fee_plan.id),
+                    "name": installment.name,
+                    "installment_number": (
+                        installment.installment_number
+                    ),
+                    "amount": installment.amount,
+                    "due_date": installment.due_date,
+                },
+                description="Fee plan installment created successfully.",
+            )
+
+        except IntegrityError:
+            return CustomResponse.errorResponse(
+                description="Installment number already exists."
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "fee_plan_installment_create_failed",
+                error=str(e),
+                fee_plan_id=str(fee_plan_id),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to create fee plan installment."
+            )
+
+
+class FeePlanInstallmentListAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_plan_installment.view"
+
+    def get(self, request, fee_plan_id):
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required."
+            )
+
+        try:
+            fee_plan = FeePlan.objects.filter(
+                id=fee_plan_id,
+                school=school,
+            ).first()
+
+            if not fee_plan:
+                return CustomResponse.errorResponse(
+                    description="Fee plan not found."
+                )
+
+            queryset = (
+                FeePlanInstallment.objects
+                .filter(
+                    fee_plan=fee_plan,
+                    school=school,
+                )
+                .order_by("installment_number")
+            )
+
+            total_installment_amount = (
+                queryset.aggregate(
+                    total=Sum("amount")
+                )["total"]
+                or Decimal("0")
+            )
+
+            data = [
+                {
+                    "id": str(installment.id),
+                    "name": installment.name,
+                    "installment_number": (
+                        installment.installment_number
+                    ),
+                    "amount": installment.amount,
+                    "due_date": installment.due_date,
+                }
+                for installment in queryset
+            ]
+
+            return CustomResponse.successResponse(
+                data={
+                    "fee_plan": {
+                        "id": str(fee_plan.id),
+                        "name": fee_plan.name,
+                        "total_amount": fee_plan.total_amount,
+                    },
+                    "total_installment_amount": (
+                        total_installment_amount
+                    ),
+                    "remaining_amount": (
+                        fee_plan.total_amount
+                        - total_installment_amount
+                    ),
+                    "installments": data,
+                },
+                total=queryset.count(),
+                description="Fee plan installments fetched successfully.",
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "fee_plan_installment_list_failed",
+                error=str(e),
+                fee_plan_id=str(fee_plan_id),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to fetch fee plan installments."
+            )
+
+
+class FeePlanInstallmentUpdateAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_plan_installment.update"
+
+    def put(self, request, fee_plan_id, installment_id):
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required."
+            )
+
+        try:
+            installment = (
+                FeePlanInstallment.objects
+                .filter(
+                    id=installment_id,
+                    fee_plan_id=fee_plan_id,
+                    school=school,
+                )
+                .select_related("fee_plan")
+                .first()
+            )
+
+            if not installment:
+                return CustomResponse.errorResponse(
+                    description="Fee plan installment not found."
+                )
+
+            name = request.data.get("name")
+            amount = request.data.get("amount")
+            due_date = request.data.get("due_date")
+            installment_number = request.data.get(
+                "installment_number"
+            )
+
+            if name is not None:
+                if not name.strip():
+                    return CustomResponse.errorResponse(
+                        description="Installment name cannot be empty."
+                    )
+
+                installment.name = name.strip()
+
+            if installment_number is not None:
+                try:
+                    installment_number = int(
+                        installment_number
+                    )
+                except (TypeError, ValueError):
+                    return CustomResponse.errorResponse(
+                        description="Invalid installment number."
+                    )
+
+                if installment_number <= 0:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Installment number must be greater than zero."
+                        )
+                    )
+
+                duplicate = (
+                    FeePlanInstallment.objects
+                    .filter(
+                        fee_plan_id=fee_plan_id,
+                        installment_number=installment_number,
+                    )
+                    .exclude(id=installment.id)
+                    .exists()
+                )
+
+                if duplicate:
+                    return CustomResponse.errorResponse(
+                        description="Installment number already exists."
+                    )
+
+                installment.installment_number = (
+                    installment_number
+                )
+
+            if amount is not None:
+                try:
+                    amount = Decimal(str(amount))
+                except (InvalidOperation, ValueError):
+                    return CustomResponse.errorResponse(
+                        description="Invalid installment amount."
+                    )
+
+                if amount <= 0:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Installment amount must be greater than zero."
+                        )
+                    )
+
+                existing_total = (
+                    FeePlanInstallment.objects
+                    .filter(fee_plan_id=fee_plan_id)
+                    .exclude(id=installment.id)
+                    .aggregate(total=Sum("amount"))
+                    ["total"]
+                    or Decimal("0")
+                )
+
+                if (
+                    existing_total + amount
+                    > installment.fee_plan.total_amount
+                ):
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Installment total cannot exceed "
+                            "the fee plan total amount."
+                        )
+                    )
+
+                installment.amount = amount
+
+            if due_date is not None:
+                installment.due_date = due_date
+
+            installment.save()
+
+            application_logger.info(
+                "fee_plan_installment_updated",
+                installment_id=str(installment.id),
+                fee_plan_id=str(fee_plan_id),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "id": str(installment.id),
+                    "name": installment.name,
+                    "installment_number": (
+                        installment.installment_number
+                    ),
+                    "amount": installment.amount,
+                    "due_date": installment.due_date,
+                },
+                description="Fee plan installment updated successfully.",
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "fee_plan_installment_update_failed",
+                error=str(e),
+                installment_id=str(installment_id),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to update fee plan installment."
+            )

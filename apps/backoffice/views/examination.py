@@ -370,7 +370,10 @@ class ExaminationTypeUpdateAPIView(APIView):
 
 
 class ExaminationCreateAPIView(APIView):
-    permission_classes = [IsAuthenticated,HasPermission,]
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
 
     required_permission = "examination.create"
 
@@ -386,13 +389,17 @@ class ExaminationCreateAPIView(APIView):
         examination_type_id = request.data.get("examination_type_id")
         academic_year_id = request.data.get("academic_year_id")
         branch_id = request.data.get("branch_id")
+
         start_date = request.data.get("start_date")
         end_date = request.data.get("end_date")
-        description = request.data.get("description")
+        result_date = request.data.get("result_date")
 
-        # -------------------------
+        description = request.data.get("description")
+        grades_data = request.data.get("grades", [])
+
+        # ---------------------------------
         # Required validations
-        # -------------------------
+        # ---------------------------------
 
         if not name:
             return CustomResponse.errorResponse(
@@ -419,102 +426,471 @@ class ExaminationCreateAPIView(APIView):
                 description="End date is required."
             )
 
-        # -------------------------
-        # Validate examination type
-        # -------------------------
-
-        examination_type = ExaminationType.objects.filter(
-            id=examination_type_id,
-            school=school,
-            status=ExaminationType.Status.ACTIVE,
-        ).first()
-
-        if not examination_type:
+        if not grades_data:
             return CustomResponse.errorResponse(
-                description="Invalid examination type."
+                description="At least one grade is required."
             )
 
-        # -------------------------
-        # Validate academic year
-        # -------------------------
-
-        academic_year = AcademicYear.objects.filter(
-            id=academic_year_id,
-            school=school,
-        ).first()
-
-        if not academic_year:
-            return CustomResponse.errorResponse(
-                description="Invalid academic year."
-            )
-
-        # -------------------------
-        # Validate branch
-        # -------------------------
-
-        branch = None
-
-        if branch_id:
-            branch = Branch.objects.filter(
-                id=branch_id,
-                school=school,
-            ).first()
-
-            if not branch:
-                return CustomResponse.errorResponse(
-                    description="Invalid branch."
-                )
-
-        # -------------------------
+        # ---------------------------------
         # Validate dates
-        # -------------------------
+        # ---------------------------------
 
         if start_date > end_date:
             return CustomResponse.errorResponse(
                 description="Start date cannot be after end date."
             )
 
-        # -------------------------
-        # Check duplicate
-        # -------------------------
-
-        if Examination.objects.filter(
-            school=school,
-            academic_year=academic_year,
-            name__iexact=name.strip(),
-        ).exists():
+        if result_date and result_date < end_date:
             return CustomResponse.errorResponse(
-                description="Examination with this name already exists."
+                description="Result date cannot be before examination end date."
             )
 
         try:
-            examination = Examination.objects.create(
+            # ---------------------------------
+            # Validate examination type
+            # ---------------------------------
+
+            examination_type = ExaminationType.objects.filter(
+                id=examination_type_id,
                 school=school,
-                branch=branch,
+                status=ExaminationType.Status.ACTIVE,
+            ).first()
+
+            if not examination_type:
+                return CustomResponse.errorResponse(
+                    description="Invalid examination type."
+                )
+
+            # ---------------------------------
+            # Validate academic year
+            # ---------------------------------
+
+            academic_year = AcademicYear.objects.filter(
+                id=academic_year_id,
+                school=school,
+            ).first()
+
+            if not academic_year:
+                return CustomResponse.errorResponse(
+                    description="Invalid academic year."
+                )
+
+            # ---------------------------------
+            # Validate branch
+            # ---------------------------------
+
+            branch = None
+
+            if branch_id:
+                branch = Branch.objects.filter(
+                    id=branch_id,
+                    school=school,
+                ).first()
+
+                if not branch:
+                    return CustomResponse.errorResponse(
+                        description="Invalid branch."
+                    )
+
+            # ---------------------------------
+            # Duplicate examination
+            # ---------------------------------
+
+            if Examination.objects.filter(
+                school=school,
                 academic_year=academic_year,
-                examination_type=examination_type,
-                name=name.strip(),
-                start_date=start_date,
-                end_date=end_date,
-                status=Examination.Status.DRAFT,
-                description=description,
-            )
+                name__iexact=name.strip(),
+            ).exists():
+                return CustomResponse.errorResponse(
+                    description="Examination with this name already exists."
+                )
 
-            application_logger.info(
-                "examination_created",
-                examination_id=str(examination.id),
-                school_id=str(school.id),
-            )
+            with transaction.atomic():
 
-            return CustomResponse.successResponse(
-                data={
-                    "id": examination.id,
+                # ---------------------------------
+                # Create examination
+                # ---------------------------------
 
-                },
-                description="Examination created successfully.",
+                examination = Examination.objects.create(
+                    school=school,
+                    branch=branch,
+                    academic_year=academic_year,
+                    examination_type=examination_type,
+                    name=name.strip(),
+                    start_date=start_date,
+                    end_date=end_date,
+                    result_date=result_date,
+                    status=Examination.Status.DRAFT,
+                    description=description,
+                )
+
+                created_grades = []
+
+                # ---------------------------------
+                # Grades
+                # ---------------------------------
+
+                for grade_data in grades_data:
+
+                    grade_id = grade_data.get("grade_id")
+                    schedules_data = grade_data.get("schedules", [])
+
+                    if not grade_id:
+                        raise ValueError("Grade is required.")
+
+                    if not schedules_data:
+                        raise ValueError(
+                            "At least one subject schedule is required."
+                        )
+
+                    # ---------------------------------
+                    # Validate grade
+                    # ---------------------------------
+
+                    grade = Grade.objects.filter(
+                        id=grade_id,
+                        school=school,
+                        academic_year=academic_year,
+                        status=Grade.Status.ACTIVE,
+                    ).first()
+
+                    if not grade:
+                        raise ValueError("Invalid grade.")
+
+                    # ---------------------------------
+                    # Duplicate grade
+                    # ---------------------------------
+
+                    if ExaminationGrade.objects.filter(
+                        examination=examination,
+                        grade=grade,
+                    ).exists():
+                        raise ValueError(
+                            f"Grade {grade.name} is already assigned."
+                        )
+
+                    examination_grade = ExaminationGrade.objects.create(
+                        examination=examination,
+                        grade=grade,
+                    )
+
+                    created_schedules = []
+
+                    # ---------------------------------
+                    # Subjects / schedules
+                    # ---------------------------------
+
+                    for schedule_data in schedules_data:
+
+                        subject_id = schedule_data.get("subject_id")
+                        exam_date = schedule_data.get("exam_date")
+                        start_time = schedule_data.get("start_time")
+                        end_time = schedule_data.get("end_time")
+
+                        room_number = schedule_data.get("room_number")
+
+                        maximum_marks = schedule_data.get(
+                            "maximum_marks"
+                        )
+
+                        passing_marks = schedule_data.get(
+                            "passing_marks"
+                        )
+
+                        internal_percentage = schedule_data.get(
+                            "internal_percentage",
+                            0,
+                        )
+
+                        external_percentage = schedule_data.get(
+                            "external_percentage",
+                            0,
+                        )
+
+                        practical_percentage = schedule_data.get(
+                            "practical_percentage",
+                            0,
+                        )
+
+                        instructions = schedule_data.get(
+                            "instructions"
+                        )
+
+                        # ---------------------------------
+                        # Required fields
+                        # ---------------------------------
+
+                        if not subject_id:
+                            raise ValueError(
+                                "Subject is required."
+                            )
+
+                        if not exam_date:
+                            raise ValueError(
+                                "Exam date is required."
+                            )
+
+                        if not start_time:
+                            raise ValueError(
+                                "Start time is required."
+                            )
+
+                        if not end_time:
+                            raise ValueError(
+                                "End time is required."
+                            )
+
+                        if maximum_marks is None:
+                            raise ValueError(
+                                "Maximum marks is required."
+                            )
+
+                        if passing_marks is None:
+                            raise ValueError(
+                                "Passing marks is required."
+                            )
+
+                        # ---------------------------------
+                        # Validate subject
+                        # ---------------------------------
+
+                        subject = Subject.objects.filter(
+                            id=subject_id,
+                            school=school,
+                            status=Subject.Status.ACTIVE,
+                        ).first()
+
+                        if not subject:
+                            raise ValueError(
+                                "Invalid subject."
+                            )
+
+                        # ---------------------------------
+                        # Subject must belong to grade
+                        # ---------------------------------
+
+                        if not SubjectGrade.objects.filter(
+                            subject=subject,
+                            grade=grade,
+                        ).exists():
+                            raise ValueError(
+                                f"Subject {subject.name} "
+                                f"is not assigned to grade {grade.name}."
+                            )
+
+                        # ---------------------------------
+                        # Validate exam date
+                        # ---------------------------------
+
+                        if not (
+                            examination.start_date
+                            <= exam_date
+                            <= examination.end_date
+                        ):
+                            raise ValueError(
+                                "Exam date must be within the examination "
+                                "start and end dates."
+                            )
+
+                        # ---------------------------------
+                        # Validate time
+                        # ---------------------------------
+
+                        if start_time >= end_time:
+                            raise ValueError(
+                                "Start time must be before end time."
+                            )
+
+                        # ---------------------------------
+                        # Convert marks
+                        # ---------------------------------
+
+                        maximum_marks = Decimal(
+                            str(maximum_marks)
+                        )
+
+                        passing_marks = Decimal(
+                            str(passing_marks)
+                        )
+
+                        if maximum_marks <= 0:
+                            raise ValueError(
+                                "Maximum marks must be greater than 0."
+                            )
+
+                        if passing_marks < 0:
+                            raise ValueError(
+                                "Passing marks cannot be negative."
+                            )
+
+                        if passing_marks > maximum_marks:
+                            raise ValueError(
+                                "Passing marks cannot exceed maximum marks."
+                            )
+
+                        # ---------------------------------
+                        # Convert percentages
+                        # ---------------------------------
+
+                        internal_percentage = Decimal(
+                            str(internal_percentage)
+                        )
+
+                        external_percentage = Decimal(
+                            str(external_percentage)
+                        )
+
+                        practical_percentage = Decimal(
+                            str(practical_percentage)
+                        )
+
+                        # ---------------------------------
+                        # Validate percentages
+                        # ---------------------------------
+
+                        for percentage in [
+                            internal_percentage,
+                            external_percentage,
+                            practical_percentage,
+                        ]:
+                            if percentage < 0 or percentage > 100:
+                                raise ValueError(
+                                    "Percentage must be between 0 and 100."
+                                )
+
+                        percentage_total = (
+                            internal_percentage
+                            + external_percentage
+                            + practical_percentage
+                        )
+
+                        if percentage_total != Decimal("100"):
+                            raise ValueError(
+                                "Internal, external and practical "
+                                "percentages must total 100%."
+                            )
+
+                        # ---------------------------------
+                        # Duplicate subject
+                        # ---------------------------------
+
+                        if ExaminationSchedule.objects.filter(
+                            examination=examination,
+                            grade=grade,
+                            subject=subject,
+                        ).exists():
+                            raise ValueError(
+                                f"{subject.name} is already scheduled "
+                                f"for this examination."
+                            )
+
+                        # ---------------------------------
+                        # Overlapping schedule
+                        # ---------------------------------
+
+                        overlapping_schedule = (
+                            ExaminationSchedule.objects
+                            .filter(
+                                examination=examination,
+                                grade=grade,
+                                exam_date=exam_date,
+                            )
+                            .filter(
+                                start_time__lt=end_time,
+                                end_time__gt=start_time,
+                            )
+                            .exists()
+                        )
+
+                        if overlapping_schedule:
+                            raise ValueError(
+                                "Another subject is already scheduled "
+                                "during this time for this grade."
+                            )
+
+                        # ---------------------------------
+                        # Create schedule
+                        # ---------------------------------
+
+                        schedule = ExaminationSchedule.objects.create(
+                            examination=examination,
+                            grade=grade,
+                            subject=subject,
+                            exam_date=exam_date,
+                            start_time=start_time,
+                            end_time=end_time,
+                            room_number=room_number,
+                            maximum_marks=maximum_marks,
+                            passing_marks=passing_marks,
+                            internal_percentage=internal_percentage,
+                            external_percentage=external_percentage,
+                            practical_percentage=practical_percentage,
+                            instructions=instructions,
+                        )
+
+                        created_schedules.append({
+                            "id": schedule.id,
+                            "subject_id": subject.id,
+                            "subject_name": subject.name,
+                            "exam_date": schedule.exam_date,
+                            "start_time": schedule.start_time,
+                            "end_time": schedule.end_time,
+                            "room_number": schedule.room_number,
+                            "maximum_marks": schedule.maximum_marks,
+                            "passing_marks": schedule.passing_marks,
+                            "internal_percentage": (
+                                schedule.internal_percentage
+                            ),
+                            "external_percentage": (
+                                schedule.external_percentage
+                            ),
+                            "practical_percentage": (
+                                schedule.practical_percentage
+                            ),
+                            "instructions": schedule.instructions,
+                        })
+
+                    created_grades.append({
+                        "id": examination_grade.id,
+                        "grade_id": grade.id,
+                        "grade_name": grade.name,
+                        "schedules": created_schedules,
+                    })
+
+                # ---------------------------------
+                # Log
+                # ---------------------------------
+
+                application_logger.info(
+                    "examination_created",
+                    examination_id=str(examination.id),
+                    school_id=str(school.id),
+                )
+
+                return CustomResponse.successResponse(
+                    data={
+                        "id": examination.id,
+                        "name": examination.name,
+                        "academic_year_id": examination.academic_year_id,
+                        "examination_type_id": examination.examination_type_id,
+                        "branch_id": examination.branch_id,
+                        "start_date": examination.start_date,
+                        "end_date": examination.end_date,
+                        "result_date": examination.result_date,
+                        "status": examination.status,
+                        "grades": created_grades,
+                    },
+                    description="Examination created successfully.",
+                )
+
+        except ValueError as e:
+
+            return CustomResponse.errorResponse(
+                description=str(e)
             )
 
         except Exception as e:
+
             application_logger.exception(
                 "examination_create_failed",
                 error=str(e),

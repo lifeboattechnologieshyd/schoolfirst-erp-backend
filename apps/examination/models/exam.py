@@ -155,6 +155,9 @@ class Examination(AuditModel):
 
     end_date = models.DateField()
 
+    result_date = models.DateField()
+
+
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
@@ -278,6 +281,24 @@ class ExaminationSchedule(AuditModel):
     passing_marks = models.DecimalField(
         max_digits=6,
         decimal_places=2,
+    )
+
+    internal_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+    )
+
+    external_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+    )
+
+    practical_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
     )
 
     instructions = models.TextField(
