@@ -369,6 +369,88 @@ class ExaminationTypeUpdateAPIView(APIView):
             )
 
 
+class GradeSubjectListAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "subject.view"
+
+    def get(self, request):
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required."
+            )
+
+        academic_year_id = request.query_params.get(
+            "academic_year_id"
+        )
+
+        if not academic_year_id:
+            return CustomResponse.errorResponse(
+                description="Academic year is required."
+            )
+
+        try:
+            grades = (
+                Grade.objects
+                .filter(
+                    school=school,
+                    academic_year_id=academic_year_id,
+                    status=Grade.Status.ACTIVE,
+                )
+                .prefetch_related(
+                    "grade_subjects__subject"
+                )
+                .order_by("display_order", "name")
+            )
+
+            data = []
+
+            for grade in grades:
+
+                subjects = []
+
+                for subject_grade in grade.grade_subjects.all():
+
+                    subject = subject_grade.subject
+
+                    if subject.status != Subject.Status.ACTIVE:
+                        continue
+
+                    subjects.append({
+                        "id": subject.id,
+                        "name": subject.name,
+                    })
+
+                data.append({
+                    "id": grade.id,
+                    "name": grade.name,
+                    "subjects": subjects,
+                })
+
+            return CustomResponse.successResponse(
+                data=data,
+                total=len(data),
+                description="Grade subjects fetched successfully.",
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "grade_subject_list_failed",
+                error=str(e),
+                school_id=str(school.id),
+                academic_year_id=str(academic_year_id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to fetch grade subjects."
+            )
+
+
 class ExaminationCreateAPIView(APIView):
     permission_classes = [
         IsAuthenticated,

@@ -9,7 +9,7 @@ from apps.backoffice.views.examination import ExaminationTypeCreateAPIView, Exam
     ExaminationGradeCreateAPIView, ExaminationGradeListAPIView, ExaminationGradeUpdateAPIView, \
     ExaminationGradeSubjectListAPIView, ExaminationScheduleCreateAPIView, ExaminationScheduleListAPIView, \
     ExaminationScheduleUpdateAPIView, ExaminationStatusUpdateAPIView, ExaminationMarksUploadAPIView, \
-    ExaminationResultListAPIView
+    ExaminationResultListAPIView, GradeSubjectListAPIView
 from apps.backoffice.views.fee import CreateFeeTypeAPIView, FeeTypeListAPIView, UpdateFeeTypeAPIView, \
     DeleteFeeTypeAPIView, CreateFeeTemplateAPIView, FeeTemplateListAPIView, FeeTemplateDetailAPIView, \
     UpdateFeeTemplateAPIView, DeleteFeeTemplateAPIView, CreateFeeTemplateItemAPIView, FeeTemplateItemListAPIView, \
@@ -467,6 +467,8 @@ urlpatterns = [
     path("exam/grade/<uuid:examination_id>",ExaminationGradeListAPIView.as_view(),),
 
     path("exam/grade/<uuid:grade_id>",ExaminationGradeUpdateAPIView.as_view(),),
+
+    path("grade-subject",GradeSubjectListAPIView.as_view(),),
 
     path("exam/grade-subject",ExaminationGradeSubjectListAPIView.as_view(),),
 
