@@ -1282,6 +1282,7 @@ class SchoolDocumentType(AuditModel):
         null=True,
         blank=True,
     )
+    color = models.CharField(max_length=20, default="#FFFFFF", )
 
     status = models.CharField(
         max_length=20,
