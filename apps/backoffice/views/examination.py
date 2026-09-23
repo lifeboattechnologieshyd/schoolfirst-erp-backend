@@ -1099,11 +1099,7 @@ class ExaminationListAPIView(APIView):
                         "subjects": subjects,
                     })
 
-                    grades.append({
-                        "id": str(grade.id),
-                        "name": grade.name,
-                        "subjects": list(subject_map.values()),
-                    })
+
 
                 data.append({
                     "id": str(examination.id),
