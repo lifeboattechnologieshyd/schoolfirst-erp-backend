@@ -3,7 +3,7 @@ from django.db.models import Q, Max, Avg, F
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from decimal import Decimal,InvalidOperation
-
+from openpyxl import load_workbook
 from apps.examination.models import ExaminationType, Examination, ExaminationGrade, ExaminationSchedule, \
     ExaminationResult
 from apps.school.models.school import Branch, AcademicYear, Grade, Subject, SubjectGrade, Student
@@ -2871,6 +2871,7 @@ class ExaminationMarksTemplateAPIView(APIView):
             )
 
 
+
 class ExaminationMarksUploadAPIView(APIView):
     permission_classes = [
         IsAuthenticated,
@@ -2900,10 +2901,14 @@ class ExaminationMarksUploadAPIView(APIView):
                 description="Excel file is required."
             )
 
-        if not file.name.lower().endswith((".xlsx", ".xls")):
+        if not file.name.lower().endswith(
+            (".xlsx", ".xls")
+        ):
             return CustomResponse.errorResponse(
                 description="Only Excel files are allowed."
             )
+
+        workbook = None
 
         try:
             # --------------------------------
@@ -2933,7 +2938,14 @@ class ExaminationMarksUploadAPIView(APIView):
 
             examination = schedule.examination
 
-            if examination.status != Examination.Status.SCHEDULED:
+            # --------------------------------
+            # Validate examination status
+            # --------------------------------
+
+            if (
+                examination.status
+                != Examination.Status.SCHEDULED
+            ):
                 return CustomResponse.errorResponse(
                     description=(
                         "Marks can only be uploaded for a "
@@ -2942,10 +2954,48 @@ class ExaminationMarksUploadAPIView(APIView):
                 )
 
             # --------------------------------
-            # Read Excel
+            # Validate percentages
             # --------------------------------
 
-            from openpyxl import load_workbook
+            total_percentage = (
+                schedule.internal_percentage
+                + schedule.external_percentage
+                + schedule.practical_percentage
+            )
+
+            if total_percentage != Decimal("100"):
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Internal, external, and practical "
+                        "percentages must total 100."
+                    )
+                )
+
+            # --------------------------------
+            # Calculate maximum marks
+            # --------------------------------
+
+            internal_max = (
+                schedule.maximum_marks
+                * schedule.internal_percentage
+                / Decimal("100")
+            )
+
+            external_max = (
+                schedule.maximum_marks
+                * schedule.external_percentage
+                / Decimal("100")
+            )
+
+            practical_max = (
+                schedule.maximum_marks
+                * schedule.practical_percentage
+                / Decimal("100")
+            )
+
+            # --------------------------------
+            # Read Excel
+            # --------------------------------
 
             workbook = load_workbook(
                 file,
@@ -2962,8 +3012,6 @@ class ExaminationMarksUploadAPIView(APIView):
             headers = next(rows, None)
 
             if not headers:
-                workbook.close()
-
                 return CustomResponse.errorResponse(
                     description="Excel file is empty."
                 )
@@ -2980,13 +3028,27 @@ class ExaminationMarksUploadAPIView(APIView):
                 "marks obtained",
             }
 
+            # Component headers are required
+            if schedule.internal_percentage > 0:
+                required_headers.add(
+                    "internal marks"
+                )
+
+            if schedule.external_percentage > 0:
+                required_headers.add(
+                    "external marks"
+                )
+
+            if schedule.practical_percentage > 0:
+                required_headers.add(
+                    "practical marks"
+                )
+
             missing_headers = (
                 required_headers - set(headers)
             )
 
             if missing_headers:
-                workbook.close()
-
                 return CustomResponse.errorResponse(
                     description=(
                         "Missing columns: "
@@ -2998,9 +3060,33 @@ class ExaminationMarksUploadAPIView(APIView):
                 "admission no"
             )
 
-            marks_index = headers.index(
-                "marks obtained"
-            )
+            marks_index = None
+
+            if "marks obtained" in headers:
+                marks_index = headers.index(
+                    "marks obtained"
+                )
+
+            internal_marks_index = None
+
+            if "internal marks" in headers:
+                internal_marks_index = headers.index(
+                    "internal marks"
+                )
+
+            external_marks_index = None
+
+            if "external marks" in headers:
+                external_marks_index = headers.index(
+                    "external marks"
+                )
+
+            practical_marks_index = None
+
+            if "practical marks" in headers:
+                practical_marks_index = headers.index(
+                    "practical marks"
+                )
 
             # --------------------------------
             # Validate Excel rows
@@ -3008,6 +3094,7 @@ class ExaminationMarksUploadAPIView(APIView):
 
             validated_rows = []
             errors = []
+            seen_admission_numbers = set()
 
             row_number = 1
 
@@ -3017,13 +3104,16 @@ class ExaminationMarksUploadAPIView(APIView):
                 if not row:
                     continue
 
-                admission_no = row[admission_no_index]
-                marks = row[marks_index]
+                admission_no = row[
+                    admission_no_index
+                ]
 
                 if admission_no is None:
                     errors.append({
                         "row": row_number,
-                        "error": "Admission number is required.",
+                        "error": (
+                            "Admission number is required."
+                        ),
                     })
                     continue
 
@@ -3034,42 +3124,228 @@ class ExaminationMarksUploadAPIView(APIView):
                 if not admission_no:
                     errors.append({
                         "row": row_number,
-                        "error": "Admission number is required.",
+                        "error": (
+                            "Admission number is required."
+                        ),
                     })
                     continue
 
-                if marks is None:
-                    errors.append({
-                        "row": row_number,
-                        "admission_no": admission_no,
-                        "error": "Marks are required.",
-                    })
-                    continue
+                # --------------------------------
+                # Duplicate admission number
+                # --------------------------------
 
-                try:
-                    marks = Decimal(str(marks))
-                except (InvalidOperation, ValueError):
-                    errors.append({
-                        "row": row_number,
-                        "admission_no": admission_no,
-                        "error": "Invalid marks.",
-                    })
-                    continue
-
-                if marks < 0:
-                    errors.append({
-                        "row": row_number,
-                        "admission_no": admission_no,
-                        "error": "Marks cannot be negative.",
-                    })
-                    continue
-
-                if marks > schedule.maximum_marks:
+                if admission_no in seen_admission_numbers:
                     errors.append({
                         "row": row_number,
                         "admission_no": admission_no,
                         "error": (
-                            f"Marks cannot exceed "
+                            "Duplicate admission number "
+                            "in Excel."
+                        ),
+                    })
+                    continue
+
+                seen_admission_numbers.add(
+                    admission_no
+                )
+
+                # --------------------------------
+                # Get component marks
+                # --------------------------------
+
+                internal_marks = Decimal("0")
+                external_marks = Decimal("0")
+                practical_marks = Decimal("0")
+
+                # Internal
+                if schedule.internal_percentage > 0:
+                    value = row[
+                        internal_marks_index
+                    ]
+
+                    if value is None:
+                        errors.append({
+                            "row": row_number,
+                            "admission_no": admission_no,
+                            "error": (
+                                "Internal marks are required."
+                            ),
+                        })
+                        continue
+
+                    try:
+                        internal_marks = Decimal(
+                            str(value)
+                        )
+                    except (
+                        InvalidOperation,
+                        ValueError,
+                    ):
+                        errors.append({
+                            "row": row_number,
+                            "admission_no": admission_no,
+                            "error": (
+                                "Invalid internal marks."
+                            ),
+                        })
+                        continue
+
+                # External
+                if schedule.external_percentage > 0:
+                    value = row[
+                        external_marks_index
+                    ]
+
+                    if value is None:
+                        errors.append({
+                            "row": row_number,
+                            "admission_no": admission_no,
+                            "error": (
+                                "External marks are required."
+                            ),
+                        })
+                        continue
+
+                    try:
+                        external_marks = Decimal(
+                            str(value)
+                        )
+                    except (
+                        InvalidOperation,
+                        ValueError,
+                    ):
+                        errors.append({
+                            "row": row_number,
+                            "admission_no": admission_no,
+                            "error": (
+                                "Invalid external marks."
+                            ),
+                        })
+                        continue
+
+                # Practical
+                if schedule.practical_percentage > 0:
+                    value = row[
+                        practical_marks_index
+                    ]
+
+                    if value is None:
+                        errors.append({
+                            "row": row_number,
+                            "admission_no": admission_no,
+                            "error": (
+                                "Practical marks are required."
+                            ),
+                        })
+                        continue
+
+                    try:
+                        practical_marks = Decimal(
+                            str(value)
+                        )
+                    except (
+                        InvalidOperation,
+                        ValueError,
+                    ):
+                        errors.append({
+                            "row": row_number,
+                            "admission_no": admission_no,
+                            "error": (
+                                "Invalid practical marks."
+                            ),
+                        })
+                        continue
+
+                # --------------------------------
+                # Validate negative marks
+                # --------------------------------
+
+                if internal_marks < 0:
+                    errors.append({
+                        "row": row_number,
+                        "admission_no": admission_no,
+                        "error": (
+                            "Internal marks cannot "
+                            "be negative."
+                        ),
+                    })
+                    continue
+
+                if external_marks < 0:
+                    errors.append({
+                        "row": row_number,
+                        "admission_no": admission_no,
+                        "error": (
+                            "External marks cannot "
+                            "be negative."
+                        ),
+                    })
+                    continue
+
+                if practical_marks < 0:
+                    errors.append({
+                        "row": row_number,
+                        "admission_no": admission_no,
+                        "error": (
+                            "Practical marks cannot "
+                            "be negative."
+                        ),
+                    })
+                    continue
+
+                # --------------------------------
+                # Validate maximum marks
+                # --------------------------------
+
+                if internal_marks > internal_max:
+                    errors.append({
+                        "row": row_number,
+                        "admission_no": admission_no,
+                        "error": (
+                            f"Internal marks cannot "
+                            f"exceed {internal_max}."
+                        ),
+                    })
+                    continue
+
+                if external_marks > external_max:
+                    errors.append({
+                        "row": row_number,
+                        "admission_no": admission_no,
+                        "error": (
+                            f"External marks cannot "
+                            f"exceed {external_max}."
+                        ),
+                    })
+                    continue
+
+                if practical_marks > practical_max:
+                    errors.append({
+                        "row": row_number,
+                        "admission_no": admission_no,
+                        "error": (
+                            f"Practical marks cannot "
+                            f"exceed {practical_max}."
+                        ),
+                    })
+                    continue
+
+                # --------------------------------
+                # Calculate total marks
+                # --------------------------------
+
+                marks_obtained = (
+                    internal_marks
+                    + external_marks
+                    + practical_marks
+                )
+
+                if marks_obtained > schedule.maximum_marks:
+                    errors.append({
+                        "row": row_number,
+                        "admission_no": admission_no,
+                        "error": (
+                            f"Total marks cannot exceed "
                             f"{schedule.maximum_marks}."
                         ),
                     })
@@ -3078,13 +3354,14 @@ class ExaminationMarksUploadAPIView(APIView):
                 validated_rows.append({
                     "row": row_number,
                     "admission_no": admission_no,
-                    "marks": marks,
+                    "internal_marks": internal_marks,
+                    "external_marks": external_marks,
+                    "practical_marks": practical_marks,
+                    "marks_obtained": marks_obtained,
                 })
 
-            workbook.close()
-
             # --------------------------------
-            # Stop if Excel has validation errors
+            # Stop if Excel has errors
             # --------------------------------
 
             if errors:
@@ -3100,7 +3377,10 @@ class ExaminationMarksUploadAPIView(APIView):
 
             if not validated_rows:
                 return CustomResponse.errorResponse(
-                    description="No valid student records found in Excel."
+                    description=(
+                        "No valid student records "
+                        "found in Excel."
+                    )
                 )
 
             # --------------------------------
@@ -3133,7 +3413,9 @@ class ExaminationMarksUploadAPIView(APIView):
             student_errors = []
 
             for row in validated_rows:
-                admission_no = row["admission_no"]
+                admission_no = row[
+                    "admission_no"
+                ]
 
                 if admission_no not in student_map:
                     student_errors.append({
@@ -3141,7 +3423,8 @@ class ExaminationMarksUploadAPIView(APIView):
                         "admission_no": admission_no,
                         "error": (
                             "Student not found or "
-                            "student does not belong to this grade."
+                            "student does not belong "
+                            "to this grade."
                         ),
                     })
 
@@ -3151,13 +3434,13 @@ class ExaminationMarksUploadAPIView(APIView):
                         "errors": student_errors,
                     },
                     description=(
-                        "Some students could not be matched. "
-                        "No marks were uploaded."
+                        "Some students could not be "
+                        "matched. No marks were uploaded."
                     ),
                 )
 
             # --------------------------------
-            # Upload marks
+            # Save marks
             # --------------------------------
 
             created_count = 0
@@ -3178,7 +3461,18 @@ class ExaminationMarksUploadAPIView(APIView):
                             student=student,
                             defaults={
                                 "examination": examination,
-                                "marks_obtained": row["marks"],
+                                "internal_marks": (
+                                    row["internal_marks"]
+                                ),
+                                "external_marks": (
+                                    row["external_marks"]
+                                ),
+                                "practical_marks": (
+                                    row["practical_marks"]
+                                ),
+                                "marks_obtained": (
+                                    row["marks_obtained"]
+                                ),
                                 "status": (
                                     ExaminationResult.Status.DRAFT
                                 ),
@@ -3191,29 +3485,71 @@ class ExaminationMarksUploadAPIView(APIView):
                     else:
                         updated_count += 1
 
+            # --------------------------------
+            # Log
+            # --------------------------------
+
             application_logger.info(
                 "examination_marks_uploaded",
-                examination_id=str(examination.id),
-                schedule_id=str(schedule.id),
-                grade_id=str(schedule.grade_id),
-                subject_id=str(schedule.subject_id),
+                examination_id=str(
+                    examination.id
+                ),
+                schedule_id=str(
+                    schedule.id
+                ),
+                grade_id=str(
+                    schedule.grade_id
+                ),
+                subject_id=str(
+                    schedule.subject_id
+                ),
                 created_count=created_count,
                 updated_count=updated_count,
                 school_id=str(school.id),
             )
 
+            # --------------------------------
+            # Response
+            # --------------------------------
+
             return CustomResponse.successResponse(
-                total=created_count + updated_count,
+                total=(
+                    created_count
+                    + updated_count
+                ),
                 data={
-                    "examination_id": str(examination.id),
-                    "schedule_id": str(schedule.id),
-                    "grade_id": str(schedule.grade_id),
-                    "subject_id": str(schedule.subject_id),
-                    "subject_name": schedule.subject.name,
+                    "examination_id": str(
+                        examination.id
+                    ),
+                    "schedule_id": str(
+                        schedule.id
+                    ),
+                    "grade_id": str(
+                        schedule.grade_id
+                    ),
+                    "subject_id": str(
+                        schedule.subject_id
+                    ),
+                    "subject_name": (
+                        schedule.subject.name
+                    ),
+                    "maximum_marks": (
+                        schedule.maximum_marks
+                    ),
+                    "internal_max_marks": (
+                        internal_max
+                    ),
+                    "external_max_marks": (
+                        external_max
+                    ),
+                    "practical_max_marks": (
+                        practical_max
+                    ),
                     "created_count": created_count,
                     "updated_count": updated_count,
                     "total_processed": (
-                        created_count + updated_count
+                        created_count
+                        + updated_count
                     ),
                 },
                 description="Marks uploaded successfully.",
@@ -3223,15 +3559,29 @@ class ExaminationMarksUploadAPIView(APIView):
             application_logger.exception(
                 "examination_marks_upload_failed",
                 error=str(e),
-                examination_id=str(examination_id),
-                grade_id=str(grade_id),
-                subject_id=str(subject_id),
-                school_id=str(school.id),
+                examination_id=str(
+                    examination_id
+                ),
+                grade_id=str(
+                    grade_id
+                ),
+                subject_id=str(
+                    subject_id
+                ),
+                school_id=str(
+                    school.id
+                ),
             )
 
             return CustomResponse.errorResponse(
-                description="Failed to upload examination marks."
+                description=(
+                    "Failed to upload examination marks."
+                )
             )
+
+        finally:
+            if workbook:
+                workbook.close()
 
 
 
