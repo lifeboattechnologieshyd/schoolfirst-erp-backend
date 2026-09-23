@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from decimal import Decimal,InvalidOperation
 from openpyxl import load_workbook
 from apps.examination.models import ExaminationType, Examination, ExaminationGrade, ExaminationSchedule, \
-    ExaminationResult
+    ExaminationResult, GradeConfiguration
 from apps.school.models.school import Branch, AcademicYear, Grade, Subject, SubjectGrade, Student
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
@@ -2872,7 +2872,6 @@ class ExaminationMarksTemplateAPIView(APIView):
             )
 
 
-
 class ExaminationMarksUploadAPIView(APIView):
     permission_classes = [
         IsAuthenticated,
@@ -2891,6 +2890,13 @@ class ExaminationMarksUploadAPIView(APIView):
         school = request.school
 
         if not school:
+            application_logger.warning(
+                "examination_marks_upload_school_missing",
+                examination_id=str(examination_id),
+                grade_id=str(grade_id),
+                subject_id=str(subject_id),
+            )
+
             return CustomResponse.errorResponse(
                 description="School is required."
             )
@@ -2898,6 +2904,14 @@ class ExaminationMarksUploadAPIView(APIView):
         file = request.FILES.get("file")
 
         if not file:
+            application_logger.warning(
+                "examination_marks_upload_file_missing",
+                examination_id=str(examination_id),
+                grade_id=str(grade_id),
+                subject_id=str(subject_id),
+                school_id=str(school.id),
+            )
+
             return CustomResponse.errorResponse(
                 description="Excel file is required."
             )
@@ -2905,9 +2919,27 @@ class ExaminationMarksUploadAPIView(APIView):
         if not file.name.lower().endswith(
             (".xlsx", ".xls")
         ):
+            application_logger.warning(
+                "examination_marks_upload_invalid_file",
+                file_name=file.name,
+                examination_id=str(examination_id),
+                grade_id=str(grade_id),
+                subject_id=str(subject_id),
+                school_id=str(school.id),
+            )
+
             return CustomResponse.errorResponse(
                 description="Only Excel files are allowed."
             )
+
+        application_logger.info(
+            "examination_marks_upload_started",
+            examination_id=str(examination_id),
+            grade_id=str(grade_id),
+            subject_id=str(subject_id),
+            file_name=file.name,
+            school_id=str(school.id),
+        )
 
         workbook = None
 
@@ -2933,6 +2965,14 @@ class ExaminationMarksUploadAPIView(APIView):
             )
 
             if not schedule:
+                application_logger.warning(
+                    "examination_marks_upload_schedule_not_found",
+                    examination_id=str(examination_id),
+                    grade_id=str(grade_id),
+                    subject_id=str(subject_id),
+                    school_id=str(school.id),
+                )
+
                 return CustomResponse.errorResponse(
                     description="Examination schedule not found."
                 )
@@ -2947,6 +2987,14 @@ class ExaminationMarksUploadAPIView(APIView):
                 examination.status
                 != Examination.Status.SCHEDULED
             ):
+                application_logger.warning(
+                    "examination_marks_upload_invalid_status",
+                    examination_id=str(examination.id),
+                    schedule_id=str(schedule.id),
+                    status=examination.status,
+                    school_id=str(school.id),
+                )
+
                 return CustomResponse.errorResponse(
                     description=(
                         "Marks can only be uploaded for a "
@@ -2965,6 +3013,23 @@ class ExaminationMarksUploadAPIView(APIView):
             )
 
             if total_percentage != Decimal("100"):
+                application_logger.error(
+                    "examination_marks_upload_invalid_percentages",
+                    examination_id=str(examination.id),
+                    schedule_id=str(schedule.id),
+                    internal_percentage=(
+                        schedule.internal_percentage
+                    ),
+                    external_percentage=(
+                        schedule.external_percentage
+                    ),
+                    practical_percentage=(
+                        schedule.practical_percentage
+                    ),
+                    total_percentage=total_percentage,
+                    school_id=str(school.id),
+                )
+
                 return CustomResponse.errorResponse(
                     description=(
                         "Internal, external, and practical "
@@ -2994,6 +3059,15 @@ class ExaminationMarksUploadAPIView(APIView):
                 / Decimal("100")
             )
 
+            application_logger.debug(
+                "examination_marks_upload_component_limits",
+                schedule_id=str(schedule.id),
+                maximum_marks=schedule.maximum_marks,
+                internal_max=internal_max,
+                external_max=external_max,
+                practical_max=practical_max,
+            )
+
             # --------------------------------
             # Read Excel
             # --------------------------------
@@ -3013,6 +3087,13 @@ class ExaminationMarksUploadAPIView(APIView):
             headers = next(rows, None)
 
             if not headers:
+                application_logger.warning(
+                    "examination_marks_upload_empty_excel",
+                    examination_id=str(examination.id),
+                    schedule_id=str(schedule.id),
+                    school_id=str(school.id),
+                )
+
                 return CustomResponse.errorResponse(
                     description="Excel file is empty."
                 )
@@ -3029,7 +3110,6 @@ class ExaminationMarksUploadAPIView(APIView):
                 "marks obtained",
             }
 
-            # Component headers are required
             if schedule.internal_percentage > 0:
                 required_headers.add(
                     "internal marks"
@@ -3050,6 +3130,16 @@ class ExaminationMarksUploadAPIView(APIView):
             )
 
             if missing_headers:
+                application_logger.warning(
+                    "examination_marks_upload_missing_headers",
+                    examination_id=str(examination.id),
+                    schedule_id=str(schedule.id),
+                    missing_headers=sorted(
+                        missing_headers
+                    ),
+                    school_id=str(school.id),
+                )
+
                 return CustomResponse.errorResponse(
                     description=(
                         "Missing columns: "
@@ -3061,33 +3151,23 @@ class ExaminationMarksUploadAPIView(APIView):
                 "admission no"
             )
 
-            marks_index = None
+            internal_marks_index = (
+                headers.index("internal marks")
+                if "internal marks" in headers
+                else None
+            )
 
-            if "marks obtained" in headers:
-                marks_index = headers.index(
-                    "marks obtained"
-                )
+            external_marks_index = (
+                headers.index("external marks")
+                if "external marks" in headers
+                else None
+            )
 
-            internal_marks_index = None
-
-            if "internal marks" in headers:
-                internal_marks_index = headers.index(
-                    "internal marks"
-                )
-
-            external_marks_index = None
-
-            if "external marks" in headers:
-                external_marks_index = headers.index(
-                    "external marks"
-                )
-
-            practical_marks_index = None
-
-            if "practical marks" in headers:
-                practical_marks_index = headers.index(
-                    "practical marks"
-                )
+            practical_marks_index = (
+                headers.index("practical marks")
+                if "practical marks" in headers
+                else None
+            )
 
             # --------------------------------
             # Validate Excel rows
@@ -3131,10 +3211,6 @@ class ExaminationMarksUploadAPIView(APIView):
                     })
                     continue
 
-                # --------------------------------
-                # Duplicate admission number
-                # --------------------------------
-
                 if admission_no in seen_admission_numbers:
                     errors.append({
                         "row": row_number,
@@ -3150,15 +3226,14 @@ class ExaminationMarksUploadAPIView(APIView):
                     admission_no
                 )
 
-                # --------------------------------
-                # Get component marks
-                # --------------------------------
-
                 internal_marks = Decimal("0")
                 external_marks = Decimal("0")
                 practical_marks = Decimal("0")
 
-                # Internal
+                # --------------------------------
+                # Internal marks
+                # --------------------------------
+
                 if schedule.internal_percentage > 0:
                     value = row[
                         internal_marks_index
@@ -3191,7 +3266,10 @@ class ExaminationMarksUploadAPIView(APIView):
                         })
                         continue
 
-                # External
+                # --------------------------------
+                # External marks
+                # --------------------------------
+
                 if schedule.external_percentage > 0:
                     value = row[
                         external_marks_index
@@ -3224,7 +3302,10 @@ class ExaminationMarksUploadAPIView(APIView):
                         })
                         continue
 
-                # Practical
+                # --------------------------------
+                # Practical marks
+                # --------------------------------
+
                 if schedule.practical_percentage > 0:
                     value = row[
                         practical_marks_index
@@ -3261,35 +3342,16 @@ class ExaminationMarksUploadAPIView(APIView):
                 # Validate negative marks
                 # --------------------------------
 
-                if internal_marks < 0:
+                if (
+                    internal_marks < 0
+                    or external_marks < 0
+                    or practical_marks < 0
+                ):
                     errors.append({
                         "row": row_number,
                         "admission_no": admission_no,
                         "error": (
-                            "Internal marks cannot "
-                            "be negative."
-                        ),
-                    })
-                    continue
-
-                if external_marks < 0:
-                    errors.append({
-                        "row": row_number,
-                        "admission_no": admission_no,
-                        "error": (
-                            "External marks cannot "
-                            "be negative."
-                        ),
-                    })
-                    continue
-
-                if practical_marks < 0:
-                    errors.append({
-                        "row": row_number,
-                        "admission_no": admission_no,
-                        "error": (
-                            "Practical marks cannot "
-                            "be negative."
+                            "Marks cannot be negative."
                         ),
                     })
                     continue
@@ -3303,8 +3365,8 @@ class ExaminationMarksUploadAPIView(APIView):
                         "row": row_number,
                         "admission_no": admission_no,
                         "error": (
-                            f"Internal marks cannot "
-                            f"exceed {internal_max}."
+                            f"Internal marks cannot exceed "
+                            f"{internal_max}."
                         ),
                     })
                     continue
@@ -3314,8 +3376,8 @@ class ExaminationMarksUploadAPIView(APIView):
                         "row": row_number,
                         "admission_no": admission_no,
                         "error": (
-                            f"External marks cannot "
-                            f"exceed {external_max}."
+                            f"External marks cannot exceed "
+                            f"{external_max}."
                         ),
                     })
                     continue
@@ -3325,8 +3387,8 @@ class ExaminationMarksUploadAPIView(APIView):
                         "row": row_number,
                         "admission_no": admission_no,
                         "error": (
-                            f"Practical marks cannot "
-                            f"exceed {practical_max}."
+                            f"Practical marks cannot exceed "
+                            f"{practical_max}."
                         ),
                     })
                     continue
@@ -3341,7 +3403,10 @@ class ExaminationMarksUploadAPIView(APIView):
                     + practical_marks
                 )
 
-                if marks_obtained > schedule.maximum_marks:
+                if (
+                    marks_obtained
+                    > schedule.maximum_marks
+                ):
                     errors.append({
                         "row": row_number,
                         "admission_no": admission_no,
@@ -3366,6 +3431,15 @@ class ExaminationMarksUploadAPIView(APIView):
             # --------------------------------
 
             if errors:
+                application_logger.warning(
+                    "examination_marks_upload_validation_failed",
+                    examination_id=str(examination.id),
+                    schedule_id=str(schedule.id),
+                    total_errors=len(errors),
+                    valid_rows=len(validated_rows),
+                    school_id=str(school.id),
+                )
+
                 return CustomResponse.errorResponse(
                     data={
                         "errors": errors,
@@ -3377,6 +3451,13 @@ class ExaminationMarksUploadAPIView(APIView):
                 )
 
             if not validated_rows:
+                application_logger.warning(
+                    "examination_marks_upload_no_valid_rows",
+                    examination_id=str(examination.id),
+                    schedule_id=str(schedule.id),
+                    school_id=str(school.id),
+                )
+
                 return CustomResponse.errorResponse(
                     description=(
                         "No valid student records "
@@ -3430,6 +3511,14 @@ class ExaminationMarksUploadAPIView(APIView):
                     })
 
             if student_errors:
+                application_logger.warning(
+                    "examination_marks_upload_student_validation_failed",
+                    examination_id=str(examination.id),
+                    schedule_id=str(schedule.id),
+                    total_errors=len(student_errors),
+                    school_id=str(school.id),
+                )
+
                 return CustomResponse.errorResponse(
                     data={
                         "errors": student_errors,
@@ -3475,7 +3564,9 @@ class ExaminationMarksUploadAPIView(APIView):
                                     row["marks_obtained"]
                                 ),
                                 "status": (
-                                    ExaminationResult.Status.DRAFT
+                                    ExaminationResult
+                                    .Status
+                                    .DRAFT
                                 ),
                             },
                         )
@@ -3487,7 +3578,7 @@ class ExaminationMarksUploadAPIView(APIView):
                         updated_count += 1
 
             # --------------------------------
-            # Log
+            # Success log
             # --------------------------------
 
             application_logger.info(
@@ -3506,12 +3597,12 @@ class ExaminationMarksUploadAPIView(APIView):
                 ),
                 created_count=created_count,
                 updated_count=updated_count,
+                total_processed=(
+                    created_count
+                    + updated_count
+                ),
                 school_id=str(school.id),
             )
-
-            # --------------------------------
-            # Response
-            # --------------------------------
 
             return CustomResponse.successResponse(
                 total=(
@@ -3586,8 +3677,12 @@ class ExaminationMarksUploadAPIView(APIView):
 
 
 
+
 class ExaminationResultListAPIView(APIView):
-    permission_classes = [IsAuthenticated,HasPermission,]
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
 
     required_permission = "examination_result.view"
 
@@ -3600,6 +3695,10 @@ class ExaminationResultListAPIView(APIView):
             )
 
         try:
+            # -----------------------------------------
+            # Get Examination
+            # -----------------------------------------
+
             examination = (
                 Examination.objects
                 .filter(
@@ -3614,11 +3713,15 @@ class ExaminationResultListAPIView(APIView):
                     description="Examination not found."
                 )
 
+            # -----------------------------------------
+            # Get Results
+            # -----------------------------------------
+
             queryset = (
                 ExaminationResult.objects
                 .filter(
                     examination=examination,
-                    examination_schedule__school=school,
+                    examination_schedule__examination__school=school,
                 )
                 .select_related(
                     "student",
@@ -3633,10 +3736,25 @@ class ExaminationResultListAPIView(APIView):
                 )
             )
 
-            grade_id = request.query_params.get("grade_id")
-            subject_id = request.query_params.get("subject_id")
-            student_id = request.query_params.get("student_id")
-            search = request.query_params.get("search")
+            # -----------------------------------------
+            # Filters
+            # -----------------------------------------
+
+            grade_id = request.query_params.get(
+                "grade_id"
+            )
+
+            subject_id = request.query_params.get(
+                "subject_id"
+            )
+
+            student_id = request.query_params.get(
+                "student_id"
+            )
+
+            search = request.query_params.get(
+                "search"
+            )
 
             if grade_id:
                 queryset = queryset.filter(
@@ -3656,73 +3774,44 @@ class ExaminationResultListAPIView(APIView):
             if search:
                 search = search.strip()
 
-                queryset = queryset.filter(
-                    Q(student__name__icontains=search)
-                    | Q(
-                        student__admission_number__icontains=search
+                if search:
+                    queryset = queryset.filter(
+                        Q(
+                            student__name__icontains=search
+                        )
+                        | Q(
+                            student__admission_number__icontains=search
+                        )
                     )
-                )
-
-            # -----------------------------------------
-            # Summary
-            # -----------------------------------------
-
-            summary_queryset = queryset
-
-            summary = summary_queryset.aggregate(
-                highest_score=Max("marks_obtained"),
-                class_average=Avg("marks_obtained"),
-            )
-
-            total_students = summary_queryset.count()
-
-            passed_students = summary_queryset.filter(
-                marks_obtained__gte=F(
-                    "examination_schedule__passing_marks"
-                )
-            ).count()
-
-            failed_students = total_students - passed_students
-
-            pass_rate = (
-                (passed_students / total_students) * 100
-                if total_students
-                else 0
-            )
-
-            summary_data = {
-                "highest_score": (
-                    summary["highest_score"]
-                    if summary["highest_score"] is not None
-                    else 0
-                ),
-                "class_average": (
-                    round(summary["class_average"], 2)
-                    if summary["class_average"] is not None
-                    else 0
-                ),
-                "pass_rate": round(pass_rate, 2),
-                "total_students": total_students,
-                "passed_students": passed_students,
-                "failed_students": failed_students,
-            }
 
             # -----------------------------------------
             # Pagination
             # -----------------------------------------
 
-            page = int(
-                request.query_params.get("page", 1)
+            page = max(
+                int(
+                    request.query_params.get(
+                        "page",
+                        1,
+                    )
+                ),
+                1,
             )
 
-            page_size = int(
-                request.query_params.get("page_size", 20)
+            page_size = max(
+                int(
+                    request.query_params.get(
+                        "page_size",
+                        20,
+                    )
+                ),
+                1,
             )
 
-            page_size = min(page_size, 100)
-
-            if page < 1:
-                page = 1
+            page_size = min(
+                page_size,
+                100,
+            )
 
             total_count = queryset.count()
 
@@ -3732,80 +3821,235 @@ class ExaminationResultListAPIView(APIView):
             queryset = queryset[start:end]
 
             # -----------------------------------------
+            # Grade Configurations
+            # -----------------------------------------
+
+            grade_configurations = (
+                GradeConfiguration.objects
+                .filter(
+                    school=school,
+                    academic_year=examination.academic_year,
+                )
+                .order_by(
+                    "min_percentage"
+                )
+            )
+
+            # -----------------------------------------
             # Result Data
             # -----------------------------------------
 
-            results = [
-                {
-                    "id": result.id,
-                    "examination_id": result.examination_id,
-                    "schedule_id": result.examination_schedule_id,
+            data = []
 
-                    "student_id": result.student_id,
-                    "student_name": result.student.name,
-                    "admission_number": result.student.admission_number,
+            for result in queryset:
 
-                    "grade_id": (
-                        result.examination_schedule.grade_id
+                schedule = (
+                    result.examination_schedule
+                )
+
+                maximum_marks = (
+                    schedule.maximum_marks
+                )
+
+                # -----------------------------------------
+                # Calculate Percentage
+                # -----------------------------------------
+
+                if (
+                    maximum_marks
+                    and maximum_marks > 0
+                ):
+                    percentage = (
+                        result.marks_obtained
+                        / maximum_marks
+                    ) * Decimal("100")
+                else:
+                    percentage = Decimal("0")
+
+                percentage = percentage.quantize(
+                    Decimal("0.01")
+                )
+
+                # -----------------------------------------
+                # Find Grade Configuration
+                # -----------------------------------------
+
+                grade_configuration = next(
+                    (
+                        config
+                        for config
+                        in grade_configurations
+                        if (
+                            config.min_percentage
+                            <= percentage
+                            <= config.max_percentage
+                        )
                     ),
+                    None,
+                )
+
+                grade = (
+                    grade_configuration.grade
+                    if grade_configuration
+                    else None
+                )
+
+                # -----------------------------------------
+                # Result Status
+                # -----------------------------------------
+
+                result_status = (
+                    result.result_status
+                )
+
+                # If result_status is not already
+                # calculated/stored, determine PASS/FAIL
+                # from passing marks.
+                if not result_status:
+                    result_status = (
+                        "PASS"
+                        if result.marks_obtained
+                        >= schedule.passing_marks
+                        else "FAIL"
+                    )
+
+                data.append({
+                    "id": str(
+                        result.id
+                    ),
+
+                    "examination_id": str(
+                        result.examination_id
+                    ),
+
+                    "schedule_id": str(
+                        result.examination_schedule_id
+                    ),
+
+                    "student_id": str(
+                        result.student_id
+                    ),
+
+                    "student_name": (
+                        result.student.name
+                    ),
+
+                    "admission_number": (
+                        result.student.admission_number
+                    ),
+
+                    "grade_id": str(
+                        schedule.grade_id
+                    ),
+
                     "grade_name": (
-                        result.examination_schedule.grade.name
+                        schedule.grade.name
                     ),
 
-                    "subject_id": (
-                        result.examination_schedule.subject_id
+                    "subject_id": str(
+                        schedule.subject_id
                     ),
+
                     "subject_name": (
-                        result.examination_schedule.subject.name
+                        schedule.subject.name
                     ),
 
                     "exam_date": (
-                        result.examination_schedule.exam_date
+                        schedule.exam_date
                     ),
 
+                    # ---------------------------------
+                    # Marks
+                    # ---------------------------------
+
                     "maximum_marks": (
-                        result.examination_schedule.maximum_marks
+                        maximum_marks
                     ),
 
                     "passing_marks": (
-                        result.examination_schedule.passing_marks
+                        schedule.passing_marks
                     ),
 
-                    "marks_obtained": result.marks_obtained,
-                    "grade": result.grade,
-                    "grade_point": result.grade_point,
-                    "result_status": result.result_status,
-                    "remarks": result.remarks,
-                    "status": result.status,
-                }
-                for result in queryset
-            ]
+                    "internal_marks": (
+                        result.internal_marks
+                    ),
 
-            data = {
-                "summary": summary_data,
-                "results": results,
-            }
+                    "external_marks": (
+                        result.external_marks
+                    ),
+
+                    "practical_marks": (
+                        result.practical_marks
+                    ),
+
+                    "marks_obtained": (
+                        result.marks_obtained
+                    ),
+
+                    # ---------------------------------
+                    # Calculated Result
+                    # ---------------------------------
+
+                    "percentage": percentage,
+
+                    "grade": grade,
+
+                    "grade_point": (
+                        result.grade_point
+                    ),
+
+                    "result_status": (
+                        result_status
+                    ),
+
+                    "remarks": (
+                        result.remarks
+                    ),
+
+                    "status": (
+                        result.status
+                    ),
+                })
+
+            # -----------------------------------------
+            # Log
+            # -----------------------------------------
 
             application_logger.info(
                 "examination_results_fetched",
-                examination_id=str(examination.id),
-                school_id=str(school.id),
+                examination_id=str(
+                    examination.id
+                ),
+                school_id=str(
+                    school.id
+                ),
                 grade_id=grade_id,
                 subject_id=subject_id,
+                student_id=student_id,
                 total_count=total_count,
             )
+
+            # -----------------------------------------
+            # Response
+            # -----------------------------------------
 
             return CustomResponse.successResponse(
                 total=total_count,
                 data=data,
-                description="Examination results fetched successfully.",
+                description=(
+                    "Examination results fetched successfully."
+                ),
             )
 
         except Exception as e:
             application_logger.exception(
                 "examination_results_fetch_failed",
-                examination_id=str(examination_id),
-                school_id=str(school.id),
+                examination_id=str(
+                    examination_id
+                ),
+                school_id=str(
+                    school.id
+                ),
                 error=str(e),
             )
 
