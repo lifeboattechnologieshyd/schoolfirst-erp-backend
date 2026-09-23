@@ -1145,6 +1145,7 @@ class ExaminationListAPIView(APIView):
                 })
 
             return CustomResponse.successResponse(
+                total=len(data),
                 data=data,
                 description="Examinations fetched successfully.",
             )
