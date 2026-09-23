@@ -1213,6 +1213,7 @@ class ExaminationUpdateAPIView(APIView):
                 result_date = request.data.get("result_date")
                 reporting_date = request.data.get("reporting_date")
                 description = request.data.get("description")
+                status = request.data.get("status")
 
                 # --------------------------------
                 # Name
@@ -1315,6 +1316,7 @@ class ExaminationUpdateAPIView(APIView):
                 if reporting_date is not None:
                     examination.reporting_date = reporting_date
 
+
                 if examination.start_date > examination.end_date:
                     return CustomResponse.errorResponse(
                         description="Start date cannot be after end date."
@@ -1325,6 +1327,9 @@ class ExaminationUpdateAPIView(APIView):
                         return CustomResponse.errorResponse(
                             description="Result date cannot be before examination end date."
                         )
+
+                if status is not None:
+                    examination.status = status
 
                 # --------------------------------
                 # Description
