@@ -1089,7 +1089,7 @@ class ExaminationListAPIView(APIView):
 
                             "instructions": schedule.instructions,
                         }
-                        for schedule in examination.examination_schedules.all()
+                        for schedule in examination.schedules.all()
                         if schedule.grade_id == grade.id
                     ]
 
