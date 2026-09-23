@@ -484,7 +484,7 @@ urlpatterns = [
 
     path("exam/<uuid:examination_id>/grades/<uuid:grade_id>/subjects/<uuid:subject_id>/marks/upload",ExaminationMarksUploadAPIView.as_view(),),
 
-    path("exam/results",ExaminationResultListAPIView.as_view(),),
+    path("exam/results/<uuid:examination_id>",ExaminationResultListAPIView.as_view(),),
 
 
 
