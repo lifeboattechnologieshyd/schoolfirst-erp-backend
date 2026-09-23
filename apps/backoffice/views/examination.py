@@ -3,6 +3,7 @@ from django.db.models import Q, Max, Avg, F
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from decimal import Decimal,InvalidOperation
+
 from apps.examination.models import ExaminationType, Examination, ExaminationGrade, ExaminationSchedule, \
     ExaminationResult
 from apps.school.models.school import Branch, AcademicYear, Grade, Subject, SubjectGrade, Student
@@ -2864,12 +2865,22 @@ class ExaminationMarksTemplateAPIView(APIView):
                 description="Failed to generate marks template."
             )
 
+
 class ExaminationMarksUploadAPIView(APIView):
-    permission_classes = [IsAuthenticated,HasPermission,]
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
 
     required_permission = "examination_result.create"
 
-    def post(self, request, schedule_id):
+    def post(
+        self,
+        request,
+        examination_id,
+        grade_id,
+        subject_id,
+    ):
         school = request.school
 
         if not school:
@@ -2890,6 +2901,10 @@ class ExaminationMarksUploadAPIView(APIView):
             )
 
         try:
+            # --------------------------------
+            # Get examination schedule
+            # --------------------------------
+
             schedule = (
                 ExaminationSchedule.objects
                 .select_related(
@@ -2898,7 +2913,9 @@ class ExaminationMarksUploadAPIView(APIView):
                     "subject",
                 )
                 .filter(
-                    id=schedule_id,
+                    examination_id=examination_id,
+                    grade_id=grade_id,
+                    subject_id=subject_id,
                     examination__school=school,
                 )
                 .first()
@@ -2914,8 +2931,8 @@ class ExaminationMarksUploadAPIView(APIView):
             if examination.status != Examination.Status.SCHEDULED:
                 return CustomResponse.errorResponse(
                     description=(
-                        "Marks can only be uploaded for "
-                        "a scheduled examination."
+                        "Marks can only be uploaded for a "
+                        "scheduled examination."
                     )
                 )
 
@@ -2940,6 +2957,8 @@ class ExaminationMarksUploadAPIView(APIView):
             headers = next(rows, None)
 
             if not headers:
+                workbook.close()
+
                 return CustomResponse.errorResponse(
                     description="Excel file is empty."
                 )
@@ -2961,10 +2980,12 @@ class ExaminationMarksUploadAPIView(APIView):
             )
 
             if missing_headers:
+                workbook.close()
+
                 return CustomResponse.errorResponse(
                     description=(
-                        f"Missing columns: "
-                        f"{', '.join(missing_headers)}"
+                        "Missing columns: "
+                        f"{', '.join(sorted(missing_headers))}"
                     )
                 )
 
@@ -2977,7 +2998,7 @@ class ExaminationMarksUploadAPIView(APIView):
             )
 
             # --------------------------------
-            # Validate all rows first
+            # Validate Excel rows
             # --------------------------------
 
             validated_rows = []
@@ -3004,6 +3025,13 @@ class ExaminationMarksUploadAPIView(APIView):
                 admission_no = str(
                     admission_no
                 ).strip()
+
+                if not admission_no:
+                    errors.append({
+                        "row": row_number,
+                        "error": "Admission number is required.",
+                    })
+                    continue
 
                 if marks is None:
                     errors.append({
@@ -3048,6 +3076,8 @@ class ExaminationMarksUploadAPIView(APIView):
                     "marks": marks,
                 })
 
+            workbook.close()
+
             # --------------------------------
             # Stop if Excel has validation errors
             # --------------------------------
@@ -3061,6 +3091,11 @@ class ExaminationMarksUploadAPIView(APIView):
                         "Excel contains invalid data. "
                         "No marks were uploaded."
                     ),
+                )
+
+            if not validated_rows:
+                return CustomResponse.errorResponse(
+                    description="No valid student records found in Excel."
                 )
 
             # --------------------------------
@@ -3077,7 +3112,7 @@ class ExaminationMarksUploadAPIView(APIView):
                 .filter(
                     school=school,
                     admission_number__in=admission_numbers,
-                    grade=schedule.grade,
+                    grade_id=grade_id,
                 )
             )
 
@@ -3132,7 +3167,8 @@ class ExaminationMarksUploadAPIView(APIView):
                     ]
 
                     result, created = (
-                        ExaminationResult.objects.update_or_create(
+                        ExaminationResult.objects
+                        .update_or_create(
                             examination_schedule=schedule,
                             student=student,
                             defaults={
@@ -3164,10 +3200,10 @@ class ExaminationMarksUploadAPIView(APIView):
             return CustomResponse.successResponse(
                 total=created_count + updated_count,
                 data={
-                    "examination_id": examination.id,
-                    "schedule_id": schedule.id,
-                    "grade_id": schedule.grade_id,
-                    "subject_id": schedule.subject_id,
+                    "examination_id": str(examination.id),
+                    "schedule_id": str(schedule.id),
+                    "grade_id": str(schedule.grade_id),
+                    "subject_id": str(schedule.subject_id),
                     "subject_name": schedule.subject.name,
                     "created_count": created_count,
                     "updated_count": updated_count,
@@ -3182,7 +3218,9 @@ class ExaminationMarksUploadAPIView(APIView):
             application_logger.exception(
                 "examination_marks_upload_failed",
                 error=str(e),
-                schedule_id=str(schedule_id),
+                examination_id=str(examination_id),
+                grade_id=str(grade_id),
+                subject_id=str(subject_id),
                 school_id=str(school.id),
             )
 
