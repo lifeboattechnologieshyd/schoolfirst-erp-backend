@@ -12,6 +12,7 @@ from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
 from django.db import transaction
 from io import BytesIO
+from rest_framework.parsers import MultiPartParser, FormParser
 
 from django.http import HttpResponse
 from openpyxl import Workbook
@@ -2873,6 +2874,10 @@ class ExaminationMarksTemplateAPIView(APIView):
 
 
 class ExaminationMarksUploadAPIView(APIView):
+    parser_classes = [
+        MultiPartParser,
+        FormParser,
+    ]
     permission_classes = [
         IsAuthenticated,
         HasPermission,
