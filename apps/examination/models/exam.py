@@ -157,6 +157,8 @@ class Examination(AuditModel):
 
     result_date = models.DateField()
 
+    reporting_date = models.DateField()
+
 
     status = models.CharField(
         max_length=20,

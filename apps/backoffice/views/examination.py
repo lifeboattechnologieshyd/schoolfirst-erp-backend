@@ -481,6 +481,7 @@ class ExaminationCreateAPIView(APIView):
         start_date = request.data.get("start_date")
         end_date = request.data.get("end_date")
         result_date = request.data.get("result_date")
+        reporting_date = request.data.get("reporting_date")
 
         description = request.data.get("description")
         grades_data = request.data.get("grades", [])
@@ -608,6 +609,7 @@ class ExaminationCreateAPIView(APIView):
                     start_date=start_date,
                     end_date=end_date,
                     result_date=result_date,
+                    reporting_date = reporting_date,
                     status=Examination.Status.DRAFT,
                     description=description,
                 )
@@ -1132,6 +1134,7 @@ class ExaminationListAPIView(APIView):
 
                     "start_date": examination.start_date,
                     "end_date": examination.end_date,
+                    "reporting_date": examination.reporting_date,
                     "result_date": examination.result_date,
 
                     "description": examination.description,
@@ -1207,6 +1210,7 @@ class ExaminationUpdateAPIView(APIView):
                 start_date = request.data.get("start_date")
                 end_date = request.data.get("end_date")
                 result_date = request.data.get("result_date")
+                reporting_date = request.data.get("reporting_date")
                 description = request.data.get("description")
 
                 # --------------------------------
@@ -1307,6 +1311,8 @@ class ExaminationUpdateAPIView(APIView):
 
                 if result_date is not None:
                     examination.result_date = result_date
+                if reporting_date is not None:
+                    examination.reporting_date = reporting_date
 
                 if examination.start_date > examination.end_date:
                     return CustomResponse.errorResponse(
