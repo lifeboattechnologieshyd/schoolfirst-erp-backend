@@ -1021,7 +1021,7 @@ class ExaminationListAPIView(APIView):
                 )
                 .prefetch_related(
                     "examination_grades__grade",
-                    "examination_schedules__subject",
+                    "schedules__subject",
                 )
             )
 
