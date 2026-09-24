@@ -650,6 +650,7 @@ class GradeConfiguration(AuditModel):
         null=True,
         blank=True,
     )
+    color = models.CharField(max_length=20, default="#FFFFFF", )
 
     class Meta:
         db_table = "grade_configurations"

@@ -2908,6 +2908,7 @@ class GradeConfigurationCreateAPIView(APIView):
             description = request.data.get(
                 "description"
             )
+            color = request.data.get("color")
 
             # -----------------------------------------
             # Required Fields
@@ -3093,6 +3094,7 @@ class GradeConfigurationCreateAPIView(APIView):
                     max_percentage=max_percentage,
                     grade_point=grade_point,
                     description=description,
+                    color = color,
                 )
             )
 
@@ -3110,29 +3112,8 @@ class GradeConfigurationCreateAPIView(APIView):
             return CustomResponse.successResponse(
                 data={
                     "id": str(
-                        grade_configuration.id
-                    ),
-                    "academic_year_id": str(
-                        grade_configuration.academic_year_id
-                    ),
-                    "branch_id": (
-                        str(grade_configuration.branch_id)
-                        if grade_configuration.branch_id
-                        else None
-                    ),
-                    "grade": grade_configuration.grade,
-                    "min_percentage": (
-                        grade_configuration.min_percentage
-                    ),
-                    "max_percentage": (
-                        grade_configuration.max_percentage
-                    ),
-                    "grade_point": (
-                        grade_configuration.grade_point
-                    ),
-                    "description": (
-                        grade_configuration.description
-                    ),
+                        grade_configuration.id)
+
                 },
                 description=(
                     "Grade configuration created successfully."
@@ -3317,6 +3298,7 @@ class GradeConfigurationListAPIView(APIView):
                     "description": (
                         configuration.description
                     ),
+                    "color":configuration.color,
                 })
 
             application_logger.info(
@@ -3419,6 +3401,7 @@ class GradeConfigurationUpdateAPIView(APIView):
                 "description",
                 configuration.description,
             )
+            color = request.data.get("color", configuration.color)
 
             # -----------------------------------------
             # Normalize
@@ -3611,6 +3594,7 @@ class GradeConfigurationUpdateAPIView(APIView):
             configuration.description = (
                 description
             )
+            configuration.color = (color)
 
             configuration.save()
 
@@ -3631,45 +3615,7 @@ class GradeConfigurationUpdateAPIView(APIView):
                         configuration.id
                     ),
 
-                    "academic_year_id": str(
-                        configuration.academic_year_id
-                    ),
 
-                    "academic_year_name": (
-                        configuration
-                        .academic_year
-                        .name
-                    ),
-
-                    "branch_id": (
-                        str(configuration.branch_id)
-                        if configuration.branch_id
-                        else None
-                    ),
-
-                    "branch_name": (
-                        configuration.branch.name
-                        if configuration.branch
-                        else None
-                    ),
-
-                    "grade": configuration.grade,
-
-                    "min_percentage": (
-                        configuration.min_percentage
-                    ),
-
-                    "max_percentage": (
-                        configuration.max_percentage
-                    ),
-
-                    "grade_point": (
-                        configuration.grade_point
-                    ),
-
-                    "description": (
-                        configuration.description
-                    ),
                 },
                 description=(
                     "Grade configuration updated successfully."
@@ -4866,8 +4812,7 @@ class ExaminationResultListAPIView(APIView):
                         if result.marks_obtained >= schedule.passing_marks
                         else "FAIL"
                     ),
-
-
+                    "color":result.color,
 
                     "remarks": (
                         result.remarks
