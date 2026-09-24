@@ -4132,7 +4132,21 @@ class MyAssignedVehicleAPIView(APIView):
 
     def get(self, request):
         try:
-            staff = request.user.staff
+            staff = (
+                Staff.objects
+                .filter(
+                    user=request.user,
+                    staff_type=Staff.StaffType.DRIVER,
+                    status=Staff.Status.ACTIVE,
+                )
+                .first()
+            )
+
+            if not staff:
+                return CustomResponse.errorResponse(
+                    description="Active driver profile not found for this user."
+                )
+
             today = timezone.localdate()
 
             assignment = (
@@ -4183,6 +4197,7 @@ class MyAssignedVehicleAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Failed to fetch assigned vehicle.",
             )
+
 
 
 class CreateTripAPIView(APIView):
