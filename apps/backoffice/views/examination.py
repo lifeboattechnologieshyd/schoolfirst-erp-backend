@@ -2872,6 +2872,826 @@ class ExaminationMarksTemplateAPIView(APIView):
                 description="Failed to generate marks template."
             )
 
+class GradeConfigurationCreateAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "grade_configuration.create"
+
+    def post(self, request):
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required."
+            )
+
+        try:
+            academic_year_id = request.data.get(
+                "academic_year_id"
+            )
+            branch_id = request.data.get(
+                "branch_id"
+            )
+            grade = request.data.get("grade")
+            min_percentage = request.data.get(
+                "min_percentage"
+            )
+            max_percentage = request.data.get(
+                "max_percentage"
+            )
+            grade_point = request.data.get(
+                "grade_point"
+            )
+            description = request.data.get(
+                "description"
+            )
+
+            # -----------------------------------------
+            # Required Fields
+            # -----------------------------------------
+
+            if not academic_year_id:
+                return CustomResponse.errorResponse(
+                    description="Academic year is required."
+                )
+
+            if not grade:
+                return CustomResponse.errorResponse(
+                    description="Grade is required."
+                )
+
+            if min_percentage is None:
+                return CustomResponse.errorResponse(
+                    description="Minimum percentage is required."
+                )
+
+            if max_percentage is None:
+                return CustomResponse.errorResponse(
+                    description="Maximum percentage is required."
+                )
+
+            if grade_point is None:
+                return CustomResponse.errorResponse(
+                    description="Grade point is required."
+                )
+
+            grade = str(grade).strip().upper()
+
+            # -----------------------------------------
+            # Decimal Validation
+            # -----------------------------------------
+
+            try:
+                min_percentage = Decimal(
+                    str(min_percentage)
+                )
+                max_percentage = Decimal(
+                    str(max_percentage)
+                )
+                grade_point = Decimal(
+                    str(grade_point)
+                )
+            except (InvalidOperation, ValueError):
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Minimum percentage, maximum percentage "
+                        "and grade point must be valid numbers."
+                    )
+                )
+
+            # -----------------------------------------
+            # Percentage Validation
+            # -----------------------------------------
+
+            if (
+                min_percentage < Decimal("0")
+                or min_percentage > Decimal("100")
+            ):
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Minimum percentage must be "
+                        "between 0 and 100."
+                    )
+                )
+
+            if (
+                max_percentage < Decimal("0")
+                or max_percentage > Decimal("100")
+            ):
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Maximum percentage must be "
+                        "between 0 and 100."
+                    )
+                )
+
+            if min_percentage > max_percentage:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Minimum percentage cannot be "
+                        "greater than maximum percentage."
+                    )
+                )
+
+            if grade_point < Decimal("0"):
+                return CustomResponse.errorResponse(
+                    description="Grade point cannot be negative."
+                )
+
+            # -----------------------------------------
+            # Academic Year
+            # -----------------------------------------
+
+            academic_year = (
+                AcademicYear.objects
+                .filter(
+                    id=academic_year_id,
+                    school=school,
+                )
+                .first()
+            )
+
+            if not academic_year:
+                return CustomResponse.errorResponse(
+                    description="Academic year not found."
+                )
+
+            # -----------------------------------------
+            # Branch
+            # -----------------------------------------
+
+            branch = None
+
+            if branch_id:
+                branch = (
+                    Branch.objects
+                    .filter(
+                        id=branch_id,
+                        school=school,
+                    )
+                    .first()
+                )
+
+                if not branch:
+                    return CustomResponse.errorResponse(
+                        description="Branch not found."
+                    )
+
+            # -----------------------------------------
+            # Duplicate Grade
+            # -----------------------------------------
+
+            if GradeConfiguration.objects.filter(
+                school=school,
+                academic_year=academic_year,
+                grade=grade,
+            ).exists():
+                return CustomResponse.errorResponse(
+                    description=(
+                        f"Grade configuration '{grade}' "
+                        "already exists for this academic year."
+                    )
+                )
+
+            # -----------------------------------------
+            # Overlapping Percentage Range
+            # -----------------------------------------
+
+            overlapping = (
+                GradeConfiguration.objects
+                .filter(
+                    school=school,
+                    academic_year=academic_year,
+                    min_percentage__lte=max_percentage,
+                    max_percentage__gte=min_percentage,
+                )
+                .exists()
+            )
+
+            if overlapping:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Percentage range overlaps with "
+                        "an existing grade configuration."
+                    )
+                )
+
+            # -----------------------------------------
+            # Create
+            # -----------------------------------------
+
+            grade_configuration = (
+                GradeConfiguration.objects.create(
+                    school=school,
+                    branch=branch,
+                    academic_year=academic_year,
+                    grade=grade,
+                    min_percentage=min_percentage,
+                    max_percentage=max_percentage,
+                    grade_point=grade_point,
+                    description=description,
+                )
+            )
+
+            application_logger.info(
+                "grade_configuration_created",
+                grade_configuration_id=str(
+                    grade_configuration.id
+                ),
+                school_id=str(school.id),
+                academic_year_id=str(
+                    academic_year.id
+                ),
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "id": str(
+                        grade_configuration.id
+                    ),
+                    "academic_year_id": str(
+                        grade_configuration.academic_year_id
+                    ),
+                    "branch_id": (
+                        str(grade_configuration.branch_id)
+                        if grade_configuration.branch_id
+                        else None
+                    ),
+                    "grade": grade_configuration.grade,
+                    "min_percentage": (
+                        grade_configuration.min_percentage
+                    ),
+                    "max_percentage": (
+                        grade_configuration.max_percentage
+                    ),
+                    "grade_point": (
+                        grade_configuration.grade_point
+                    ),
+                    "description": (
+                        grade_configuration.description
+                    ),
+                },
+                description=(
+                    "Grade configuration created successfully."
+                ),
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "grade_configuration_create_failed",
+                error=str(e),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Failed to create grade configuration."
+                )
+            )
+
+
+class GradeConfigurationListAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "grade_configuration.view"
+
+    def get(self, request):
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required."
+            )
+
+        try:
+            queryset = (
+                GradeConfiguration.objects
+                .filter(
+                    school=school,
+                )
+                .select_related(
+                    "academic_year",
+                    "branch",
+                )
+            )
+
+            # -----------------------------------------
+            # Filters
+            # -----------------------------------------
+
+            academic_year_id = request.query_params.get(
+                "academic_year_id"
+            )
+
+            branch_id = request.query_params.get(
+                "branch_id"
+            )
+
+            search = request.query_params.get(
+                "search"
+            )
+
+            if academic_year_id:
+                queryset = queryset.filter(
+                    academic_year_id=academic_year_id
+                )
+
+            if branch_id:
+                queryset = queryset.filter(
+                    branch_id=branch_id
+                )
+
+            if search:
+                search = search.strip()
+
+                if search:
+                    queryset = queryset.filter(
+                        grade__icontains=search
+                    )
+
+            queryset = queryset.order_by(
+                "min_percentage"
+            )
+
+            # -----------------------------------------
+            # Pagination
+            # -----------------------------------------
+
+            try:
+                page = max(
+                    int(
+                        request.query_params.get(
+                            "page",
+                            1,
+                        )
+                    ),
+                    1,
+                )
+
+                page_size = max(
+                    int(
+                        request.query_params.get(
+                            "page_size",
+                            20,
+                        )
+                    ),
+                    1,
+                )
+
+            except (TypeError, ValueError):
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Page and page_size must be valid integers."
+                    )
+                )
+
+            page_size = min(
+                page_size,
+                100,
+            )
+
+            total_count = queryset.count()
+
+            start = (
+                page - 1
+            ) * page_size
+
+            end = start + page_size
+
+            queryset = queryset[start:end]
+
+            # -----------------------------------------
+            # Response Data
+            # -----------------------------------------
+
+            data = []
+
+            for configuration in queryset:
+                data.append({
+                    "id": str(
+                        configuration.id
+                    ),
+
+                    "academic_year_id": str(
+                        configuration.academic_year_id
+                    ),
+
+                    "academic_year_name": (
+                        configuration
+                        .academic_year
+                        .name
+                    ),
+
+                    "branch_id": (
+                        str(configuration.branch_id)
+                        if configuration.branch_id
+                        else None
+                    ),
+
+                    "branch_name": (
+                        configuration.branch.name
+                        if configuration.branch
+                        else None
+                    ),
+
+                    "grade": configuration.grade,
+
+                    "min_percentage": (
+                        configuration.min_percentage
+                    ),
+
+                    "max_percentage": (
+                        configuration.max_percentage
+                    ),
+
+                    "grade_point": (
+                        configuration.grade_point
+                    ),
+
+                    "description": (
+                        configuration.description
+                    ),
+                })
+
+            application_logger.info(
+                "grade_configurations_fetched",
+                school_id=str(school.id),
+                academic_year_id=academic_year_id,
+                branch_id=branch_id,
+                total_count=total_count,
+            )
+
+            return CustomResponse.successResponse(
+                total=total_count,
+                data=data,
+                description=(
+                    "Grade configurations fetched successfully."
+                ),
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "grade_configuration_list_failed",
+                error=str(e),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Failed to fetch grade configurations."
+                )
+            )
+
+class GradeConfigurationUpdateAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "grade_configuration.update"
+
+    def put(self, request, configuration_id):
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required."
+            )
+
+        try:
+            configuration = (
+                GradeConfiguration.objects
+                .filter(
+                    id=configuration_id,
+                    school=school,
+                )
+                .first()
+            )
+
+            if not configuration:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Grade configuration not found."
+                    )
+                )
+
+            # -----------------------------------------
+            # Get Values
+            # -----------------------------------------
+
+            academic_year_id = request.data.get(
+                "academic_year_id",
+                configuration.academic_year_id,
+            )
+
+            branch_id = request.data.get(
+                "branch_id",
+                configuration.branch_id,
+            )
+
+            grade = request.data.get(
+                "grade",
+                configuration.grade,
+            )
+
+            min_percentage = request.data.get(
+                "min_percentage",
+                configuration.min_percentage,
+            )
+
+            max_percentage = request.data.get(
+                "max_percentage",
+                configuration.max_percentage,
+            )
+
+            grade_point = request.data.get(
+                "grade_point",
+                configuration.grade_point,
+            )
+
+            description = request.data.get(
+                "description",
+                configuration.description,
+            )
+
+            # -----------------------------------------
+            # Normalize
+            # -----------------------------------------
+
+            grade = str(
+                grade
+            ).strip().upper()
+
+            # -----------------------------------------
+            # Decimal Validation
+            # -----------------------------------------
+
+            try:
+                min_percentage = Decimal(
+                    str(min_percentage)
+                )
+
+                max_percentage = Decimal(
+                    str(max_percentage)
+                )
+
+                grade_point = Decimal(
+                    str(grade_point)
+                )
+
+            except (InvalidOperation, ValueError):
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Minimum percentage, maximum percentage "
+                        "and grade point must be valid numbers."
+                    )
+                )
+
+            # -----------------------------------------
+            # Percentage Validation
+            # -----------------------------------------
+
+            if (
+                min_percentage < Decimal("0")
+                or min_percentage > Decimal("100")
+            ):
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Minimum percentage must be "
+                        "between 0 and 100."
+                    )
+                )
+
+            if (
+                max_percentage < Decimal("0")
+                or max_percentage > Decimal("100")
+            ):
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Maximum percentage must be "
+                        "between 0 and 100."
+                    )
+                )
+
+            if min_percentage > max_percentage:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Minimum percentage cannot be "
+                        "greater than maximum percentage."
+                    )
+                )
+
+            if grade_point < Decimal("0"):
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Grade point cannot be negative."
+                    )
+                )
+
+            # -----------------------------------------
+            # Academic Year
+            # -----------------------------------------
+
+            academic_year = (
+                AcademicYear.objects
+                .filter(
+                    id=academic_year_id,
+                    school=school,
+                )
+                .first()
+            )
+
+            if not academic_year:
+                return CustomResponse.errorResponse(
+                    description="Academic year not found."
+                )
+
+            # -----------------------------------------
+            # Branch
+            # -----------------------------------------
+
+            branch = None
+
+            if branch_id:
+                branch = (
+                    Branch.objects
+                    .filter(
+                        id=branch_id,
+                        school=school,
+                    )
+                    .first()
+                )
+
+                if not branch:
+                    return CustomResponse.errorResponse(
+                        description="Branch not found."
+                    )
+
+            # -----------------------------------------
+            # Duplicate Grade
+            # -----------------------------------------
+
+            duplicate_grade = (
+                GradeConfiguration.objects
+                .filter(
+                    school=school,
+                    academic_year=academic_year,
+                    grade=grade,
+                )
+                .exclude(
+                    id=configuration.id
+                )
+                .exists()
+            )
+
+            if duplicate_grade:
+                return CustomResponse.errorResponse(
+                    description=(
+                        f"Grade configuration '{grade}' "
+                        "already exists for this academic year."
+                    )
+                )
+
+            # -----------------------------------------
+            # Overlapping Range
+            # -----------------------------------------
+
+            overlapping = (
+                GradeConfiguration.objects
+                .filter(
+                    school=school,
+                    academic_year=academic_year,
+                    min_percentage__lte=max_percentage,
+                    max_percentage__gte=min_percentage,
+                )
+                .exclude(
+                    id=configuration.id
+                )
+                .exists()
+            )
+
+            if overlapping:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Percentage range overlaps with "
+                        "an existing grade configuration."
+                    )
+                )
+
+            # -----------------------------------------
+            # Update
+            # -----------------------------------------
+
+            configuration.academic_year = (
+                academic_year
+            )
+
+            configuration.branch = branch
+
+            configuration.grade = grade
+
+            configuration.min_percentage = (
+                min_percentage
+            )
+
+            configuration.max_percentage = (
+                max_percentage
+            )
+
+            configuration.grade_point = (
+                grade_point
+            )
+
+            configuration.description = (
+                description
+            )
+
+            configuration.save()
+
+            application_logger.info(
+                "grade_configuration_updated",
+                grade_configuration_id=str(
+                    configuration.id
+                ),
+                school_id=str(school.id),
+                academic_year_id=str(
+                    academic_year.id
+                ),
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "id": str(
+                        configuration.id
+                    ),
+
+                    "academic_year_id": str(
+                        configuration.academic_year_id
+                    ),
+
+                    "academic_year_name": (
+                        configuration
+                        .academic_year
+                        .name
+                    ),
+
+                    "branch_id": (
+                        str(configuration.branch_id)
+                        if configuration.branch_id
+                        else None
+                    ),
+
+                    "branch_name": (
+                        configuration.branch.name
+                        if configuration.branch
+                        else None
+                    ),
+
+                    "grade": configuration.grade,
+
+                    "min_percentage": (
+                        configuration.min_percentage
+                    ),
+
+                    "max_percentage": (
+                        configuration.max_percentage
+                    ),
+
+                    "grade_point": (
+                        configuration.grade_point
+                    ),
+
+                    "description": (
+                        configuration.description
+                    ),
+                },
+                description=(
+                    "Grade configuration updated successfully."
+                ),
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "grade_configuration_update_failed",
+                error=str(e),
+                grade_configuration_id=str(
+                    configuration_id
+                ),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Failed to update grade configuration."
+                )
+            )
+
 class ExaminationMarksUploadAPIView(APIView):
     parser_classes = [
         MultiPartParser,
