@@ -4125,6 +4125,65 @@ class UpdateStudentTransportAPIView(APIView):
             },
         )
 
+class MyAssignedVehicleAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+    ]
+
+    def get(self, request):
+        try:
+            staff = request.user.staff
+            today = timezone.localdate()
+
+            assignment = (
+                VehicleAssignment.objects
+                .select_related("vehicle", "route")
+                .filter(
+                    driver=staff,
+                    status=VehicleAssignment.Status.ACTIVE,
+                    effective_from__lte=today,
+                )
+                .filter(
+                    Q(effective_to__isnull=True)
+                    | Q(effective_to__gte=today)
+                )
+                .first()
+            )
+
+            if not assignment:
+                return CustomResponse.successResponse(
+                    data=None,
+                    description="No vehicle assigned to this driver.",
+                )
+
+            vehicle = assignment.vehicle
+            route = assignment.route
+
+            data = {
+                "vehicle_assignment_id": str(assignment.id),
+                "vehicle_id": str(vehicle.id),
+                "vehicle_number": vehicle.vehicle_number,
+                "vehicle_type": vehicle.vehicle_type,
+                "route_id": str(route.id),
+                "route_name": route.route_name,
+            }
+
+            return CustomResponse.successResponse(
+                data=data,
+                description="Assigned vehicle fetched successfully.",
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "driver_assigned_vehicle_failed",
+                error=str(e),
+                user_id=str(request.user.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to fetch assigned vehicle.",
+            )
+
 
 class CreateTripAPIView(APIView):
 
