@@ -4124,13 +4124,19 @@ class UpdateStudentTransportAPIView(APIView):
                 "status": student_transport.status,
             },
         )
-
 class MyAssignedVehicleAPIView(APIView):
     permission_classes = [
         IsAuthenticated,
     ]
 
     def get(self, request):
+        user_id = str(request.user.id)
+
+        application_logger.info(
+            "driver_assigned_vehicle_request_started",
+            user_id=user_id,
+        )
+
         try:
             staff = (
                 Staff.objects
@@ -4143,15 +4149,29 @@ class MyAssignedVehicleAPIView(APIView):
             )
 
             if not staff:
+                application_logger.warning(
+                    "active_driver_profile_not_found",
+                    user_id=user_id,
+                )
+
                 return CustomResponse.errorResponse(
                     description="Active driver profile not found for this user."
                 )
+
+            application_logger.info(
+                "active_driver_profile_found",
+                user_id=user_id,
+                staff_id=str(staff.id),
+            )
 
             today = timezone.localdate()
 
             assignment = (
                 VehicleAssignment.objects
-                .select_related("vehicle", "route")
+                .select_related(
+                    "vehicle",
+                    "route",
+                )
                 .filter(
                     driver=staff,
                     status=VehicleAssignment.Status.ACTIVE,
@@ -4165,10 +4185,25 @@ class MyAssignedVehicleAPIView(APIView):
             )
 
             if not assignment:
+                application_logger.info(
+                    "driver_vehicle_assignment_not_found",
+                    user_id=user_id,
+                    staff_id=str(staff.id),
+                )
+
                 return CustomResponse.successResponse(
                     data=None,
                     description="No vehicle assigned to this driver.",
                 )
+
+            application_logger.info(
+                "driver_vehicle_assignment_found",
+                user_id=user_id,
+                staff_id=str(staff.id),
+                vehicle_assignment_id=str(assignment.id),
+                vehicle_id=str(assignment.vehicle.id),
+                route_id=str(assignment.route.id),
+            )
 
             vehicle = assignment.vehicle
             route = assignment.route
@@ -4182,6 +4217,13 @@ class MyAssignedVehicleAPIView(APIView):
                 "route_name": route.route_name,
             }
 
+            application_logger.info(
+                "driver_assigned_vehicle_fetched_successfully",
+                user_id=user_id,
+                staff_id=str(staff.id),
+                vehicle_assignment_id=str(assignment.id),
+            )
+
             return CustomResponse.successResponse(
                 data=data,
                 description="Assigned vehicle fetched successfully.",
@@ -4190,8 +4232,8 @@ class MyAssignedVehicleAPIView(APIView):
         except Exception as e:
             application_logger.exception(
                 "driver_assigned_vehicle_failed",
+                user_id=user_id,
                 error=str(e),
-                user_id=str(request.user.id),
             )
 
             return CustomResponse.errorResponse(
