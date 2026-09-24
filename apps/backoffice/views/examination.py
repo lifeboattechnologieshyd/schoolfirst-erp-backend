@@ -4583,6 +4583,18 @@ class ExaminationResultListAPIView(APIView):
                     "student__name",
                 )
             )
+            grade_configurations = GradeConfiguration.objects.filter(
+                school=school,
+                academic_year=examination.academic_year,
+            ).filter(
+                Q(branch=examination.branch) |
+                Q(branch__isnull=True)
+            )
+
+            grade_config_map = {
+                config.grade: config
+                for config in grade_configurations
+            }
 
             # -----------------------------------------
             # Filters
@@ -4687,9 +4699,12 @@ class ExaminationResultListAPIView(APIView):
 
             for result in queryset:
 
+
                 schedule = result.examination_schedule
 
                 maximum_marks = schedule.maximum_marks
+
+                grade_config = grade_config_map.get(result.grade)
 
                 # -------------------------------------
                 # Calculate Percentage
@@ -4812,7 +4827,7 @@ class ExaminationResultListAPIView(APIView):
                         if result.marks_obtained >= schedule.passing_marks
                         else "FAIL"
                     ),
-                    "color":result.color,
+                    "color": grade_config.color if grade_config else None,
 
                     "remarks": (
                         result.remarks
