@@ -545,6 +545,12 @@ class ExaminationResult(AuditModel):
         decimal_places=2,
         default=0,
     )
+    grade_point = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
 
     status = models.CharField(
         max_length=20,
@@ -614,6 +620,13 @@ class GradeConfiguration(AuditModel):
 
     grade = models.CharField(
         max_length=10,
+    )
+
+    grade_point = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        null=True,
+        blank=True,
     )
 
     min_percentage = models.DecimalField(
