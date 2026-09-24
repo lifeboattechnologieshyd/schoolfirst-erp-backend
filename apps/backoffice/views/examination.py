@@ -4475,18 +4475,18 @@ class ExaminationMarksUploadAPIView(APIView):
                     "subject_name": (
                         schedule.subject.name
                     ),
-                    "maximum_marks": (
-                        schedule.maximum_marks
-                    ),
-                    "internal_max_marks": (
-                        internal_max
-                    ),
-                    "external_max_marks": (
-                        external_max
-                    ),
-                    "practical_max_marks": (
-                        practical_max
-                    ),
+                    # "maximum_marks": (
+                    #     schedule.maximum_marks
+                    # ),
+                    # "internal_max_marks": (
+                    #     internal_max
+                    # ),
+                    # "external_max_marks": (
+                    #     external_max
+                    # ),
+                    # "practical_max_marks": (
+                    #     practical_max
+                    # ),
                     "created_count": created_count,
                     "updated_count": updated_count,
                     "total_processed": (
