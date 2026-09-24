@@ -520,10 +520,30 @@ class ExaminationResult(AuditModel):
         on_delete=models.CASCADE,
         related_name="examination_results",
     )
+    internal_marks = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=0,
+    )
+
+    external_marks = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=0,
+    )
+
+    practical_marks = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=0,
+    )
+
+
 
     marks_obtained = models.DecimalField(
         max_digits=6,
         decimal_places=2,
+        default=0,
     )
 
     status = models.CharField(
