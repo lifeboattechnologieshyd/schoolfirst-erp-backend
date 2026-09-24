@@ -4862,8 +4862,12 @@ class ExaminationResultListAPIView(APIView):
                     ),
 
                     "result_status": (
-                        result.result_status
+                        "PASS"
+                        if result.marks_obtained >= schedule.passing_marks
+                        else "FAIL"
                     ),
+
+
 
                     "remarks": (
                         result.remarks
