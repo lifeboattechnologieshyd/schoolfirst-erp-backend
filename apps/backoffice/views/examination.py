@@ -3904,7 +3904,7 @@ class ExaminationResultListAPIView(APIView):
                 # -----------------------------------------
 
                 result_status = (
-                    result.result_status
+                    result.status
                 )
 
                 # If result_status is not already
