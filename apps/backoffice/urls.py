@@ -485,9 +485,9 @@ urlpatterns = [
 
     path("exam/grade-configurations/create",GradeConfigurationCreateAPIView.as_view(),),
 
-    path("grade-configurations",GradeConfigurationListAPIView.as_view(),),
+    path("exam/grade-configurations",GradeConfigurationListAPIView.as_view(),),
 
-    path("grade-configurations/<uuid:configuration_id>",GradeConfigurationUpdateAPIView.as_view(),),
+    path("exam/grade-configurations/<uuid:configuration_id>",GradeConfigurationUpdateAPIView.as_view(),),
 
     path("exam/<uuid:examination_id>/grades/<uuid:grade_id>/subjects/<uuid:subject_id>/marks/upload",ExaminationMarksUploadAPIView.as_view(),),
 
