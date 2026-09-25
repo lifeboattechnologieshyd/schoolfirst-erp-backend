@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Prefetch
 from django.utils import timezone
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
@@ -4124,6 +4124,9 @@ class UpdateStudentTransportAPIView(APIView):
                 "status": student_transport.status,
             },
         )
+
+
+
 class MyAssignedVehicleAPIView(APIView):
     permission_classes = [
         IsAuthenticated,
@@ -4166,11 +4169,24 @@ class MyAssignedVehicleAPIView(APIView):
 
             today = timezone.localdate()
 
+            vehicle_photo_prefetch = Prefetch(
+                "vehicle__documents",
+                queryset=VehicleDocument.objects.filter(
+                    document_type=VehicleDocument.DocumentType.PHOTO,
+                    status=VehicleDocument.Status.ACTIVE,
+                    document_file__isnull=False,
+                ),
+                to_attr="photo_documents",
+            )
+
             assignment = (
                 VehicleAssignment.objects
                 .select_related(
                     "vehicle",
                     "route",
+                )
+                .prefetch_related(
+                    vehicle_photo_prefetch,
                 )
                 .filter(
                     driver=staff,
@@ -4208,11 +4224,23 @@ class MyAssignedVehicleAPIView(APIView):
             vehicle = assignment.vehicle
             route = assignment.route
 
+            photo_documents = getattr(
+                vehicle,
+                "photo_documents",
+                [],
+            )
+
+            vehicle_photo = None
+
+            if photo_documents:
+                vehicle_photo = photo_documents[0].document_file.url
+
             data = {
                 "vehicle_assignment_id": str(assignment.id),
                 "vehicle_id": str(vehicle.id),
                 "vehicle_number": vehicle.vehicle_number,
                 "vehicle_type": vehicle.vehicle_type,
+                "vehicle_photo": vehicle_photo,
                 "route_id": str(route.id),
                 "route_name": route.route_name,
             }
@@ -4239,7 +4267,6 @@ class MyAssignedVehicleAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Failed to fetch assigned vehicle.",
             )
-
 
 
 class CreateTripAPIView(APIView):
