@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 
 from apps.school.models.school import Branch, Staff, Student, AcademicYear
 from apps.transport.models import Vehicle, VehicleDocument, Route, RouteStop, VehicleAssignment, StudentTransport, Stop, \
-    Trip, TripAttendance, LiveLocation, TripEvent, LocationHistory
+    Trip, TripAttendance, LiveLocation, TripEvent, LocationHistory, TripStopStatus
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger, audit_logger
@@ -4927,231 +4927,317 @@ class UpdateTripAPIView(APIView):
         )
 
 
-
 class CreateTripAttendanceAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
 
-    permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "trip.attendance.create"
 
     def post(self, request):
-
         school = request.school
 
-        branch_id = request.data.get("branch_id")
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required."
+            )
+
         trip_id = request.data.get("trip_id")
-        student_id = request.data.get("student_id")
+        attendance_type = request.data.get("attendance_type", "STUDENT")
 
         application_logger.info(
-            "trip_attendance_create_requested",
-            requested_by=str(request.user.id),
-            school_id=str(school.id) if school else None,
-            trip_id=trip_id,
-            student_id=student_id,
+            "trip_attendance_request_started",
+            user_id=str(request.user.id),
+            trip_id=str(trip_id) if trip_id else None,
+            attendance_type=attendance_type,
         )
 
-        if school is None:
-
-            application_logger.warning(
-                "trip_attendance_create_failed",
-                requested_by=str(request.user.id),
-                reason="school_not_found",
-            )
-
+        if not trip_id:
             return CustomResponse.errorResponse(
-                description="School not found."
-            )
-
-        required_fields = [
-            "trip_id",
-            "student_id",
-        ]
-
-        for field in required_fields:
-
-            if request.data.get(field) in [None, ""]:
-
-                application_logger.warning(
-                    "trip_attendance_create_failed",
-                    requested_by=str(request.user.id),
-                    school_id=str(school.id),
-                    field=field,
-                    reason="required_field_missing",
-                )
-
-                return CustomResponse.errorResponse(
-                    description=f"{field} is required."
-                )
-
-        branch = None
-
-        if branch_id:
-
-            branch = Branch.objects.filter(
-                id=branch_id,
-                school=school,
-            ).first()
-
-            if branch is None:
-
-                application_logger.warning(
-                    "trip_attendance_create_failed",
-                    requested_by=str(request.user.id),
-                    school_id=str(school.id),
-                    branch_id=branch_id,
-                    reason="branch_not_found",
-                )
-
-                return CustomResponse.errorResponse(
-                    description="Branch not found."
-                )
-
-        trip = Trip.objects.filter(
-            id=trip_id,
-            school=school,
-        ).first()
-
-        if trip is None:
-
-            application_logger.warning(
-                "trip_attendance_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                trip_id=trip_id,
-                reason="trip_not_found",
-            )
-
-            return CustomResponse.errorResponse(
-                description="Trip not found."
-            )
-
-        student = Student.objects.filter(
-            id=student_id,
-            school=school,
-        ).first()
-
-        if student is None:
-
-            application_logger.warning(
-                "trip_attendance_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                student_id=student_id,
-                reason="student_not_found",
-            )
-
-            return CustomResponse.errorResponse(
-                description="Student not found."
-            )
-
-        if not StudentTransport.objects.filter(
-            school=school,
-            student=student,
-            vehicle_assignment=trip.vehicle_assignment,
-            status=StudentTransport.Status.ACTIVE,
-        ).exists():
-
-            application_logger.warning(
-                "trip_attendance_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                student_id=str(student.id),
-                reason="student_not_assigned_to_vehicle",
-            )
-
-            return CustomResponse.errorResponse(
-                description="Student is not assigned to this vehicle."
-            )
-
-        if TripAttendance.objects.filter(
-            trip=trip,
-            student=student,
-        ).exists():
-
-            application_logger.warning(
-                "trip_attendance_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                trip_id=str(trip.id),
-                student_id=str(student.id),
-                reason="attendance_already_exists",
-            )
-
-            return CustomResponse.errorResponse(
-                description="Attendance already marked."
-            )
-
-        pickup_status = request.data.get(
-            "pickup_status",
-            TripAttendance.PickupStatus.PENDING,
-        )
-
-        if pickup_status not in TripAttendance.PickupStatus.values:
-
-            return CustomResponse.errorResponse(
-                description="Invalid pickup status."
-            )
-
-        drop_status = request.data.get(
-            "drop_status",
-            TripAttendance.DropStatus.PENDING,
-        )
-
-        if drop_status not in TripAttendance.DropStatus.values:
-
-            return CustomResponse.errorResponse(
-                description="Invalid drop status."
+                description="trip_id is required."
             )
 
         try:
-
-            with transaction.atomic():
-
-                attendance = TripAttendance.objects.create(
+            # ---------------------------------------------------------
+            # Get Trip
+            # ---------------------------------------------------------
+            trip = (
+                Trip.objects
+                .select_related(
+                    "vehicle_assignment",
+                    "vehicle_assignment__vehicle",
+                    "vehicle_assignment__route",
+                )
+                .filter(
+                    id=trip_id,
                     school=school,
-                    branch=branch,
-                    trip=trip,
-                    student=student,
-                    pickup_status=pickup_status,
-                    pickup_time=request.data.get("pickup_time"),
-                    drop_status=drop_status,
-                    drop_time=request.data.get("drop_time"),
-                    remarks=request.data.get("remarks"),
+                )
+                .first()
+            )
+
+            if not trip:
+                return CustomResponse.errorResponse(
+                    description="Trip not found.",
+                    status_code=404,
+                )
+
+            # =========================================================
+            # STUDENT ATTENDANCE
+            # =========================================================
+            if attendance_type == "STUDENT":
+
+                student_id = request.data.get("student_id")
+
+                if not student_id:
+                    return CustomResponse.errorResponse(
+                        description="student_id is required."
+                    )
+
+                # -----------------------------------------------------
+                # Get Student
+                # -----------------------------------------------------
+                student = (
+                    Student.objects
+                    .filter(
+                        id=student_id,
+                        school=school,
+                    )
+                    .first()
+                )
+
+                if not student:
+                    return CustomResponse.errorResponse(
+                        description="Student not found.",
+                        status_code=404,
+                    )
+
+                # -----------------------------------------------------
+                # Check Student Transport
+                # -----------------------------------------------------
+                student_transport = (
+                    StudentTransport.objects
+                    .filter(
+                        student=student,
+                        vehicle_assignment=trip.vehicle_assignment,
+                        is_active=True,
+                    )
+                    .first()
+                )
+
+                if not student_transport:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Student is not assigned to this trip's "
+                            "vehicle."
+                        ),
+                    )
+
+                # -----------------------------------------------------
+                # Prevent duplicate attendance
+                # -----------------------------------------------------
+                attendance_exists = (
+                    TripAttendance.objects
+                    .filter(
+                        trip=trip,
+                        student=student,
+                    )
+                    .exists()
+                )
+
+                if attendance_exists:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Attendance already exists for this "
+                            "student and trip."
+                        ),
+                    )
+
+                pickup_status = request.data.get(
+                    "pickup_status",
+                    TripAttendance.PickupStatus.PENDING,
+                )
+
+                drop_status = request.data.get(
+                    "drop_status",
+                    TripAttendance.DropStatus.PENDING,
+                )
+
+                if pickup_status not in TripAttendance.PickupStatus.values:
+                    return CustomResponse.errorResponse(
+                        description="Invalid pickup_status."
+                    )
+
+                if drop_status not in TripAttendance.DropStatus.values:
+                    return CustomResponse.errorResponse(
+                        description="Invalid drop_status."
+                    )
+
+                pickup_time = request.data.get("pickup_time")
+                drop_time = request.data.get("drop_time")
+                remarks = request.data.get("remarks")
+
+                with transaction.atomic():
+
+                    attendance = TripAttendance.objects.create(
+                        school=school,
+                        branch=trip.branch,
+                        trip=trip,
+                        student=student,
+                        pickup_status=pickup_status,
+                        pickup_time=pickup_time,
+                        drop_status=drop_status,
+                        drop_time=drop_time,
+                        remarks=remarks,
+                    )
+
+                application_logger.info(
+                    "trip_student_attendance_created",
+                    user_id=str(request.user.id),
+                    trip_id=str(trip.id),
+                    student_id=str(student.id),
+                    attendance_id=str(attendance.id),
+                )
+
+                data = {
+                    "id": str(attendance.id),
+                    "attendance_type": "STUDENT",
+                    "student_id": str(student.id),
+                    "student_name": getattr(
+                        student,
+                        "full_name",
+                        None,
+                    ),
+                    "trip_id": str(trip.id),
+                    "trip_date": trip.trip_date,
+                    "pickup_status": attendance.pickup_status,
+                    "pickup_time": attendance.pickup_time,
+                    "drop_status": attendance.drop_status,
+                    "drop_time": attendance.drop_time,
+                    "remarks": attendance.remarks,
+                }
+
+                return CustomResponse.successResponse(
+                    data=data,
+                    description="Student attendance created successfully.",
+                )
+
+            # =========================================================
+            # STOP STATUS
+            # =========================================================
+            elif attendance_type == "STOP":
+
+                stop_id = request.data.get("stop_id")
+
+                if not stop_id:
+                    return CustomResponse.errorResponse(
+                        description="stop_id is required."
+                    )
+
+                # -----------------------------------------------------
+                # Validate stop belongs to trip route
+                # -----------------------------------------------------
+                stop = (
+                    trip.route.stops
+                    .filter(id=stop_id)
+                    .first()
+                )
+
+                if not stop:
+                    return CustomResponse.errorResponse(
+                        description="Stop not found for this trip route.",
+                        status_code=404,
+                    )
+
+                status = request.data.get(
+                    "status",
+                    TripStopStatus.Status.REACHED,
+                )
+
+                if status not in TripStopStatus.Status.values:
+                    return CustomResponse.errorResponse(
+                        description="Invalid stop status."
+                    )
+
+                remarks = request.data.get("remarks")
+
+                # -----------------------------------------------------
+                # Create / update stop status
+                # -----------------------------------------------------
+                with transaction.atomic():
+
+                    stop_status, created = (
+                        TripStopStatus.objects.update_or_create(
+                            trip=trip,
+                            stop=stop,
+                            defaults={
+                                "school": school,
+                                "branch": trip.branch,
+                                "status": status,
+                                "reached_time": (
+                                    timezone.now()
+                                    if status
+                                    == TripStopStatus.Status.REACHED
+                                    else None
+                                ),
+                                "remarks": remarks,
+                            },
+                        )
+                    )
+
+                application_logger.info(
+                    "trip_stop_status_updated",
+                    user_id=str(request.user.id),
+                    trip_id=str(trip.id),
+                    stop_id=str(stop.id),
+                    stop_status_id=str(stop_status.id),
+                    status=status,
+                )
+
+                data = {
+                    "id": str(stop_status.id),
+                    "attendance_type": "STOP",
+                    "trip_id": str(trip.id),
+                    "stop_id": str(stop.id),
+                    "stop_name": getattr(
+                        stop,
+                        "stop_name",
+                        None,
+                    ),
+                    "status": stop_status.status,
+                    "reached_time": stop_status.reached_time,
+                    "remarks": stop_status.remarks,
+                }
+
+                return CustomResponse.successResponse(
+                    data=data,
+                    description="Trip stop status updated successfully.",
+                )
+
+            # =========================================================
+            # INVALID TYPE
+            # =========================================================
+            else:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Invalid attendance_type. "
+                        "Use STUDENT or STOP."
+                    )
                 )
 
         except Exception as e:
 
             application_logger.exception(
-                "trip_attendance_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                trip_id=str(trip.id),
-                student_id=str(student.id),
+                "trip_attendance_request_failed",
+                user_id=str(request.user.id),
+                trip_id=str(trip_id) if trip_id else None,
+                attendance_type=attendance_type,
                 error=str(e),
             )
 
             return CustomResponse.errorResponse(
-                description=str(e),
+                description="Failed to process trip attendance."
             )
-
-        application_logger.info(
-            "trip_attendance_created",
-            requested_by=str(request.user.id),
-            school_id=str(school.id),
-            attendance_id=str(attendance.id),
-        )
-
-        return CustomResponse.successResponse(
-            description="Trip attendance created successfully.",
-            data={
-                "id": str(attendance.id),
-                "student": student.name,
-                "trip_date": trip.trip_date,
-                "vehicle": trip.vehicle_assignment.vehicle.vehicle_number,
-                "pickup_status": attendance.pickup_status,
-                "drop_status": attendance.drop_status,
-            },
-        )
-
 
 class TripAttendanceListAPIView(APIView):
 
@@ -5316,7 +5402,11 @@ class TripAttendanceListAPIView(APIView):
 
 class UpdateTripAttendanceAPIView(APIView):
 
-    permission_classes = [IsAuthenticated, HasPermission]
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
     required_permission = "trip.attendance.update"
 
     def put(self, request, attendance_id):
@@ -5342,113 +5432,177 @@ class UpdateTripAttendanceAPIView(APIView):
                 description="School not found."
             )
 
-        attendance = TripAttendance.objects.select_related(
-            "trip",
-            "trip__vehicle_assignment",
-            "student",
-            "branch",
-        ).filter(
-            id=attendance_id,
-            school=school,
-        ).first()
+        try:
 
-        if attendance is None:
-
-            application_logger.warning(
-                "trip_attendance_update_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                attendance_id=str(attendance_id),
-                reason="attendance_not_found",
-            )
-
-            return CustomResponse.errorResponse(
-                description="Trip attendance not found."
-            )
-
-        branch = attendance.branch
-
-        if "branch_id" in request.data:
-
-            branch_id = request.data.get("branch_id")
-
-            if branch_id:
-
-                branch = Branch.objects.filter(
-                    id=branch_id,
+            attendance = (
+                TripAttendance.objects
+                .select_related(
+                    "trip",
+                    "trip__vehicle_assignment",
+                    "student",
+                    "branch",
+                )
+                .filter(
+                    id=attendance_id,
                     school=school,
-                ).first()
+                )
+                .first()
+            )
 
-                if branch is None:
+            if attendance is None:
 
-                    application_logger.warning(
-                        "trip_attendance_update_failed",
-                        requested_by=str(request.user.id),
-                        school_id=str(school.id),
-                        branch_id=branch_id,
-                        reason="branch_not_found",
+                application_logger.warning(
+                    "trip_attendance_update_failed",
+                    requested_by=str(request.user.id),
+                    school_id=str(school.id),
+                    attendance_id=str(attendance_id),
+                    reason="attendance_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Trip attendance not found.",
+                    status_code=404,
+                )
+
+            # ---------------------------------------------------------
+            # Branch
+            # ---------------------------------------------------------
+
+            branch = attendance.branch
+
+            if "branch_id" in request.data:
+
+                branch_id = request.data.get("branch_id")
+
+                if branch_id:
+
+                    branch = (
+                        Branch.objects
+                        .filter(
+                            id=branch_id,
+                            school=school,
+                        )
+                        .first()
                     )
+
+                    if branch is None:
+
+                        application_logger.warning(
+                            "trip_attendance_update_failed",
+                            requested_by=str(request.user.id),
+                            school_id=str(school.id),
+                            branch_id=branch_id,
+                            reason="branch_not_found",
+                        )
+
+                        return CustomResponse.errorResponse(
+                            description="Branch not found.",
+                            status_code=404,
+                        )
+
+                else:
+                    branch = None
+
+            # ---------------------------------------------------------
+            # Pickup Status
+            # ---------------------------------------------------------
+
+            if "pickup_status" in request.data:
+
+                pickup_status = request.data.get(
+                    "pickup_status"
+                )
+
+                if pickup_status not in (
+                    TripAttendance.PickupStatus.values
+                ):
 
                     return CustomResponse.errorResponse(
-                        description="Branch not found."
+                        description="Invalid pickup status."
                     )
 
-            else:
+                attendance.pickup_status = pickup_status
 
-                branch = None
+                # Automatically set pickup time
+                if pickup_status == TripAttendance.PickupStatus.BOARDED:
 
-        if "pickup_status" in request.data:
+                    attendance.pickup_time = timezone.now()
 
-            pickup_status = request.data.get("pickup_status")
+                elif pickup_status in [
+                    TripAttendance.PickupStatus.PENDING,
+                    TripAttendance.PickupStatus.ABSENT,
+                    TripAttendance.PickupStatus.NO_SHOW,
+                ]:
 
-            if pickup_status not in TripAttendance.PickupStatus.values:
+                    # Only clear if explicitly changing away
+                    # from BOARDED
+                    if "pickup_time" not in request.data:
+                        attendance.pickup_time = None
 
-                application_logger.warning(
-                    "trip_attendance_update_failed",
-                    requested_by=str(request.user.id),
-                    school_id=str(school.id),
-                    pickup_status=pickup_status,
-                    reason="invalid_pickup_status",
+            # ---------------------------------------------------------
+            # Drop Status
+            # ---------------------------------------------------------
+
+            if "drop_status" in request.data:
+
+                drop_status = request.data.get(
+                    "drop_status"
                 )
 
-                return CustomResponse.errorResponse(
-                    description="Invalid pickup status."
+                if drop_status not in (
+                    TripAttendance.DropStatus.values
+                ):
+
+                    return CustomResponse.errorResponse(
+                        description="Invalid drop status."
+                    )
+
+                attendance.drop_status = drop_status
+
+                # Automatically set drop time
+                if drop_status == TripAttendance.DropStatus.DROPPED:
+
+                    attendance.drop_time = timezone.now()
+
+                elif drop_status in [
+                    TripAttendance.DropStatus.PENDING,
+                    TripAttendance.DropStatus.NOT_DROPPED,
+                ]:
+
+                    if "drop_time" not in request.data:
+                        attendance.drop_time = None
+
+            # ---------------------------------------------------------
+            # Explicit Times
+            # ---------------------------------------------------------
+
+            if "pickup_time" in request.data:
+
+                attendance.pickup_time = request.data.get(
+                    "pickup_time"
                 )
 
-            attendance.pickup_status = pickup_status
+            if "drop_time" in request.data:
 
-        if "drop_status" in request.data:
-
-            drop_status = request.data.get("drop_status")
-
-            if drop_status not in TripAttendance.DropStatus.values:
-
-                application_logger.warning(
-                    "trip_attendance_update_failed",
-                    requested_by=str(request.user.id),
-                    school_id=str(school.id),
-                    drop_status=drop_status,
-                    reason="invalid_drop_status",
+                attendance.drop_time = request.data.get(
+                    "drop_time"
                 )
 
-                return CustomResponse.errorResponse(
-                    description="Invalid drop status."
+            # ---------------------------------------------------------
+            # Remarks
+            # ---------------------------------------------------------
+
+            if "remarks" in request.data:
+
+                attendance.remarks = request.data.get(
+                    "remarks"
                 )
 
-            attendance.drop_status = drop_status
+            attendance.branch = branch
 
-        if "pickup_time" in request.data:
-            attendance.pickup_time = request.data.get("pickup_time")
-
-        if "drop_time" in request.data:
-            attendance.drop_time = request.data.get("drop_time")
-
-        if "remarks" in request.data:
-            attendance.remarks = request.data.get("remarks")
-
-        attendance.branch = branch
-
-        try:
+            # ---------------------------------------------------------
+            # Save
+            # ---------------------------------------------------------
 
             with transaction.atomic():
 
@@ -5460,12 +5614,12 @@ class UpdateTripAttendanceAPIView(APIView):
                 "trip_attendance_update_failed",
                 requested_by=str(request.user.id),
                 school_id=str(school.id),
-                attendance_id=str(attendance.id),
+                attendance_id=str(attendance_id),
                 error=str(e),
             )
 
             return CustomResponse.errorResponse(
-                description=str(e),
+                description="Failed to update trip attendance.",
             )
 
         application_logger.info(
@@ -5478,16 +5632,106 @@ class UpdateTripAttendanceAPIView(APIView):
         return CustomResponse.successResponse(
             description="Trip attendance updated successfully.",
             data={
-                "id": str(attendance.id),
-                "student": attendance.student.name,
-                "trip_date": attendance.trip.trip_date,
-                "pickup_status": attendance.pickup_status,
-                "pickup_time": attendance.pickup_time,
-                "drop_status": attendance.drop_status,
-                "drop_time": attendance.drop_time,
-                "remarks": attendance.remarks,
+                "id": str(attendance.id)
+
+
             },
         )
+
+
+class UpdateTripStopStatusAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "trip.attendance.update"
+
+    def put(self, request, stop_status_id):
+
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        try:
+
+            stop_status = (
+                TripStopStatus.objects
+                .select_related(
+                    "trip",
+                    "stop",
+                    "branch",
+                )
+                .filter(
+                    id=stop_status_id,
+                    school=school,
+                )
+                .first()
+            )
+
+            if not stop_status:
+
+                return CustomResponse.errorResponse(
+                    description="Trip stop status not found.",
+                    status_code=404,
+                )
+
+            status = request.data.get("status")
+
+            if status not in TripStopStatus.Status.values:
+
+                return CustomResponse.errorResponse(
+                    description="Invalid stop status."
+                )
+
+            stop_status.status = status
+
+            if status == TripStopStatus.Status.REACHED:
+                stop_status.reached_time = timezone.now()
+            else:
+                stop_status.reached_time = None
+
+            if "remarks" in request.data:
+                stop_status.remarks = request.data.get("remarks")
+
+            with transaction.atomic():
+                stop_status.save()
+
+            application_logger.info(
+                "trip_stop_status_updated",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                stop_status_id=str(stop_status.id),
+                trip_id=str(stop_status.trip.id),
+                stop_id=str(stop_status.stop.id),
+                status=status,
+            )
+
+            return CustomResponse.successResponse(
+                description="Trip stop status updated successfully.",
+                data={
+                    "id": str(stop_status.id)
+                }
+
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "trip_stop_status_update_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                stop_status_id=str(stop_status_id),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to update trip stop status.",
+            )
 
 class UpdateLiveLocationAPIView(APIView):
 

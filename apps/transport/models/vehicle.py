@@ -898,6 +898,80 @@ class TripAttendance(AuditModel):
         return f"{self.trip} - {self.student}"
 
 
+class TripStopStatus(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        REACHED = "REACHED", "Reached"
+        SKIPPED = "SKIPPED", "Skipped"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="trip_stop_statuses",
+    )
+
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="trip_stop_statuses",
+    )
+
+    trip = models.ForeignKey(
+        "transport.Trip",
+        on_delete=models.CASCADE,
+        related_name="stop_statuses",
+    )
+
+    stop = models.ForeignKey(
+        "transport.Stop",
+        on_delete=models.CASCADE,
+        related_name="trip_statuses",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+
+    reached_time = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    remarks = models.TextField(
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "transport_trip_stop_status"
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["trip", "stop"],
+                name="unique_trip_stop_status",
+            ),
+        ]
+
+        indexes = [
+            models.Index(fields=["trip"]),
+            models.Index(fields=["stop"]),
+            models.Index(fields=["status"]),
+        ]
+
+
 
 
 
