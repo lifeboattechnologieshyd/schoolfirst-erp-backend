@@ -4624,8 +4624,10 @@ class TripListAPIView(APIView):
                         if trip.vehicle_assignment.attendant
                         else None
                     ),
+                    "trip_id": str(trip.id),
 
                     "trip_date": trip.trip_date,
+
 
                     "shift": trip.shift,
                     "shift_display": trip.get_shift_display(),
