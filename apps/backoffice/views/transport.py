@@ -4158,7 +4158,7 @@ class MyAssignedVehicleAPIView(APIView):
                 )
 
                 return CustomResponse.errorResponse(
-                    description="Active driver profile not found for this user."
+                    description="Active driver profile not found for this user.",
                 )
 
             application_logger.info(
@@ -4169,24 +4169,11 @@ class MyAssignedVehicleAPIView(APIView):
 
             today = timezone.localdate()
 
-            vehicle_photo_prefetch = Prefetch(
-                "vehicle__documents",
-                queryset=VehicleDocument.objects.filter(
-                    document_type=VehicleDocument.DocumentType.PHOTO,
-                    status=VehicleDocument.Status.ACTIVE,
-                    document_file__isnull=False,
-                ),
-                to_attr="photo_documents",
-            )
-
             assignment = (
                 VehicleAssignment.objects
                 .select_related(
                     "vehicle",
                     "route",
-                )
-                .prefetch_related(
-                    vehicle_photo_prefetch,
                 )
                 .filter(
                     driver=staff,
@@ -4224,16 +4211,26 @@ class MyAssignedVehicleAPIView(APIView):
             vehicle = assignment.vehicle
             route = assignment.route
 
-            photo_documents = getattr(
-                vehicle,
-                "photo_documents",
-                [],
+            # Get active vehicle photo
+            photo_document = (
+                vehicle.documents
+                .filter(
+                    document_type=VehicleDocument.DocumentType.PHOTO,
+                    status=VehicleDocument.Status.ACTIVE,
+                    document_file__isnull=False,
+                )
+                .first()
             )
 
             vehicle_photo = None
 
-            if photo_documents:
-                vehicle_photo = photo_documents[0].document_file.url
+            if photo_document and photo_document.document_file:
+                file_name = photo_document.document_file.name
+
+                if file_name.startswith(("http://", "https://")):
+                    vehicle_photo = file_name
+                else:
+                    vehicle_photo = photo_document.document_file.url
 
             data = {
                 "vehicle_assignment_id": str(assignment.id),
