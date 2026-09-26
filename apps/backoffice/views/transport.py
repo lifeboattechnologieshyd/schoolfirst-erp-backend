@@ -1781,7 +1781,7 @@ class CreateRouteAPIView(APIView):
 
 
 
-class RouteListAPIView(APIView):
+class RouteDetailsAPIView(APIView):
 
     permission_classes = [
         IsAuthenticated,
@@ -1790,158 +1790,214 @@ class RouteListAPIView(APIView):
 
     required_permission = "route.view"
 
-    def get(self, request):
+    def get(self, request, route_id):
 
         school = request.school
 
+        application_logger.info(
+            "route_details_requested",
+            requested_by=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            route_id=str(route_id),
+        )
+
         if not school:
-            return CustomResponse.errorResponse(
-                description="School is required."
+
+            application_logger.warning(
+                "route_details_failed",
+                requested_by=str(request.user.id),
+                reason="school_not_found",
             )
 
-        branch_id = request.headers.get("X-Branch-Id")
-        shift = request.GET.get("shift")
-        status = request.GET.get("status")
-        search = request.GET.get("search", "").strip()
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
 
         try:
 
-            # ---------------------------------------------------------
-            # Active vehicle assignments
-            # ---------------------------------------------------------
+            # =========================================================
+            # ROUTE
+            # =========================================================
 
-            active_assignments = (
-                VehicleAssignment.objects
-                .filter(
-                    status=VehicleAssignment.Status.ACTIVE,
+            route = (
+                Route.objects
+                .select_related(
+                    "branch",
                 )
+                .filter(
+                    id=route_id,
+                    school=school,
+                )
+                .first()
+            )
+
+            if not route:
+
+                application_logger.warning(
+                    "route_details_failed",
+                    requested_by=str(request.user.id),
+                    school_id=str(school.id),
+                    route_id=str(route_id),
+                    reason="route_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Route not found.",
+                    status_code=404,
+                )
+
+            # =========================================================
+            # VEHICLE ASSIGNMENT
+            # =========================================================
+
+            vehicle_assignment = (
+                VehicleAssignment.objects
                 .select_related(
                     "vehicle",
                     "driver__user",
+                    "attendant__user",
                 )
-            )
-
-            # ---------------------------------------------------------
-            # Routes
-            # ---------------------------------------------------------
-
-            routes = (
-                Route.objects
-                .select_related("branch")
                 .annotate(
-                    stops_count=Count(
-                        "stops",
+                    active_student_count=Count(
+                        "student_transports",
+                        filter=Q(
+                            student_transports__status=(
+                                StudentTransport.Status.ACTIVE
+                            )
+                        ),
                         distinct=True,
-                    )
-                )
-                .prefetch_related(
-                    Prefetch(
-                        "vehicle_assignments",
-                        queryset=active_assignments,
-                        to_attr="active_assignments",
                     )
                 )
                 .filter(
                     school=school,
+                    route=route,
+                    status=VehicleAssignment.Status.ACTIVE,
+                )
+                .first()
+            )
+
+            vehicle = (
+                vehicle_assignment.vehicle
+                if vehicle_assignment
+                else None
+            )
+
+            driver = (
+                vehicle_assignment.driver
+                if vehicle_assignment
+                else None
+            )
+
+            attendant = (
+                vehicle_assignment.attendant
+                if vehicle_assignment
+                else None
+            )
+
+            students_count = (
+                vehicle_assignment.active_student_count
+                if vehicle_assignment
+                else 0
+            )
+
+            # =========================================================
+            # ROUTE STOPS
+            # =========================================================
+
+            route_stops = (
+                RouteStop.objects
+                .select_related(
+                    "stop",
+                )
+                .filter(
+                    route=route,
+                )
+                .order_by(
+                    "stop_order",
                 )
             )
 
-            # ---------------------------------------------------------
-            # Filters
-            # ---------------------------------------------------------
+            stops_data = []
 
-            if branch_id:
-                routes = routes.filter(
-                    branch_id=branch_id
-                )
+            for route_stop in route_stops:
 
-            if shift:
-                routes = routes.filter(
-                    shift=shift
-                )
+                stop = route_stop.stop
 
-            if status:
-                routes = routes.filter(
-                    status=status
-                )
+                stops_data.append({
 
-            if search:
-                routes = routes.filter(
-                    Q(route_name__icontains=search)
-                    | Q(route_code__icontains=search)
-                    | Q(source__icontains=search)
-                    | Q(destination__icontains=search)
-                )
+                    "id": str(route_stop.id),
 
-            routes = routes.order_by(
-                "route_name"
+                    "stop": {
+                        "id": str(stop.id),
+                        "stop_name": stop.stop_name,
+                        "stop_code": stop.stop_code,
+                        "stop_type": stop.stop_type,
+                        "landmark": stop.landmark,
+                        "address": stop.address,
+                        "latitude": stop.latitude,
+                        "longitude": stop.longitude,
+                    },
+
+                    "stop_order": route_stop.stop_order,
+
+                    "pickup_time": route_stop.pickup_time,
+
+                    "drop_time": route_stop.drop_time,
+
+                    "distance_from_previous_stop": (
+                        route_stop.distance_from_previous_stop
+                    ),
+
+                    "estimated_travel_time": (
+                        route_stop.estimated_travel_time
+                    ),
+                })
+
+            # =========================================================
+            # COUNTS
+            # =========================================================
+
+            stops_count = len(stops_data)
+
+            vehicle_capacity = (
+                vehicle.capacity
+                if vehicle
+                else 0
             )
 
-            data = []
+            capacity_utilization = None
 
-            # ---------------------------------------------------------
-            # Response
-            # ---------------------------------------------------------
+            if vehicle_capacity:
 
-            for route in routes:
-
-                vehicle_assignment = (
-                    route.active_assignments[0]
-                    if route.active_assignments
-                    else None
+                capacity_utilization = round(
+                    (
+                        students_count
+                        / vehicle_capacity
+                    ) * 100,
+                    2,
                 )
 
-                student_count = 0
+            # =========================================================
+            # RESPONSE
+            # =========================================================
 
-                if vehicle_assignment:
+            data = {
 
-                    student_count = (
-                        vehicle_assignment
-                        .student_transports
-                        .filter(
-                            status=StudentTransport.Status.ACTIVE
-                        )
-                        .count()
-                    )
+                # -----------------------------------------------------
+                # Route
+                # -----------------------------------------------------
 
-                vehicle = (
-                    vehicle_assignment.vehicle
-                    if vehicle_assignment
-                    else None
-                )
-
-                driver = (
-                    vehicle_assignment.driver
-                    if vehicle_assignment
-                    else None
-                )
-
-                data.append({
+                "route": {
 
                     "id": str(route.id),
 
-                    "route_name": route.route_name,
-
                     "route_code": route.route_code,
 
-                    "branch": (
-                        {
-                            "id": str(route.branch.id),
-                            "name": route.branch.name,
-                        }
-                        if route.branch
-                        else None
-                    ),
+                    "route_name": route.route_name,
 
                     "source": route.source,
 
                     "destination": route.destination,
-
-                    "total_distance": route.total_distance,
-
-                    "estimated_duration": (
-                        route.estimated_duration
-                    ),
 
                     "shift": route.shift,
 
@@ -1955,78 +2011,195 @@ class RouteListAPIView(APIView):
                         route.get_status_display()
                     ),
 
-                    # -------------------------------------------------
-                    # Vehicle
-                    # -------------------------------------------------
+                    "total_distance": route.total_distance,
 
-                    "assigned_vehicle": (
+                    "estimated_duration": (
+                        route.estimated_duration
+                    ),
+
+                    "branch": (
                         {
-                            "id": str(vehicle.id),
-                            "vehicle_number": (
-                                vehicle.vehicle_number
-                            ),
-                            "vehicle_type": (
-                                vehicle.vehicle_type
-                            ),
+                            "id": str(route.branch.id),
+                            "name": route.branch.name,
                         }
+                        if route.branch
+                        else None
+                    ),
+                },
+
+                # -----------------------------------------------------
+                # Vehicle Assignment
+                # -----------------------------------------------------
+
+                "vehicle_assignment_id": (
+                    str(vehicle_assignment.id)
+                    if vehicle_assignment
+                    else None
+                ),
+
+                # -----------------------------------------------------
+                # Vehicle
+                # -----------------------------------------------------
+
+                "vehicle": {
+
+                    "id": (
+                        str(vehicle.id)
                         if vehicle
                         else None
                     ),
 
-                    # -------------------------------------------------
-                    # Driver
-                    # -------------------------------------------------
-
-                    "driver": (
-                        {
-                            "id": str(driver.id),
-                            "name": (
-                                driver.user.name
-                                if driver.user
-                                else None
-                            ),
-                        }
-                        if driver
+                    "vehicle_number": (
+                        vehicle.vehicle_number
+                        if vehicle
                         else None
                     ),
 
-                    # -------------------------------------------------
-                    # Counts
-                    # -------------------------------------------------
+                    "vehicle_type": (
+                        vehicle.vehicle_type
+                        if vehicle
+                        else None
+                    ),
 
-                    "stops_count": route.stops_count,
+                    "capacity": (
+                        vehicle.capacity
+                        if vehicle
+                        else None
+                    ),
 
-                    "student_count": student_count,
+                    "status": (
+                        vehicle.status
+                        if vehicle
+                        else None
+                    ),
+                },
 
-                    "created_at": route.created_at,
+                # -----------------------------------------------------
+                # Driver
+                # -----------------------------------------------------
 
-                    "updated_at": route.updated_at,
-                })
+                "driver": (
+                    {
+                        "id": str(driver.id),
+
+                        "name": (
+                            driver.user.name
+                            if driver.user
+                            else None
+                        ),
+
+                        "mobile": (
+                            driver.user.mobile
+                            if driver.user
+                            else None
+                        ),
+
+                        "profile_image": (
+                            driver.user.profile_image
+                            if driver.user
+                            else None
+                        ),
+                    }
+                    if driver
+                    else None
+                ),
+
+                # -----------------------------------------------------
+                # Attendant
+                # -----------------------------------------------------
+
+                "attendant": (
+                    {
+                        "id": str(attendant.id),
+
+                        "name": (
+                            attendant.user.name
+                            if attendant.user
+                            else None
+                        ),
+
+                        "mobile": (
+                            attendant.user.mobile
+                            if attendant.user
+                            else None
+                        ),
+
+                        "profile_image": (
+                            attendant.user.profile_image
+                            if attendant.user
+                            else None
+                        ),
+                    }
+                    if attendant
+                    else None
+                ),
+
+                # -----------------------------------------------------
+                # Summary
+                # -----------------------------------------------------
+
+                "summary": {
+
+                    "stops_count": stops_count,
+
+                    "students_assigned": students_count,
+
+                    "vehicle_capacity": vehicle_capacity,
+
+                    "capacity_utilization": (
+                        capacity_utilization
+                    ),
+
+                    "is_over_capacity": (
+                        students_count > vehicle_capacity
+                        if vehicle_capacity
+                        else False
+                    ),
+                },
+
+                # -----------------------------------------------------
+                # Stops
+                # -----------------------------------------------------
+
+                "stops": stops_data,
+            }
 
             application_logger.info(
-                "route_list_fetched",
+                "route_details_fetched",
                 requested_by=str(request.user.id),
                 school_id=str(school.id),
-                total=len(data),
+                route_id=str(route.id),
+                vehicle_assignment_id=(
+                    str(vehicle_assignment.id)
+                    if vehicle_assignment
+                    else None
+                ),
+                vehicle_id=(
+                    str(vehicle.id)
+                    if vehicle
+                    else None
+                ),
+                stops_count=stops_count,
+                students_count=students_count,
             )
 
             return CustomResponse.successResponse(
-                description="Routes fetched successfully.",
-                total=len(data),
+                description="Route details fetched successfully.",
                 data=data,
             )
 
         except Exception as e:
 
             application_logger.exception(
-                "route_list_failed",
+                "route_details_failed",
                 requested_by=str(request.user.id),
                 school_id=str(school.id),
+                route_id=str(route_id),
                 error=str(e),
             )
 
             return CustomResponse.errorResponse(
-                description="Failed to fetch routes."
+                description="Failed to fetch route details."
             )
 
 
