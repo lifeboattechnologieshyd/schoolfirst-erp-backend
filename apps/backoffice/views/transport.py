@@ -1778,6 +1778,8 @@ class CreateRouteAPIView(APIView):
         )
 
 
+
+
 class RouteListAPIView(APIView):
 
     permission_classes = [
@@ -1803,19 +1805,32 @@ class RouteListAPIView(APIView):
 
         try:
 
+            today = timezone.localdate()
+
             # ---------------------------------------------------------
-            # Active vehicle assignments
+            # Vehicle assignments
             # ---------------------------------------------------------
 
-            active_assignments = (
+            assignments = (
                 VehicleAssignment.objects
                 .filter(
-                    status=VehicleAssignment.Status.ACTIVE,
                     school=school,
+                )
+                .filter(
+                    Q(effective_from__isnull=True)
+                    | Q(effective_from__lte=today)
+                )
+                .filter(
+                    Q(effective_to__isnull=True)
+                    | Q(effective_to__gte=today)
                 )
                 .select_related(
                     "vehicle",
                     "driver",
+                )
+                .order_by(
+                    "-effective_from",
+                    "-created_at",
                 )
             )
 
@@ -1837,8 +1852,8 @@ class RouteListAPIView(APIView):
                 .prefetch_related(
                     Prefetch(
                         "vehicle_assignments",
-                        queryset=active_assignments,
-                        to_attr="active_assignments",
+                        queryset=assignments,
+                        to_attr="current_assignments",
                     )
                 )
                 .filter(
@@ -1851,21 +1866,25 @@ class RouteListAPIView(APIView):
             # ---------------------------------------------------------
 
             if branch_id:
+
                 routes = routes.filter(
-                    branch_id=branch_id
+                    branch_id=branch_id,
                 )
 
             if shift:
+
                 routes = routes.filter(
-                    shift=shift
+                    shift=shift,
                 )
 
             if status:
+
                 routes = routes.filter(
-                    status=status
+                    status=status,
                 )
 
             if search:
+
                 routes = routes.filter(
                     Q(route_name__icontains=search)
                     | Q(route_code__icontains=search)
@@ -1874,20 +1893,20 @@ class RouteListAPIView(APIView):
                 )
 
             routes = routes.order_by(
-                "route_name"
+                "route_name",
             )
 
             data = []
 
             # ---------------------------------------------------------
-            # Build response
+            # Response
             # ---------------------------------------------------------
 
             for route in routes:
 
                 vehicle_assignment = (
-                    route.active_assignments[0]
-                    if route.active_assignments
+                    route.current_assignments[0]
+                    if route.current_assignments
                     else None
                 )
 
@@ -1903,16 +1922,26 @@ class RouteListAPIView(APIView):
                     else None
                 )
 
+                # -----------------------------------------------------
+                # Student count
+                # -----------------------------------------------------
+
                 student_count = 0
 
                 if vehicle_assignment:
+
                     student_count = (
-                        vehicle_assignment.student_assignments
+                        vehicle_assignment
+                        .student_assignments
                         .filter(
                             status=StudentTransport.Status.ACTIVE,
                         )
                         .count()
                     )
+
+                # -----------------------------------------------------
+                # Data
+                # -----------------------------------------------------
 
                 data.append({
 
@@ -1954,17 +1983,15 @@ class RouteListAPIView(APIView):
                     ),
 
                     # -------------------------------------------------
-                    # Assigned Vehicle
+                    # Vehicle
                     # -------------------------------------------------
 
                     "assigned_vehicle": (
                         {
                             "id": str(vehicle.id),
-
                             "vehicle_number": (
                                 vehicle.vehicle_number
                             ),
-
                             "vehicle_type": (
                                 vehicle.vehicle_type
                             ),
@@ -1980,12 +2007,11 @@ class RouteListAPIView(APIView):
                     "driver": (
                         {
                             "id": str(driver.id),
-
-                            "name": (
-                                driver.name
-                                if driver
-                                else None
+                            "employee_id": (
+                                driver.employee_id
                             ),
+                            "name": driver.name,
+                            "mobile": driver.mobile,
                         }
                         if driver
                         else None
@@ -2029,7 +2055,6 @@ class RouteListAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Failed to fetch routes."
             )
-
 
 class RouteDetailsAPIView(APIView):
 
