@@ -1906,9 +1906,8 @@ class RouteListAPIView(APIView):
                 student_count = 0
 
                 if vehicle_assignment:
-
                     student_count = (
-                        vehicle_assignment.student_transports
+                        vehicle_assignment.student_assignments
                         .filter(
                             status=StudentTransport.Status.ACTIVE,
                         )
@@ -2110,14 +2109,13 @@ class RouteDetailsAPIView(APIView):
                 )
                 .annotate(
                     active_student_count=Count(
-                        "student_transports",
+                        "student_assignments",
                         filter=Q(
-                            student_transports__status=(
-                                StudentTransport.Status.ACTIVE
-                            )
+                            student_assignments__status=StudentTransport.Status.ACTIVE
                         ),
                         distinct=True,
                     )
+
                 )
                 .filter(
                     school=school,
