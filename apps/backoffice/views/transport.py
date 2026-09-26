@@ -1982,8 +1982,8 @@ class RouteListAPIView(APIView):
                             "id": str(driver.id),
 
                             "name": (
-                                driver.user.name
-                                if driver.user
+                                driver.name
+                                if driver
                                 else None
                             ),
                         }
@@ -2331,24 +2331,10 @@ class RouteDetailsAPIView(APIView):
                 "driver": (
                     {
                         "id": str(driver.id),
-
-                        "name": (
-                            driver.user.name
-                            if driver.user
-                            else None
-                        ),
-
-                        "mobile": (
-                            driver.user.mobile
-                            if driver.user
-                            else None
-                        ),
-
-                        "profile_image": (
-                            driver.user.profile_image
-                            if driver.user
-                            else None
-                        ),
+                        "name": driver.name,
+                        "mobile": driver.mobile,
+                        "experience": driver.experience,
+                        "profile_image": driver.profile_image,
                     }
                     if driver
                     else None
@@ -2361,24 +2347,10 @@ class RouteDetailsAPIView(APIView):
                 "attendant": (
                     {
                         "id": str(attendant.id),
-
-                        "name": (
-                            attendant.user.name
-                            if attendant.user
-                            else None
-                        ),
-
-                        "mobile": (
-                            attendant.user.mobile
-                            if attendant.user
-                            else None
-                        ),
-
-                        "profile_image": (
-                            attendant.user.profile_image
-                            if attendant.user
-                            else None
-                        ),
+                        "name": attendant.name,
+                        "mobile": attendant.mobile,
+                        "experience": attendant.experience,
+                        "profile_image": attendant.profile_image,
                     }
                     if attendant
                     else None
