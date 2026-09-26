@@ -1815,7 +1815,7 @@ class RouteListAPIView(APIView):
                 )
                 .select_related(
                     "vehicle",
-                    "driver__user",
+                    "driver",
                 )
             )
 
@@ -2104,18 +2104,19 @@ class RouteDetailsAPIView(APIView):
                 VehicleAssignment.objects
                 .select_related(
                     "vehicle",
-                    "driver__user",
-                    "attendant__user",
+                    "driver",
+                    "attendant",
                 )
                 .annotate(
                     active_student_count=Count(
                         "student_assignments",
                         filter=Q(
-                            student_assignments__status=StudentTransport.Status.ACTIVE
+                            student_assignments__status=(
+                                StudentTransport.Status.ACTIVE
+                            )
                         ),
                         distinct=True,
                     )
-
                 )
                 .filter(
                     school=school,
