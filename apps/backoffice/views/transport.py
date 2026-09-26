@@ -1778,7 +1778,258 @@ class CreateRouteAPIView(APIView):
         )
 
 
+class RouteListAPIView(APIView):
 
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "route.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required."
+            )
+
+        branch_id = request.headers.get("X-Branch-Id")
+        shift = request.GET.get("shift")
+        status = request.GET.get("status")
+        search = request.GET.get("search", "").strip()
+
+        try:
+
+            # ---------------------------------------------------------
+            # Active vehicle assignments
+            # ---------------------------------------------------------
+
+            active_assignments = (
+                VehicleAssignment.objects
+                .filter(
+                    status=VehicleAssignment.Status.ACTIVE,
+                    school=school,
+                )
+                .select_related(
+                    "vehicle",
+                    "driver__user",
+                )
+            )
+
+            # ---------------------------------------------------------
+            # Routes
+            # ---------------------------------------------------------
+
+            routes = (
+                Route.objects
+                .select_related(
+                    "branch",
+                )
+                .annotate(
+                    stops_count=Count(
+                        "route_stops",
+                        distinct=True,
+                    )
+                )
+                .prefetch_related(
+                    Prefetch(
+                        "vehicle_assignments",
+                        queryset=active_assignments,
+                        to_attr="active_assignments",
+                    )
+                )
+                .filter(
+                    school=school,
+                )
+            )
+
+            # ---------------------------------------------------------
+            # Filters
+            # ---------------------------------------------------------
+
+            if branch_id:
+                routes = routes.filter(
+                    branch_id=branch_id
+                )
+
+            if shift:
+                routes = routes.filter(
+                    shift=shift
+                )
+
+            if status:
+                routes = routes.filter(
+                    status=status
+                )
+
+            if search:
+                routes = routes.filter(
+                    Q(route_name__icontains=search)
+                    | Q(route_code__icontains=search)
+                    | Q(source__icontains=search)
+                    | Q(destination__icontains=search)
+                )
+
+            routes = routes.order_by(
+                "route_name"
+            )
+
+            data = []
+
+            # ---------------------------------------------------------
+            # Build response
+            # ---------------------------------------------------------
+
+            for route in routes:
+
+                vehicle_assignment = (
+                    route.active_assignments[0]
+                    if route.active_assignments
+                    else None
+                )
+
+                vehicle = (
+                    vehicle_assignment.vehicle
+                    if vehicle_assignment
+                    else None
+                )
+
+                driver = (
+                    vehicle_assignment.driver
+                    if vehicle_assignment
+                    else None
+                )
+
+                student_count = 0
+
+                if vehicle_assignment:
+
+                    student_count = (
+                        vehicle_assignment.student_transports
+                        .filter(
+                            status=StudentTransport.Status.ACTIVE,
+                        )
+                        .count()
+                    )
+
+                data.append({
+
+                    "id": str(route.id),
+
+                    "route_name": route.route_name,
+
+                    "route_code": route.route_code,
+
+                    "branch": (
+                        {
+                            "id": str(route.branch.id),
+                            "name": route.branch.name,
+                        }
+                        if route.branch
+                        else None
+                    ),
+
+                    "source": route.source,
+
+                    "destination": route.destination,
+
+                    "total_distance": route.total_distance,
+
+                    "estimated_duration": (
+                        route.estimated_duration
+                    ),
+
+                    "shift": route.shift,
+
+                    "shift_display": (
+                        route.get_shift_display()
+                    ),
+
+                    "status": route.status,
+
+                    "status_display": (
+                        route.get_status_display()
+                    ),
+
+                    # -------------------------------------------------
+                    # Assigned Vehicle
+                    # -------------------------------------------------
+
+                    "assigned_vehicle": (
+                        {
+                            "id": str(vehicle.id),
+
+                            "vehicle_number": (
+                                vehicle.vehicle_number
+                            ),
+
+                            "vehicle_type": (
+                                vehicle.vehicle_type
+                            ),
+                        }
+                        if vehicle
+                        else None
+                    ),
+
+                    # -------------------------------------------------
+                    # Driver
+                    # -------------------------------------------------
+
+                    "driver": (
+                        {
+                            "id": str(driver.id),
+
+                            "name": (
+                                driver.user.name
+                                if driver.user
+                                else None
+                            ),
+                        }
+                        if driver
+                        else None
+                    ),
+
+                    # -------------------------------------------------
+                    # Counts
+                    # -------------------------------------------------
+
+                    "stops_count": route.stops_count,
+
+                    "student_count": student_count,
+
+                    "created_at": route.created_at,
+
+                    "updated_at": route.updated_at,
+                })
+
+            application_logger.info(
+                "route_list_fetched",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                total=len(data),
+            )
+
+            return CustomResponse.successResponse(
+                description="Routes fetched successfully.",
+                total=len(data),
+                data=data,
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "route_list_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to fetch routes."
+            )
 
 
 class RouteDetailsAPIView(APIView):
