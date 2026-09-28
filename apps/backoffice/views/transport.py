@@ -5975,6 +5975,7 @@ class UpdateTripAPIView(APIView):
 
 
 class CreateTripAttendanceAPIView(APIView):
+
     permission_classes = [
         IsAuthenticated,
         HasPermission,
@@ -5983,6 +5984,7 @@ class CreateTripAttendanceAPIView(APIView):
     required_permission = "trip.attendance.create"
 
     def post(self, request):
+
         school = request.school
 
         if not school:
@@ -5991,13 +5993,20 @@ class CreateTripAttendanceAPIView(APIView):
             )
 
         trip_id = request.data.get("trip_id")
-        attendance_type = request.data.get("attendance_type", "STUDENT")
+        stop_id = request.data.get("stop_id")
+        stop_status = request.data.get(
+            "stop_status",
+            TripStopStatus.Status.REACHED,
+        )
+        students = request.data.get("students", [])
 
         application_logger.info(
             "trip_attendance_request_started",
             user_id=str(request.user.id),
             trip_id=str(trip_id) if trip_id else None,
-            attendance_type=attendance_type,
+            stop_id=str(stop_id) if stop_id else None,
+            stop_status=stop_status,
+            students_count=len(students),
         )
 
         if not trip_id:
@@ -6005,10 +6014,27 @@ class CreateTripAttendanceAPIView(APIView):
                 description="trip_id is required."
             )
 
+        if not stop_id:
+            return CustomResponse.errorResponse(
+                description="stop_id is required."
+            )
+
+        if not students:
+            return CustomResponse.errorResponse(
+                description="students are required."
+            )
+
+        if not isinstance(students, list):
+            return CustomResponse.errorResponse(
+                description="students must be an array."
+            )
+
         try:
-            # ---------------------------------------------------------
-            # Get Trip
-            # ---------------------------------------------------------
+
+            # =========================================================
+            # GET TRIP
+            # =========================================================
+
             trip = (
                 Trip.objects
                 .select_related(
@@ -6030,261 +6056,290 @@ class CreateTripAttendanceAPIView(APIView):
                 )
 
             # =========================================================
-            # STUDENT ATTENDANCE
+            # VALIDATE STOP
             # =========================================================
-            if attendance_type == "STUDENT":
 
-                student_id = request.data.get("student_id")
+            route_stop = (
+                RouteStop.objects
+                .select_related("stop")
+                .filter(
+                    route=trip.vehicle_assignment.route,
+                    stop_id=stop_id,
+                )
+                .first()
+            )
 
-                if not student_id:
+            if not route_stop:
+                return CustomResponse.errorResponse(
+                    description="Stop not found for this trip route.",
+                    status_code=404,
+                )
+
+            stop = route_stop.stop
+
+            # =========================================================
+            # VALIDATE STOP STATUS
+            # =========================================================
+
+            if stop_status not in TripStopStatus.Status.values:
+                return CustomResponse.errorResponse(
+                    description="Invalid stop_status."
+                )
+
+            # =========================================================
+            # VALIDATE STUDENT PAYLOAD
+            # =========================================================
+
+            for student_data in students:
+
+                if not isinstance(student_data, dict):
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Each student must be an object."
+                        )
+                    )
+
+                if not student_data.get("student_id"):
                     return CustomResponse.errorResponse(
                         description="student_id is required."
                     )
 
-                # -----------------------------------------------------
-                # Get Student
-                # -----------------------------------------------------
-                student = (
-                    Student.objects
-                    .filter(
-                        id=student_id,
-                        school=school,
-                    )
-                    .first()
-                )
-
-                if not student:
-                    return CustomResponse.errorResponse(
-                        description="Student not found.",
-                        status_code=404,
-                    )
-
-                # -----------------------------------------------------
-                # Check Student Transport
-                # -----------------------------------------------------
-                student_transport = (
-                    StudentTransport.objects
-                    .filter(
-                        student=student,
-                        vehicle_assignment=trip.vehicle_assignment,
-                        is_active=True,
-                    )
-                    .first()
-                )
-
-                if not student_transport:
-                    return CustomResponse.errorResponse(
-                        description=(
-                            "Student is not assigned to this trip's "
-                            "vehicle."
-                        ),
-                    )
-
-                # -----------------------------------------------------
-                # Prevent duplicate attendance
-                # -----------------------------------------------------
-                attendance_exists = (
-                    TripAttendance.objects
-                    .filter(
-                        trip=trip,
-                        student=student,
-                    )
-                    .exists()
-                )
-
-                if attendance_exists:
-                    return CustomResponse.errorResponse(
-                        description=(
-                            "Attendance already exists for this "
-                            "student and trip."
-                        ),
-                    )
-
-                pickup_status = request.data.get(
+                pickup_status = student_data.get(
                     "pickup_status",
                     TripAttendance.PickupStatus.PENDING,
                 )
 
-                drop_status = request.data.get(
-                    "drop_status",
-                    TripAttendance.DropStatus.PENDING,
-                )
-
                 if pickup_status not in TripAttendance.PickupStatus.values:
                     return CustomResponse.errorResponse(
-                        description="Invalid pickup_status."
-                    )
-
-                if drop_status not in TripAttendance.DropStatus.values:
-                    return CustomResponse.errorResponse(
-                        description="Invalid drop_status."
-                    )
-
-                pickup_time = request.data.get("pickup_time")
-                drop_time = request.data.get("drop_time")
-                remarks = request.data.get("remarks")
-
-                with transaction.atomic():
-
-                    attendance = TripAttendance.objects.create(
-                        school=school,
-                        branch=trip.branch,
-                        trip=trip,
-                        student=student,
-                        pickup_status=pickup_status,
-                        pickup_time=pickup_time,
-                        drop_status=drop_status,
-                        drop_time=drop_time,
-                        remarks=remarks,
-                    )
-
-                application_logger.info(
-                    "trip_student_attendance_created",
-                    user_id=str(request.user.id),
-                    trip_id=str(trip.id),
-                    student_id=str(student.id),
-                    attendance_id=str(attendance.id),
-                )
-
-                data = {
-                    "id": str(attendance.id),
-                    "attendance_type": "STUDENT",
-                    "student_id": str(student.id),
-                    "student_name": getattr(
-                        student,
-                        "full_name",
-                        None,
-                    ),
-                    "trip_id": str(trip.id),
-                    "trip_date": trip.trip_date,
-                    "pickup_status": attendance.pickup_status,
-                    "pickup_time": attendance.pickup_time,
-                    "drop_status": attendance.drop_status,
-                    "drop_time": attendance.drop_time,
-                    "remarks": attendance.remarks,
-                }
-
-                return CustomResponse.successResponse(
-                    data=data,
-                    description="Student attendance created successfully.",
-                )
-
-            # =========================================================
-            # STOP STATUS
-            # =========================================================
-            elif attendance_type == "STOP":
-
-                stop_id = request.data.get("stop_id")
-
-                if not stop_id:
-                    return CustomResponse.errorResponse(
-                        description="stop_id is required."
-                    )
-
-                # -----------------------------------------------------
-                # Validate stop belongs to trip route
-                # -----------------------------------------------------
-                stop = (
-                    trip.route.stops
-                    .filter(id=stop_id)
-                    .first()
-                )
-
-                if not stop:
-                    return CustomResponse.errorResponse(
-                        description="Stop not found for this trip route.",
-                        status_code=404,
-                    )
-
-                status = request.data.get(
-                    "status",
-                    TripStopStatus.Status.REACHED,
-                )
-
-                if status not in TripStopStatus.Status.values:
-                    return CustomResponse.errorResponse(
-                        description="Invalid stop status."
-                    )
-
-                remarks = request.data.get("remarks")
-
-                # -----------------------------------------------------
-                # Create / update stop status
-                # -----------------------------------------------------
-                with transaction.atomic():
-
-                    stop_status, created = (
-                        TripStopStatus.objects.update_or_create(
-                            trip=trip,
-                            stop=stop,
-                            defaults={
-                                "school": school,
-                                "branch": trip.branch,
-                                "status": status,
-                                "reached_time": (
-                                    timezone.now()
-                                    if status
-                                    == TripStopStatus.Status.REACHED
-                                    else None
-                                ),
-                                "remarks": remarks,
-                            },
+                        description=(
+                            f"Invalid pickup_status for student "
+                            f"{student_data.get('student_id')}."
                         )
                     )
 
-                application_logger.info(
-                    "trip_stop_status_updated",
-                    user_id=str(request.user.id),
-                    trip_id=str(trip.id),
-                    stop_id=str(stop.id),
-                    stop_status_id=str(stop_status.id),
-                    status=status,
-                )
-
-                data = {
-                    "id": str(stop_status.id),
-                    "attendance_type": "STOP",
-                    "trip_id": str(trip.id),
-                    "stop_id": str(stop.id),
-                    "stop_name": getattr(
-                        stop,
-                        "stop_name",
-                        None,
-                    ),
-                    "status": stop_status.status,
-                    "reached_time": stop_status.reached_time,
-                    "remarks": stop_status.remarks,
-                }
-
-                return CustomResponse.successResponse(
-                    data=data,
-                    description="Trip stop status updated successfully.",
-                )
-
             # =========================================================
-            # INVALID TYPE
+            # PROCESS
             # =========================================================
-            else:
-                return CustomResponse.errorResponse(
-                    description=(
-                        "Invalid attendance_type. "
-                        "Use STUDENT or STOP."
+
+            created_attendance = []
+
+            with transaction.atomic():
+
+                # -----------------------------------------------------
+                # STOP STATUS
+                # -----------------------------------------------------
+
+                trip_stop_status, _ = (
+                    TripStopStatus.objects.update_or_create(
+                        trip=trip,
+                        stop=stop,
+                        defaults={
+                            "school": school,
+                            "branch": trip.branch,
+                            "status": stop_status,
+                            "reached_time": (
+                                timezone.now()
+                                if stop_status
+                                == TripStopStatus.Status.REACHED
+                                else None
+                            ),
+                        },
                     )
                 )
+
+                # -----------------------------------------------------
+                # STUDENT ATTENDANCE
+                # -----------------------------------------------------
+
+                for student_data in students:
+
+                    student_id = student_data.get(
+                        "student_id"
+                    )
+
+                    pickup_status = student_data.get(
+                        "pickup_status",
+                        TripAttendance.PickupStatus.PENDING,
+                    )
+
+                    remarks = student_data.get(
+                        "remarks"
+                    )
+
+                    # ---------------------------------------------
+                    # Student
+                    # ---------------------------------------------
+
+                    student = (
+                        Student.objects
+                        .filter(
+                            id=student_id,
+                            school=school,
+                        )
+                        .first()
+                    )
+
+                    if not student:
+                        raise ValueError(
+                            f"Student not found: {student_id}"
+                        )
+
+                    # ---------------------------------------------
+                    # Student Transport
+                    # ---------------------------------------------
+
+                    student_transport = (
+                        StudentTransport.objects
+                        .filter(
+                            student=student,
+                            vehicle_assignment=(
+                                trip.vehicle_assignment
+                            ),
+                            status=(
+                                StudentTransport.Status.ACTIVE
+                            ),
+                        )
+                        .first()
+                    )
+
+                    if not student_transport:
+                        raise ValueError(
+                            f"Student {student_id} is not assigned "
+                            "to this trip's vehicle."
+                        )
+
+                    # ---------------------------------------------
+                    # Prevent duplicate
+                    # ---------------------------------------------
+
+                    attendance = (
+                        TripAttendance.objects
+                        .filter(
+                            trip=trip,
+                            student=student,
+                        )
+                        .first()
+                    )
+
+                    pickup_time = None
+
+                    if pickup_status == (
+                        TripAttendance.PickupStatus.BOARDED
+                    ):
+                        pickup_time = timezone.now()
+
+                    if attendance:
+
+                        attendance.pickup_status = pickup_status
+
+                        if pickup_time:
+                            attendance.pickup_time = pickup_time
+
+                        if remarks is not None:
+                            attendance.remarks = remarks
+
+                        attendance.save(
+                            update_fields=[
+                                "pickup_status",
+                                "pickup_time",
+                                "remarks",
+                                "updated_at",
+                            ]
+                        )
+
+                    else:
+
+                        attendance = (
+                            TripAttendance.objects.create(
+                                school=school,
+                                branch=trip.branch,
+                                trip=trip,
+                                student=student,
+                                pickup_status=pickup_status,
+                                pickup_time=pickup_time,
+                                drop_status=(
+                                    TripAttendance
+                                    .DropStatus
+                                    .PENDING
+                                ),
+                                remarks=remarks,
+                            )
+                        )
+
+                    created_attendance.append({
+                        "id": str(attendance.id),
+                        "student_id": str(student.id),
+                        "pickup_status": (
+                            attendance.pickup_status
+                        ),
+                        "pickup_time": (
+                            attendance.pickup_time
+                        ),
+                    })
+
+            # =========================================================
+            # LOG
+            # =========================================================
+
+            application_logger.info(
+                "trip_attendance_created",
+                user_id=str(request.user.id),
+                trip_id=str(trip.id),
+                stop_id=str(stop.id),
+                stop_status=stop_status,
+                students_count=len(created_attendance),
+            )
+
+            # =========================================================
+            # RESPONSE
+            # =========================================================
+
+            data = {
+                "trip_id": str(trip.id),
+                "stop_id": str(stop.id),
+                "stop_status": trip_stop_status.status,
+                "reached_time": (
+                    trip_stop_status.reached_time
+                ),
+                "students": created_attendance,
+            }
+
+            return CustomResponse.successResponse(
+                data=data,
+                description=(
+                    "Trip stop and student attendance "
+                    "processed successfully."
+                ),
+            )
+
+        except ValueError as e:
+
+            application_logger.warning(
+                "trip_attendance_validation_failed",
+                user_id=str(request.user.id),
+                trip_id=str(trip_id),
+                stop_id=str(stop_id),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(e)
+            )
 
         except Exception as e:
 
             application_logger.exception(
                 "trip_attendance_request_failed",
                 user_id=str(request.user.id),
-                trip_id=str(trip_id) if trip_id else None,
-                attendance_type=attendance_type,
+                trip_id=str(trip_id),
+                stop_id=str(stop_id),
                 error=str(e),
             )
 
             return CustomResponse.errorResponse(
                 description="Failed to process trip attendance."
             )
+
 
 class TripAttendanceListAPIView(APIView):
 
