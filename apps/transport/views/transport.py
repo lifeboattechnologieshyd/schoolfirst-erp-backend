@@ -3,9 +3,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.school.models.school import Student
-from apps.transport.models import StudentTransport, LiveLocation, RouteStop, VehicleDocument
+from apps.transport.models import StudentTransport, LiveLocation, RouteStop, VehicleDocument, Trip, TripStopStatus
 from shared.mixins import CustomResponse
 from shared.utils.logger import application_logger
+from django.utils import timezone
+
 
 
 class StudentBusAPIView(APIView):
@@ -106,7 +108,6 @@ class StudentBusAPIView(APIView):
                     description="Transport assignment not found for this student."
                 )
 
-
             vehicle_assignment = student_transport.vehicle_assignment
 
             if vehicle_assignment is None:
@@ -123,12 +124,11 @@ class StudentBusAPIView(APIView):
                 return CustomResponse.errorResponse(
                     description="Vehicle not found."
                 )
-            vehicle = vehicle_assignment.vehicle
 
             bus_photo = (
                 str(vehicle.photo_documents[0].document_file)
                 if vehicle.photo_documents
-                   and vehicle.photo_documents[0].document_file
+                and vehicle.photo_documents[0].document_file
                 else None
             )
 
@@ -145,7 +145,41 @@ class StudentBusAPIView(APIView):
                     description="Route not found."
                 )
 
-            # Get all stops belonging to the route
+            # ---------------------------------------------------------
+            # GET TODAY'S TRIP
+            # ---------------------------------------------------------
+
+            today = timezone.localdate()
+
+            trip = (
+                Trip.objects
+                .filter(
+                    school=school,
+                    vehicle_assignment=vehicle_assignment,
+                    trip_date=today,
+                )
+                .order_by("scheduled_start_time")
+                .first()
+            )
+
+            # ---------------------------------------------------------
+            # GET STOP STATUS FOR THIS TRIP
+            # ---------------------------------------------------------
+
+            stop_statuses = {}
+
+            if trip:
+                stop_statuses = {
+                    str(status.stop_id): status
+                    for status in TripStopStatus.objects.filter(
+                        trip=trip,
+                    )
+                }
+
+            # ---------------------------------------------------------
+            # GET ALL ROUTE STOPS
+            # ---------------------------------------------------------
+
             route_stops = (
                 RouteStop.objects
                 .select_related("stop")
@@ -155,28 +189,47 @@ class StudentBusAPIView(APIView):
                 .order_by("stop_order")
             )
 
-            route_stops_data = [
-                {
-                    "id": str(route_stop.stop.id),
-                    "stop_name": route_stop.stop.stop_name,
-                    "stop_code": route_stop.stop.stop_code,
-                    "stop_type": route_stop.stop.stop_type,
-                    "stop_order": route_stop.stop_order,
-                    "landmark": route_stop.stop.landmark,
-                    "address": route_stop.stop.address,
-                    "latitude": route_stop.stop.latitude,
-                    "longitude": route_stop.stop.longitude,
-                    "pickup_time": route_stop.pickup_time,
-                    "drop_time": route_stop.drop_time,
-                    "distance_from_previous_stop": (
-                        route_stop.distance_from_previous_stop
-                    ),
-                    "estimated_travel_time": (
-                        route_stop.estimated_travel_time
-                    ),
-                }
-                for route_stop in route_stops
-            ]
+            route_stops_data = []
+
+            for route_stop in route_stops:
+
+                stop_status = stop_statuses.get(
+                    str(route_stop.stop.id)
+                )
+
+                route_stops_data.append(
+                    {
+                        "id": str(route_stop.stop.id),
+                        "stop_name": route_stop.stop.stop_name,
+                        "stop_code": route_stop.stop.stop_code,
+                        "stop_type": route_stop.stop.stop_type,
+                        "stop_order": route_stop.stop_order,
+                        "landmark": route_stop.stop.landmark,
+                        "address": route_stop.stop.address,
+                        "latitude": route_stop.stop.latitude,
+                        "longitude": route_stop.stop.longitude,
+                        "pickup_time": route_stop.pickup_time,
+                        "drop_time": route_stop.drop_time,
+                        "distance_from_previous_stop": (
+                            route_stop.distance_from_previous_stop
+                        ),
+                        "estimated_travel_time": (
+                            route_stop.estimated_travel_time
+                        ),
+
+                        # Added
+                        "status": (
+                            stop_status.status
+                            if stop_status
+                            else TripStopStatus.Status.PENDING
+                        ),
+                        "reached_time": (
+                            stop_status.reached_time
+                            if stop_status
+                            else None
+                        ),
+                    }
+                )
 
             pickup_stop = student_transport.pickup_stop
             drop_stop = student_transport.drop_stop
@@ -189,6 +242,8 @@ class StudentBusAPIView(APIView):
                 vehicle_id=str(vehicle.id),
                 vehicle_assignment_id=str(vehicle_assignment.id),
                 route_id=str(route.id),
+                trip_id=str(trip.id) if trip else None,
+                trip_status=trip.status if trip else None,
                 route_stop_count=len(route_stops_data),
             )
 
@@ -206,14 +261,18 @@ class StudentBusAPIView(APIView):
                         "vehicle_type": vehicle.vehicle_type,
                         "capacity": vehicle.capacity,
                         "status": vehicle.status,
-                        "photo":bus_photo
+                        "photo": bus_photo,
                     },
 
                     "driver": {
                         "id": str(driver.id) if driver else None,
                         "name": driver.name if driver else None,
                         "mobile": driver.mobile if driver else None,
-                        "experience": driver.experience if driver else None,
+                        "experience": (
+                            driver.experience
+                            if driver
+                            else None
+                        ),
                         "profile_image": (
                             driver.profile_image
                             if driver
@@ -222,9 +281,15 @@ class StudentBusAPIView(APIView):
                     },
 
                     "attendant": {
-                        "id": str(attendant.id) if attendant else None,
-                        "name": attendant.name if attendant else None,
-                        "mobile": attendant.mobile if attendant else None,
+                        "id": str(attendant.id)
+                        if attendant
+                        else None,
+                        "name": attendant.name
+                        if attendant
+                        else None,
+                        "mobile": attendant.mobile
+                        if attendant
+                        else None,
                         "experience": (
                             attendant.experience
                             if attendant
@@ -248,6 +313,12 @@ class StudentBusAPIView(APIView):
                         "shift": route.shift,
                         "status": route.status,
                     },
+
+                    "trip_status": (
+                        trip.status
+                        if trip
+                        else Trip.Status.SCHEDULED
+                    ),
 
                     "pickup_stop": {
                         "id": (
