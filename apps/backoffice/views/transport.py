@@ -864,7 +864,7 @@ class VehicleDocumentListAPIView(APIView):
                     "expiry_date": document.expiry_date,
                     "issued_by": document.issued_by,
                     "document_file": (
-                        document.document_file.url
+                        document.document_file
                         if document.document_file
                         else None
                     ),
