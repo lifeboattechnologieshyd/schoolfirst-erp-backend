@@ -5565,15 +5565,39 @@ class TripListAPIView(APIView):
 
         try:
 
-            trips = Trip.objects.select_related(
-                "branch",
-                "vehicle_assignment",
-                "vehicle_assignment__vehicle",
-                "vehicle_assignment__route",
-                "vehicle_assignment__driver",
-                "vehicle_assignment__attendant",
-            ).filter(
-                school=school,
+            # ---------------------------------------------------------
+            # Trips
+            # ---------------------------------------------------------
+
+            trips = (
+                Trip.objects
+                .select_related(
+                    "branch",
+                    "vehicle_assignment",
+                    "vehicle_assignment__vehicle",
+                    "vehicle_assignment__route",
+                    "vehicle_assignment__driver",
+                    "vehicle_assignment__attendant",
+                )
+                .prefetch_related(
+                    Prefetch(
+                        "vehicle_assignment__route__route_stops",
+                        queryset=RouteStop.objects
+                        .select_related("stop")
+                        .order_by("stop_order"),
+                        to_attr="trip_route_stops",
+                    ),
+                    Prefetch(
+                        "stop_statuses",
+                        queryset=TripStopStatus.objects.select_related(
+                            "stop"
+                        ),
+                        to_attr="trip_stop_statuses",
+                    ),
+                )
+                .filter(
+                    school=school,
+                )
             )
 
             if branch_id:
@@ -5629,6 +5653,82 @@ class TripListAPIView(APIView):
 
             for trip in trips:
 
+                vehicle_assignment = trip.vehicle_assignment
+                vehicle = vehicle_assignment.vehicle
+                route = vehicle_assignment.route
+                driver = vehicle_assignment.driver
+                attendant = vehicle_assignment.attendant
+
+                # -----------------------------------------------------
+                # Stop status mapping for this trip
+                # -----------------------------------------------------
+
+                stop_statuses = {
+                    str(stop_status.stop_id): stop_status
+                    for stop_status in trip.trip_stop_statuses
+                }
+
+                # -----------------------------------------------------
+                # Route stops
+                # -----------------------------------------------------
+
+                stops_data = []
+
+                for route_stop in trip.vehicle_assignment.route.trip_route_stops:
+
+                    stop = route_stop.stop
+
+                    stop_status = stop_statuses.get(
+                        str(stop.id)
+                    )
+
+                    stops_data.append({
+                        "id": str(stop.id),
+                        "stop_name": stop.stop_name,
+                        "stop_code": stop.stop_code,
+                        "stop_type": stop.stop_type,
+                        "stop_order": route_stop.stop_order,
+
+                        "landmark": stop.landmark,
+                        "address": stop.address,
+                        "latitude": stop.latitude,
+                        "longitude": stop.longitude,
+
+                        "pickup_time": route_stop.pickup_time,
+                        "drop_time": route_stop.drop_time,
+
+                        "distance_from_previous_stop": (
+                            route_stop.distance_from_previous_stop
+                        ),
+
+                        "estimated_travel_time": (
+                            route_stop.estimated_travel_time
+                        ),
+
+                        # Trip-specific status
+                        "status": (
+                            stop_status.status
+                            if stop_status
+                            else TripStopStatus.Status.PENDING
+                        ),
+
+                        "status_display": (
+                            stop_status.get_status_display()
+                            if stop_status
+                            else TripStopStatus.Status.PENDING.label
+                        ),
+
+                        "reached_time": (
+                            stop_status.reached_time
+                            if stop_status
+                            else None
+                        ),
+                    })
+
+                # -----------------------------------------------------
+                # Trip response
+                # -----------------------------------------------------
+
                 data.append({
 
                     "id": str(trip.id),
@@ -5643,56 +5743,75 @@ class TripListAPIView(APIView):
                     ),
 
                     "vehicle": {
-                        "id": str(trip.vehicle_assignment.vehicle.id),
-                        "vehicle_number": trip.vehicle_assignment.vehicle.vehicle_number,
-                        "registration_number": trip.vehicle_assignment.vehicle.registration_number,
+                        "id": str(vehicle.id),
+                        "vehicle_number": vehicle.vehicle_number,
+                        "registration_number": (
+                            vehicle.registration_number
+                        ),
                     },
 
                     "route": {
-                        "id": str(trip.vehicle_assignment.route.id),
-                        "route_name": trip.vehicle_assignment.route.route_name,
-                        "route_code": trip.vehicle_assignment.route.route_code,
+                        "id": str(route.id),
+                        "route_name": route.route_name,
+                        "route_code": route.route_code,
                     },
 
                     "driver": {
-                        "id": str(trip.vehicle_assignment.driver.id),
-                        "name": trip.vehicle_assignment.driver.name,
-                        "mobile": trip.vehicle_assignment.driver.mobile,
+                        "id": str(driver.id),
+                        "name": driver.name,
+                        "mobile": driver.mobile,
                     },
 
                     "attendant": (
                         {
-                            "id": str(trip.vehicle_assignment.attendant.id),
-                            "name": trip.vehicle_assignment.attendant.name,
-                            "mobile": trip.vehicle_assignment.attendant.mobile,
+                            "id": str(attendant.id),
+                            "name": attendant.name,
+                            "mobile": attendant.mobile,
                         }
-                        if trip.vehicle_assignment.attendant
+                        if attendant
                         else None
                     ),
+
                     "trip_id": str(trip.id),
 
                     "trip_date": trip.trip_date,
 
-
                     "shift": trip.shift,
                     "shift_display": trip.get_shift_display(),
 
-                    "scheduled_start_time": trip.scheduled_start_time,
-                    "scheduled_end_time": trip.scheduled_end_time,
+                    "scheduled_start_time": (
+                        trip.scheduled_start_time
+                    ),
 
-                    "actual_start_time": trip.actual_start_time,
-                    "actual_end_time": trip.actual_end_time,
+                    "scheduled_end_time": (
+                        trip.scheduled_end_time
+                    ),
+
+                    "actual_start_time": (
+                        trip.actual_start_time
+                    ),
+
+                    "actual_end_time": (
+                        trip.actual_end_time
+                    ),
 
                     "start_odometer": trip.start_odometer,
+
                     "end_odometer": trip.end_odometer,
+
                     "total_distance": trip.total_distance,
 
                     "status": trip.status,
+
                     "status_display": trip.get_status_display(),
 
                     "remarks": trip.remarks,
 
+                    # NEW
+                    "stops": stops_data,
+
                     "created_at": trip.created_at,
+
                     "updated_at": trip.updated_at,
                 })
 
@@ -5721,6 +5840,7 @@ class TripListAPIView(APIView):
             total=len(data),
             data=data,
         )
+
 
 
 class UpdateTripAPIView(APIView):
