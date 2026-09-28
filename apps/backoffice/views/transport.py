@@ -863,11 +863,10 @@ class VehicleDocumentListAPIView(APIView):
                     "issue_date": document.issue_date,
                     "expiry_date": document.expiry_date,
                     "issued_by": document.issued_by,
-                    "document_file": (
-                        document.document_file.url
-                        if document.document_file
-                        else None
-                    ),
+                    "document_file":
+                        document.document_file
+
+                    ,
                     "remarks": document.remarks,
                     "status": document.status,
                     "status_display": document.get_status_display(),

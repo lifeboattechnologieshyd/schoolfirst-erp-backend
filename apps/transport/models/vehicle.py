@@ -167,10 +167,9 @@ class VehicleDocument(AuditModel):
         blank=True
     )
 
-    document_file = models.FileField(
-        upload_to="transport/vehicle_documents/",
+    document_file = models.URLField(
         null=True,
-        blank=True
+        blank=True,
     )
 
     remarks = models.TextField(

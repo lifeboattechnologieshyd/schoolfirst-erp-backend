@@ -80,13 +80,7 @@ class StudentBusAPIView(APIView):
                     "drop_stop",
                 )
                 .prefetch_related(
-                    Prefetch(
-                        "vehicle_assignment__vehicle__documents",
-                        queryset=VehicleDocument.objects.filter(
-                            document_type=VehicleDocument.DocumentType.PHOTO,
-                        ),
-                        to_attr="photo_documents",
-                    )
+                    "vehicle_assignment__vehicle__documents",
                 )
                 .filter(
                     student=student,
@@ -126,11 +120,14 @@ class StudentBusAPIView(APIView):
                     description="Vehicle not found."
                 )
 
-            bus_photo = (
-                str(vehicle.photo_documents[0].document_file)
-                if vehicle.photo_documents
-                and vehicle.photo_documents[0].document_file
-                else None
+            bus_photo = next(
+                (
+                    document.document_file
+                    for document in vehicle.documents.all()
+                    if document.document_type
+                       == VehicleDocument.DocumentType.PHOTO
+                ),
+                None,
             )
 
             if route is None:
