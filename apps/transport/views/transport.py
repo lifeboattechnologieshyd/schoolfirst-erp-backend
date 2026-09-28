@@ -16,6 +16,7 @@ class StudentBusAPIView(APIView):
     def get(self, request):
         user = request.user
         student_id = request.query_params.get("student_id")
+        school = None
 
         try:
             school = request.school
@@ -428,6 +429,7 @@ class StudentBusAPIView(APIView):
                 ),
                 error=str(e),
             )
+
 
             return CustomResponse.errorResponse(
                 description="Internal server error.",
