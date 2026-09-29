@@ -21,7 +21,8 @@ from apps.backoffice.views.fee import CreateFeeTypeAPIView, FeeTypeListAPIView, 
     FeeInstallmentItemDetailAPIView, UpdateFeeInstallmentItemAPIView, CreateLateFeeRuleAPIView, LateFeeRuleListAPIView, \
     LateFeeRuleDetailAPIView, UpdateLateFeeRuleAPIView, CreateFeeConcessionAPIView, FeeConcessionListAPIView, \
     UpdateFeeConcessionAPIView, CreateStudentFeeAssignmentAPIView, StudentFeeAssignmentListAPIView, \
-    StudentFeeListAPIView, StudentFeeDetailAPIView, GenerateStudentFeesAPIView
+    StudentFeeListAPIView, StudentFeeDetailAPIView, GenerateStudentFeesAPIView, FeePlanCreateAPIView, \
+    FeePlanListAPIView, FeePlanUpdateAPIView
 from apps.backoffice.views.homework import CreateHomeworkAPIView, HomeworkListAPIView, HomeworkUpdateAPIView, \
     TeacherHomeworkSubmissionListAPIView, TeacherCheckHomeworkAPIView
 from apps.backoffice.views.leads import \
@@ -295,6 +296,17 @@ urlpatterns = [
     path("student-fees/<uuid:student_fee_id>",StudentFeeDetailAPIView.as_view(),),
 
     path("generate-student-fees",GenerateStudentFeesAPIView.as_view(),),
+
+    # ===================================
+    # New FEE APIs
+    # ===================================
+
+    path("fee-plan/create",FeePlanCreateAPIView.as_view(),),
+
+    path("fee-plan",FeePlanListAPIView.as_view(),),
+
+    path("fee-plan/<uuid:fee_plan_id>",FeePlanUpdateAPIView.as_view(),),
+
 
     # ====================================
     #  staff APIs

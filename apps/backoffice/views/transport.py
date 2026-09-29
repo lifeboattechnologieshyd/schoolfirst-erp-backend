@@ -3056,55 +3056,55 @@ class UpdateRouteAPIView(APIView):
             # SCHOOL STOP VALIDATION
             # =====================================================
 
-            school_stop_indexes = []
-
-            for index, stop_data in enumerate(stops):
-
-                stop = stops_by_id.get(
-                    str(stop_data.get("stop_id"))
-                )
-
-                if stop.stop_type == Stop.StopType.SCHOOL:
-
-                    school_stop_indexes.append(index)
-
-            if len(school_stop_indexes) > 1:
-
-                return CustomResponse.errorResponse(
-                    description=(
-                        "A route can have only one school stop."
-                    )
-                )
-
-            if school_stop_indexes:
-
-                school_stop_index = (
-                    school_stop_indexes[0]
-                )
-
-                # Morning
-                if shift == Route.Shift.MORNING:
-
-                    if school_stop_index != len(stops) - 1:
-
-                        return CustomResponse.errorResponse(
-                            description=(
-                                "For morning routes, the school "
-                                "stop must be the last stop."
-                            )
-                        )
-
-                # Evening
-                elif shift == Route.Shift.EVENING:
-
-                    if school_stop_index != 0:
-
-                        return CustomResponse.errorResponse(
-                            description=(
-                                "For evening routes, the school "
-                                "stop must be the first stop."
-                            )
-                        )
+            # school_stop_indexes = []
+            #
+            # for index, stop_data in enumerate(stops):
+            #
+            #     stop = stops_by_id.get(
+            #         str(stop_data.get("stop_id"))
+            #     )
+            #
+            #     if stop.stop_type == Stop.StopType.SCHOOL:
+            #
+            #         school_stop_indexes.append(index)
+            #
+            # if len(school_stop_indexes) > 1:
+            #
+            #     return CustomResponse.errorResponse(
+            #         description=(
+            #             "A route can have only one school stop."
+            #         )
+            #     )
+            #
+            # if school_stop_indexes:
+            #
+            #     school_stop_index = (
+            #         school_stop_indexes[0]
+            #     )
+            #
+            #     # Morning
+            #     if shift == Route.Shift.MORNING:
+            #
+            #         if school_stop_index != len(stops) - 1:
+            #
+            #             return CustomResponse.errorResponse(
+            #                 description=(
+            #                     "For morning routes, the school "
+            #                     "stop must be the last stop."
+            #                 )
+            #             )
+            #
+            #     # Evening
+            #     elif shift == Route.Shift.EVENING:
+            #
+            #         if school_stop_index != 0:
+            #
+            #             return CustomResponse.errorResponse(
+            #                 description=(
+            #                     "For evening routes, the school "
+            #                     "stop must be the first stop."
+            #                 )
+            #             )
 
         # =========================================================
         # UPDATE
