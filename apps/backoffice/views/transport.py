@@ -308,6 +308,11 @@ class VehicleListAPIView(APIView):
             data = []
 
             for vehicle in queryset:
+                vehicle_photo = (
+                    vehicle.photo_documents[0].document_file
+                    if vehicle.photo_documents
+                    else None
+                )
                 data.append(
                     {
                         "id": str(vehicle.id),
