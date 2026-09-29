@@ -2712,6 +2712,7 @@ class UpdateRouteAPIView(APIView):
         # =========================================================
 
         if school is None:
+
             application_logger.warning(
                 "route_update_failed",
                 requested_by=str(request.user.id),
@@ -2736,6 +2737,7 @@ class UpdateRouteAPIView(APIView):
         )
 
         if route is None:
+
             application_logger.warning(
                 "route_update_failed",
                 requested_by=str(request.user.id),
@@ -2750,291 +2752,362 @@ class UpdateRouteAPIView(APIView):
             )
 
         # =========================================================
-        # REQUIRED ROUTE FIELDS
+        # BRANCH
         # =========================================================
 
-        required_fields = [
-            "route_name",
-            "route_code",
-            "source",
-            "destination",
-            "shift",
-        ]
+        branch = route.branch
 
-        for field in required_fields:
+        if "branch_id" in request.data:
 
-            value = request.data.get(field)
+            branch_id = request.data.get("branch_id")
 
-            if value in [None, ""]:
+            if branch_id:
+
+                branch = (
+                    Branch.objects
+                    .filter(
+                        id=branch_id,
+                        school=school,
+                    )
+                    .first()
+                )
+
+                if branch is None:
+
+                    return CustomResponse.errorResponse(
+                        description="Branch not found."
+                    )
+
+            else:
+
+                branch = None
+
+        # =========================================================
+        # ROUTE FIELDS
+        # =========================================================
+
+        route_name = route.route_name
+        route_code = route.route_code
+        source = route.source
+        destination = route.destination
+        shift = route.shift
+        total_distance = route.total_distance
+        estimated_duration = route.estimated_duration
+        route_status = route.status
+
+        if "route_name" in request.data:
+
+            value = request.data.get("route_name")
+
+            if value is not None:
+                route_name = value.strip()
+
+        if "route_code" in request.data:
+
+            value = request.data.get("route_code")
+
+            if value is not None:
+
+                route_code = value.strip()
+
+                # Check duplicate route code
+                if (
+                    Route.objects
+                    .filter(
+                        school=school,
+                        route_code=route_code,
+                    )
+                    .exclude(id=route.id)
+                    .exists()
+                ):
+
+                    return CustomResponse.errorResponse(
+                        description="Route code already exists."
+                    )
+
+        if "source" in request.data:
+
+            value = request.data.get("source")
+
+            if value is not None:
+                source = value.strip()
+
+        if "destination" in request.data:
+
+            value = request.data.get("destination")
+
+            if value is not None:
+                destination = value.strip()
+
+        # =========================================================
+        # SHIFT
+        # =========================================================
+
+        if "shift" in request.data:
+
+            shift = request.data.get("shift")
+
+            if shift not in Route.Shift.values:
 
                 return CustomResponse.errorResponse(
-                    description=f"{field} is required."
+                    description="Invalid shift."
+                )
+
+        # =========================================================
+        # OPTIONAL FIELDS
+        # =========================================================
+
+        if "total_distance" in request.data:
+
+            total_distance = request.data.get(
+                "total_distance"
+            )
+
+        if "estimated_duration" in request.data:
+
+            estimated_duration = request.data.get(
+                "estimated_duration"
+            )
+
+        if "status" in request.data:
+
+            route_status = request.data.get("status")
+
+            if route_status not in Route.Status.values:
+
+                return CustomResponse.errorResponse(
+                    description="Invalid status."
                 )
 
         # =========================================================
         # STOPS
         # =========================================================
 
-        stops = request.data.get("stops") or []
+        stops_provided = "stops" in request.data
 
-        if not isinstance(stops, list):
-            return CustomResponse.errorResponse(
-                description="stops must be a list."
-            )
+        stops = request.data.get("stops")
 
-        # =========================================================
-        # BRANCH VALIDATION
-        # =========================================================
+        if stops_provided:
 
-        branch_id = request.data.get("branch_id")
-        branch = None
+            if stops is None:
+                stops = []
 
-        if branch_id:
-
-            branch = (
-                Branch.objects
-                .filter(
-                    id=branch_id,
-                    school=school,
-                )
-                .first()
-            )
-
-            if branch is None:
+            if not isinstance(stops, list):
 
                 return CustomResponse.errorResponse(
-                    description="Branch not found."
+                    description="stops must be a list."
                 )
 
         # =========================================================
-        # SHIFT VALIDATION
+        # STOP VALIDATION
         # =========================================================
 
-        shift = request.data.get("shift")
+        stops_by_id = {}
 
-        if shift not in Route.Shift.values:
+        if stops_provided and stops:
 
-            return CustomResponse.errorResponse(
-                description="Invalid shift."
-            )
+            stop_orders = []
 
-        # =========================================================
-        # ROUTE CODE DUPLICATE
-        # =========================================================
+            for stop_data in stops:
 
-        route_code = request.data.get("route_code").strip()
-
-        if (
-            Route.objects
-            .filter(
-                school=school,
-                route_code=route_code,
-            )
-            .exclude(id=route.id)
-            .exists()
-        ):
-
-            return CustomResponse.errorResponse(
-                description="Route code already exists."
-            )
-
-        # =========================================================
-        # STOP ORDER VALIDATION
-        # =========================================================
-
-        stop_orders = []
-
-        for stop_data in stops:
-
-            if not isinstance(stop_data, dict):
-
-                return CustomResponse.errorResponse(
-                    description="Each stop must be an object."
-                )
-
-            stop_id = stop_data.get("stop_id")
-            stop_order = stop_data.get("stop_order")
-
-            if not stop_id:
-
-                return CustomResponse.errorResponse(
-                    description="stop_id is required for every stop."
-                )
-
-            if stop_order in [None, ""]:
-
-                return CustomResponse.errorResponse(
-                    description="stop_order is required for every stop."
-                )
-
-            try:
-
-                stop_order = int(stop_order)
-
-                if stop_order < 1:
+                if not isinstance(stop_data, dict):
 
                     return CustomResponse.errorResponse(
-                        description="stop_order must be greater than 0."
+                        description="Each stop must be an object."
                     )
 
-            except (ValueError, TypeError):
+                stop_id = stop_data.get("stop_id")
+                stop_order = stop_data.get("stop_order")
 
-                return CustomResponse.errorResponse(
-                    description="Invalid stop_order."
-                )
+                if not stop_id:
 
-            stop_orders.append(stop_order)
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "stop_id is required for every stop."
+                        )
+                    )
 
-        # =========================================================
-        # DUPLICATE STOP ORDER
-        # =========================================================
+                if stop_order in [None, ""]:
 
-        if len(stop_orders) != len(set(stop_orders)):
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "stop_order is required for every stop."
+                        )
+                    )
 
-            return CustomResponse.errorResponse(
-                description="Duplicate stop orders are not allowed."
-            )
+                try:
 
-        # =========================================================
-        # SEQUENTIAL STOP ORDER
-        # =========================================================
+                    stop_order = int(stop_order)
 
-        expected_orders = list(
-            range(1, len(stops) + 1)
-        )
-
-        if sorted(stop_orders) != expected_orders:
-
-            return CustomResponse.errorResponse(
-                description=(
-                    "Stop orders must start from 1 and "
-                    "be sequential."
-                )
-            )
-
-        # =========================================================
-        # DUPLICATE STOP IDS
-        # =========================================================
-
-        stop_ids = [
-            stop_data.get("stop_id")
-            for stop_data in stops
-        ]
-
-        if len(stop_ids) != len(set(stop_ids)):
-
-            return CustomResponse.errorResponse(
-                description="Duplicate stops are not allowed."
-            )
-
-        # =========================================================
-        # GET ALL STOPS
-        # =========================================================
-
-        stop_queryset = (
-            Stop.objects
-            .filter(
-                id__in=stop_ids,
-                school=school,
-            )
-        )
-
-        stops_by_id = {
-            str(stop.id): stop
-            for stop in stop_queryset
-        }
-
-        # =========================================================
-        # VALIDATE ALL STOPS EXIST
-        # =========================================================
-
-        for stop_id in stop_ids:
-
-            stop = stops_by_id.get(str(stop_id))
-
-            if stop is None:
-
-                return CustomResponse.errorResponse(
-                    description=f"Stop not found: {stop_id}.",
-                    status_code=404,
-                )
-
-        # =========================================================
-        # VALIDATE BRANCH
-        # =========================================================
-
-        if branch:
-
-            for stop in stops_by_id.values():
-
-                if stop.branch_id:
-
-                    if stop.branch_id != branch.id:
+                    if stop_order < 1:
 
                         return CustomResponse.errorResponse(
                             description=(
-                                f"Stop '{stop.stop_name}' "
-                                "does not belong to the route branch."
+                                "stop_order must be greater than 0."
+                            )
+                        )
+
+                except (ValueError, TypeError):
+
+                    return CustomResponse.errorResponse(
+                        description="Invalid stop_order."
+                    )
+
+                stop_orders.append(stop_order)
+
+            # =====================================================
+            # DUPLICATE STOP ORDER
+            # =====================================================
+
+            if len(stop_orders) != len(set(stop_orders)):
+
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Duplicate stop orders are not allowed."
+                    )
+                )
+
+            # =====================================================
+            # SEQUENTIAL STOP ORDER
+            # =====================================================
+
+            expected_orders = list(
+                range(1, len(stops) + 1)
+            )
+
+            if sorted(stop_orders) != expected_orders:
+
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Stop orders must start from 1 "
+                        "and be sequential."
+                    )
+                )
+
+            # =====================================================
+            # DUPLICATE STOP IDS
+            # =====================================================
+
+            stop_ids = [
+                stop_data.get("stop_id")
+                for stop_data in stops
+            ]
+
+            if len(stop_ids) != len(set(stop_ids)):
+
+                return CustomResponse.errorResponse(
+                    description="Duplicate stops are not allowed."
+                )
+
+            # =====================================================
+            # GET STOPS
+            # =====================================================
+
+            stop_queryset = (
+                Stop.objects
+                .filter(
+                    id__in=stop_ids,
+                    school=school,
+                )
+            )
+
+            stops_by_id = {
+                str(stop.id): stop
+                for stop in stop_queryset
+            }
+
+            # =====================================================
+            # VALIDATE STOPS EXIST
+            # =====================================================
+
+            for stop_id in stop_ids:
+
+                stop = stops_by_id.get(
+                    str(stop_id)
+                )
+
+                if stop is None:
+
+                    return CustomResponse.errorResponse(
+                        description=f"Stop not found: {stop_id}.",
+                        status_code=404,
+                    )
+
+            # =====================================================
+            # VALIDATE BRANCH
+            # =====================================================
+
+            if branch:
+
+                for stop in stops_by_id.values():
+
+                    if stop.branch_id:
+
+                        if stop.branch_id != branch.id:
+
+                            return CustomResponse.errorResponse(
+                                description=(
+                                    f"Stop '{stop.stop_name}' "
+                                    "does not belong to the route branch."
+                                )
+                            )
+
+            # =====================================================
+            # SCHOOL STOP VALIDATION
+            # =====================================================
+
+            school_stop_indexes = []
+
+            for index, stop_data in enumerate(stops):
+
+                stop = stops_by_id.get(
+                    str(stop_data.get("stop_id"))
+                )
+
+                if stop.stop_type == Stop.StopType.SCHOOL:
+
+                    school_stop_indexes.append(index)
+
+            if len(school_stop_indexes) > 1:
+
+                return CustomResponse.errorResponse(
+                    description=(
+                        "A route can have only one school stop."
+                    )
+                )
+
+            if school_stop_indexes:
+
+                school_stop_index = (
+                    school_stop_indexes[0]
+                )
+
+                # Morning
+                if shift == Route.Shift.MORNING:
+
+                    if school_stop_index != len(stops) - 1:
+
+                        return CustomResponse.errorResponse(
+                            description=(
+                                "For morning routes, the school "
+                                "stop must be the last stop."
+                            )
+                        )
+
+                # Evening
+                elif shift == Route.Shift.EVENING:
+
+                    if school_stop_index != 0:
+
+                        return CustomResponse.errorResponse(
+                            description=(
+                                "For evening routes, the school "
+                                "stop must be the first stop."
                             )
                         )
 
         # =========================================================
-        # SCHOOL STOP VALIDATION
-        # =========================================================
-
-        school_stop_indexes = []
-
-        for index, stop_data in enumerate(stops):
-
-            stop = stops_by_id.get(
-                str(stop_data.get("stop_id"))
-            )
-
-            if stop.stop_type == Stop.StopType.SCHOOL:
-                school_stop_indexes.append(index)
-
-        if len(school_stop_indexes) > 1:
-
-            return CustomResponse.errorResponse(
-                description="A route can have only one school stop."
-            )
-
-        if school_stop_indexes:
-
-            school_stop_index = school_stop_indexes[0]
-
-            # -----------------------------------------------------
-            # MORNING
-            # -----------------------------------------------------
-
-            if shift == Route.Shift.MORNING:
-
-                if school_stop_index != len(stops) - 1:
-
-                    return CustomResponse.errorResponse(
-                        description=(
-                            "For morning routes, the school "
-                            "stop must be the last stop."
-                        )
-                    )
-
-            # -----------------------------------------------------
-            # EVENING
-            # -----------------------------------------------------
-
-            elif shift == Route.Shift.EVENING:
-
-                if school_stop_index != 0:
-
-                    return CustomResponse.errorResponse(
-                        description=(
-                            "For evening routes, the school "
-                            "stop must be the first stop."
-                        )
-                    )
-
-        # =========================================================
-        # UPDATE ROUTE + REPLACE ROUTE STOPS
+        # UPDATE
         # =========================================================
 
         try:
@@ -3046,86 +3119,60 @@ class UpdateRouteAPIView(APIView):
                 # -------------------------------------------------
 
                 route.branch = branch
-                route.route_name = request.data.get(
-                    "route_name"
-                ).strip()
+                route.route_name = route_name
                 route.route_code = route_code
-                route.source = request.data.get(
-                    "source"
-                ).strip()
-                route.destination = request.data.get(
-                    "destination"
-                ).strip()
-                route.total_distance = request.data.get(
-                    "total_distance"
-                )
-                route.estimated_duration = request.data.get(
-                    "estimated_duration"
-                )
+                route.source = source
+                route.destination = destination
+                route.total_distance = total_distance
+                route.estimated_duration = estimated_duration
                 route.shift = shift
-                route.status = request.data.get(
-                    "status",
-                    route.status,
-                )
+                route.status = route_status
 
                 route.save()
 
                 # -------------------------------------------------
-                # DELETE EXISTING ROUTE STOPS
+                # UPDATE STOPS ONLY IF PROVIDED
                 # -------------------------------------------------
 
-                RouteStop.objects.filter(
-                    route=route
-                ).delete()
+                if stops_provided:
 
-                # -------------------------------------------------
-                # CREATE UPDATED ROUTE STOPS
-                # -------------------------------------------------
+                    # [] means remove all stops
+                    RouteStop.objects.filter(
+                        route=route
+                    ).delete()
 
-                created_route_stops = []
+                    # Create new stops
+                    for stop_data in stops:
 
-                for stop_data in stops:
+                        stop = stops_by_id.get(
+                            str(stop_data.get("stop_id"))
+                        )
 
-                    stop = stops_by_id.get(
-                        str(stop_data.get("stop_id"))
-                    )
-
-                    route_stop = RouteStop.objects.create(
-
-                        route=route,
-
-                        stop=stop,
-
-                        stop_order=int(
-                            stop_data.get("stop_order")
-                        ),
-
-                        pickup_time=stop_data.get(
-                            "pickup_time"
-                        ),
-
-                        drop_time=stop_data.get(
-                            "drop_time"
-                        ),
-
-                        distance_from_previous_stop=(
-                            stop_data.get(
-                                "distance_from_previous_stop",
-                                0,
-                            )
-                            or 0
-                        ),
-
-                        estimated_travel_time=(
-                            stop_data.get(
-                                "estimated_travel_time"
-                            )
-                        ),
-                    )
-
-                    created_route_stops.append(
-                        route_stop
-                    )
+                        RouteStop.objects.create(
+                            route=route,
+                            stop=stop,
+                            stop_order=int(
+                                stop_data.get("stop_order")
+                            ),
+                            pickup_time=stop_data.get(
+                                "pickup_time"
+                            ),
+                            drop_time=stop_data.get(
+                                "drop_time"
+                            ),
+                            distance_from_previous_stop=(
+                                stop_data.get(
+                                    "distance_from_previous_stop",
+                                    0,
+                                )
+                                or 0
+                            ),
+                            estimated_travel_time=(
+                                stop_data.get(
+                                    "estimated_travel_time"
+                                )
+                            ),
+                        )
 
         except Exception as e:
 
@@ -3134,7 +3181,6 @@ class UpdateRouteAPIView(APIView):
                 requested_by=str(request.user.id),
                 school_id=str(school.id),
                 route_id=str(route.id),
-                route_code=route_code,
                 reason="route_update_failed",
                 error=str(e),
             )
@@ -3153,7 +3199,7 @@ class UpdateRouteAPIView(APIView):
             school_id=str(school.id),
             route_id=str(route.id),
             route_code=route.route_code,
-            route_stop_count=len(created_route_stops),
+            stops_updated=stops_provided,
         )
 
         # =========================================================
@@ -3161,11 +3207,12 @@ class UpdateRouteAPIView(APIView):
         # =========================================================
 
         return CustomResponse.successResponse(
-            description="Route and stops updated successfully.",
+            description="Route updated successfully.",
             data={
                 "id": str(route.id),
             },
         )
+
 
 class CreateRouteStopAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
