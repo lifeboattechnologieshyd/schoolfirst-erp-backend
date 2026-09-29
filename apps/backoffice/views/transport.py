@@ -5686,7 +5686,10 @@ class StudentTransportListAPIView(APIView):
                     "academic_year",
                     "branch",
                     "student",
-                    "route",
+                    "vehicle_assignment",
+                    "vehicle_assignment__vehicle",
+                    "vehicle_assignment__route",
+                    "vehicle_assignment__driver",
                     "pickup_stop",
                     "drop_stop",
                 )
@@ -5734,19 +5737,17 @@ class StudentTransportListAPIView(APIView):
             # =====================================================
 
             if search:
-
                 transports = transports.filter(
-                    Q(
-                        student__name__icontains=search
+                    Q(student__name__icontains=search)
+                    | Q(student__admission_number__icontains=search)
+                    | Q(
+                        vehicle_assignment__vehicle__vehicle_number__icontains=search
                     )
                     | Q(
-                        student__admission_number__icontains=search
+                        vehicle_assignment__route__route_name__icontains=search
                     )
                     | Q(
-                        route__route_name__icontains=search
-                    )
-                    | Q(
-                        route__route_code__icontains=search
+                        vehicle_assignment__route__route_code__icontains=search
                     )
                 )
 
