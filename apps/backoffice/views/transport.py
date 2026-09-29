@@ -234,10 +234,22 @@ class VehicleListAPIView(APIView):
 
         try:
 
-            queryset = Vehicle.objects.select_related(
-                "branch",
-            ).filter(
-                school=school,
+            queryset = (
+                Vehicle.objects
+                .select_related("branch")
+                .prefetch_related(
+                    Prefetch(
+                        "documents",
+                        queryset=VehicleDocument.objects.filter(
+                            document_type=VehicleDocument.DocumentType.PHOTO,
+                            status=VehicleDocument.Status.ACTIVE,
+                        ),
+                        to_attr="photo_documents",
+                    )
+                )
+                .filter(
+                    school=school,
+                )
             )
 
             if search:
@@ -312,6 +324,7 @@ class VehicleListAPIView(APIView):
                         "rfid_reader": vehicle.rfid_reader,
                         "status": vehicle.status,
                         "status_display": vehicle.get_status_display(),
+                        "photo": vehicle_photo,
                         "branch": (
                             {
                                 "id": str(vehicle.branch.id),
@@ -6273,10 +6286,10 @@ class CreateTripAttendanceAPIView(APIView):
                 description="stop_id is required."
             )
 
-        if not students:
-            return CustomResponse.errorResponse(
-                description="students are required."
-            )
+        # if not students:
+        #     return CustomResponse.errorResponse(
+        #         description="students are required."
+        #     )
 
         if not isinstance(students, list):
             return CustomResponse.errorResponse(
