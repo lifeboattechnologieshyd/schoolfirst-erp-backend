@@ -218,8 +218,8 @@ class StudentBusAPIView(APIView):
                         # Added
                         "status": (
                             stop_status.status
-                            if stop_status
-                            else TripStopStatus.Status.PENDING
+                            # if stop_status
+                            # else TripStopStatus.Status.PENDING
                         ),
                         "reached_time": (
                             stop_status.reached_time
