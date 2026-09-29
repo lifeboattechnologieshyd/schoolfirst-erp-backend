@@ -6383,22 +6383,15 @@ class CreateTripAttendanceAPIView(APIView):
                 # STOP STATUS
                 # -----------------------------------------------------
 
-                trip_stop_status, _ = (
-                    TripStopStatus.objects.update_or_create(
-                        trip=trip,
-                        stop=stop,
-                        defaults={
-                            "school": school,
-                            "branch": trip.branch,
-                            "status": stop_status,
-                            "reached_time": (
-                                timezone.now()
-                                if stop_status
-                                == TripStopStatus.Status.REACHED
-                                else None
-                            ),
-                        },
-                    )
+                TripStopStatus.objects.update_or_create(
+                    trip=trip,
+                    stop=stop,
+                    defaults={
+                        "status": stop_status,
+                        "reached_time": timezone.now()
+                        if stop_status == TripStopStatus.Status.REACHED
+                        else None,
+                    },
                 )
 
                 # -----------------------------------------------------
