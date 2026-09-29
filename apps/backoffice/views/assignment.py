@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from apps.calendar.models import CalendarEvent, CalendarEventTarget
 from apps.homework.models import Assignment, AssignmentSection, AssignmentSubmission
 from apps.school.models.school import AcademicYear, Grade, Subject, Staff, Branch, Section
+from apps.transport.models import VehicleAssignment
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.calendar import create_calendar_event
@@ -556,7 +557,7 @@ class AssignmentUpdateAPIView(APIView):
                     description="School not found."
                 )
 
-            assignment = Assignment.objects.filter(
+            assignment = VehicleAssignment.objects.filter(
                 id=assignment_id,
                 school=school,
             ).first()
@@ -571,7 +572,7 @@ class AssignmentUpdateAPIView(APIView):
                 )
 
                 return CustomResponse.errorResponse(
-                    description="Assignment not found."
+                    description="Vehicle Assignment not found."
                 )
 
             academic_year = assignment.academic_year
