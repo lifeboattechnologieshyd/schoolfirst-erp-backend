@@ -2777,10 +2777,9 @@ class UpdateRouteAPIView(APIView):
 
         stops = request.data.get("stops")
 
-        if not isinstance(stops, list) or not stops:
-
+        if stops is not None and not isinstance(stops, list):
             return CustomResponse.errorResponse(
-                description="At least one stop is required."
+                description="stops must be a list."
             )
 
         # =========================================================
