@@ -331,6 +331,7 @@ class StudentBusAPIView(APIView):
                         "shift": route.shift,
                         "status": route.status,
                     },
+                    "trip_id":trip.id if trip else None,
 
                     "trip_status": (
                         trip.status
