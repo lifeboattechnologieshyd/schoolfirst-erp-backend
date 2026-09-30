@@ -3490,49 +3490,67 @@ class GetStaffAPIView(APIView):
 
         school = request.school
         branch_id = request.headers.get("X-Branch-Id")
-
-        application_logger.info(
-            "staff_list_requested",
-            requested_by=str(request.user.id),
-            school_id=str(school.id) if school else None,
-            branch_id=branch_id,
-        )
+        staff_type = request.GET.get("staff_type")
+        search = request.GET.get("search", "").strip()
 
         if school is None:
-
-            application_logger.warning(
-                "staff_list_failed",
-                requested_by=str(request.user.id),
-                reason="school_not_found",
-            )
-
             return CustomResponse.errorResponse(
                 description="School not found."
             )
 
+        # staff_type is required
+        if not staff_type:
+            return CustomResponse.errorResponse(
+                description="staff_type is required."
+            )
+
+        # Validate staff type
+        valid_staff_types = [
+            choice[0]
+            for choice in Staff.StaffType.choices
+        ]
+
+        if staff_type not in valid_staff_types:
+            return CustomResponse.errorResponse(
+                description=(
+                    f"Invalid staff_type. "
+                    f"Allowed values: {', '.join(valid_staff_types)}."
+                )
+            )
+
         try:
 
-            staffs = Staff.objects.select_related(
-                "user",
-                "branch",
-            ).prefetch_related(
-                Prefetch(
-                    "user__user_roles",
-                    queryset=UserRoles.objects.filter(
-                        school=school,
-                    ).select_related(
-                        "role",
-                    ),
-                    to_attr="school_roles",
+            staffs = (
+                Staff.objects
+                .select_related(
+                    "user",
+                    "branch",
                 )
-            ).filter(
-                school=school,
+                .prefetch_related(
+                    Prefetch(
+                        "user__user_roles",
+                        queryset=UserRoles.objects.filter(
+                            school=school,
+                        ).select_related("role"),
+                        to_attr="school_roles",
+                    )
+                )
+                .filter(
+                    school=school,
+                    staff_type=staff_type,
+                )
             )
 
             if branch_id:
-
                 staffs = staffs.filter(
                     branch_id=branch_id,
+                )
+
+            if search:
+                staffs = staffs.filter(
+                    Q(name__icontains=search)
+                    | Q(employee_id__icontains=search)
+                    | Q(mobile__icontains=search)
                 )
 
             staffs = staffs.order_by("name")
@@ -3581,6 +3599,8 @@ class GetStaffAPIView(APIView):
                 requested_by=str(request.user.id),
                 school_id=str(school.id),
                 branch_id=branch_id,
+                staff_type=staff_type,
+                search=search,
                 reason="staff_list_fetch_failed",
                 error=str(e),
             )
@@ -3588,14 +3608,6 @@ class GetStaffAPIView(APIView):
             return CustomResponse.errorResponse(
                 description=str(e)
             )
-
-        application_logger.info(
-            "staff_list_fetched",
-            requested_by=str(request.user.id),
-            school_id=str(school.id),
-            branch_id=branch_id,
-            returned_count=len(data),
-        )
 
         return CustomResponse.successResponse(
             description="Staff fetched successfully.",
