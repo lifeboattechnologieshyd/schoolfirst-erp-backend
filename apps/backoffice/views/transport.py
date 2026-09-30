@@ -1102,18 +1102,7 @@ class UpdateVehicleDocumentAPIView(APIView):
             data={
                 "id": str(document.id),
                 "vehicle_id": str(document.vehicle.id),
-                "document_type": document.document_type,
-                "document_number": document.document_number,
-                "issue_date": document.issue_date,
-                "expiry_date": document.expiry_date,
-                "issued_by": document.issued_by,
-                "document_file": (
-                    document.document_file.url
-                    if document.document_file
-                    else None
-                ),
-                "remarks": document.remarks,
-                "status": document.status,
+
             },
         )
 
