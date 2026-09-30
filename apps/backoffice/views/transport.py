@@ -5715,9 +5715,8 @@ class StudentTransportListAPIView(APIView):
                 )
 
             if route_id:
-
                 transports = transports.filter(
-                    route_id=route_id,
+                    vehicle_assignment__route_id=route_id,
                 )
 
             if student_id:
@@ -5802,19 +5801,19 @@ class StudentTransportListAPIView(APIView):
 
                         "route": {
                             "id": str(
-                                transport.route.id
+                                transport.vehicle_assignment.route.id
                             ),
                             "route_name": (
-                                transport.route.route_name
+                                transport.vehicle_assignment.route.route_name
                             ),
                             "route_code": (
-                                transport.route.route_code
+                                transport.vehicle_assignment.route.route_code
                             ),
                             "shift": (
-                                transport.route.shift
+                                transport.vehicle_assignment.route.shift
                             ),
                             "shift_display": (
-                                transport.route.get_shift_display()
+                                transport.vehicle_assignment.route.get_shift_display()
                             ),
                         },
 
