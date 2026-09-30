@@ -8,7 +8,6 @@ from shared.mixins import CustomResponse
 from shared.utils.logger import application_logger
 from django.utils import timezone
 
-from django.db.models import Case, When, Value, IntegerField
 
 
 class StudentBusAPIView(APIView):
@@ -29,6 +28,10 @@ class StudentBusAPIView(APIView):
                 school_id=str(school.id) if school else None,
             )
 
+            # =========================================================
+            # VALIDATION
+            # =========================================================
+
             if not school:
                 return CustomResponse.errorResponse(
                     description="School is required."
@@ -39,7 +42,10 @@ class StudentBusAPIView(APIView):
                     description="student_id is required."
                 )
 
-            # Get student
+            # =========================================================
+            # GET STUDENT
+            # =========================================================
+
             student = (
                 Student.objects
                 .select_related(
@@ -56,19 +62,14 @@ class StudentBusAPIView(APIView):
             )
 
             if student is None:
-                application_logger.warning(
-                    "student_transport_details_failed",
-                    user_id=str(user.id),
-                    student_id=str(student_id),
-                    school_id=str(school.id),
-                    reason="student_not_found",
-                )
-
                 return CustomResponse.errorResponse(
                     description="Student not found."
                 )
 
-            # Get complete transport assignment
+            # =========================================================
+            # GET STUDENT TRANSPORT ASSIGNMENT
+            # =========================================================
+
             student_transport = (
                 StudentTransport.objects
                 .select_related(
@@ -101,71 +102,160 @@ class StudentBusAPIView(APIView):
                 )
 
                 return CustomResponse.errorResponse(
-                    description="Transport assignment not found for this student."
+                    description=(
+                        "Transport assignment not found for this student."
+                    )
                 )
 
-            vehicle_assignment = student_transport.vehicle_assignment
+            # =========================================================
+            # DEFAULT ASSIGNMENT
+            # =========================================================
 
-            if vehicle_assignment is None:
+            assigned_vehicle_assignment = (
+                student_transport.vehicle_assignment
+            )
+
+            if assigned_vehicle_assignment is None:
                 return CustomResponse.errorResponse(
                     description="Vehicle assignment not found."
                 )
 
-            vehicle = vehicle_assignment.vehicle
-            driver = vehicle_assignment.driver
-            attendant = vehicle_assignment.attendant
-            route = vehicle_assignment.route
+            assigned_vehicle = assigned_vehicle_assignment.vehicle
+            assigned_route = assigned_vehicle_assignment.route
 
-            if vehicle is None:
+            if assigned_vehicle is None:
                 return CustomResponse.errorResponse(
                     description="Vehicle not found."
                 )
 
-            bus_photo = next(
-                (
-                    document.document_file
-                    for document in vehicle.documents.all()
-                    if document.document_type
-                       == VehicleDocument.DocumentType.PHOTO
-                ),
-                None,
-            )
-
-            if route is None:
-                application_logger.warning(
-                    "student_transport_details_failed",
-                    user_id=str(user.id),
-                    student_id=str(student.id),
-                    school_id=str(school.id),
-                    reason="route_not_found",
-                )
-
+            if assigned_route is None:
                 return CustomResponse.errorResponse(
                     description="Route not found."
                 )
 
-            # ---------------------------------------------------------
-            # GET TODAY'S TRIP
-            # ---------------------------------------------------------
+            # =========================================================
+            # BUS PHOTO
+            # =========================================================
+
+            bus_photo = next(
+                (
+                    document.document_file
+                    for document in assigned_vehicle.documents.all()
+                    if document.document_type
+                    == VehicleDocument.DocumentType.PHOTO
+                ),
+                None,
+            )
+
+            # =========================================================
+            # FIND CURRENTLY STARTED TRIP
+            # =========================================================
 
             today = timezone.localdate()
 
-            trip = (
+            started_trips = (
                 Trip.objects
+                .select_related(
+                    "vehicle_assignment",
+                    "vehicle_assignment__vehicle",
+                    "vehicle_assignment__driver",
+                    "vehicle_assignment__attendant",
+                    "vehicle_assignment__route",
+                )
                 .filter(
                     school=school,
-                    vehicle_assignment__vehicle=vehicle,
-                    vehicle_assignment__route=route,
+                    vehicle_assignment__vehicle=assigned_vehicle,
                     status=Trip.Status.STARTED,
                     trip_date=today,
                 )
                 .order_by("-actual_start_time")
-                .first()
             )
 
-            # ---------------------------------------------------------
-            # GET STOP STATUS FOR THIS TRIP
-            # ---------------------------------------------------------
+            # =========================================================
+            # DEBUG ALL STARTED TRIPS
+            # =========================================================
+
+            for trip_item in started_trips:
+                application_logger.info(
+                    "student_bus_trip_candidate",
+                    student_id=str(student.id),
+                    vehicle_id=str(assigned_vehicle.id),
+                    assigned_route_id=str(assigned_route.id),
+                    assigned_route_name=assigned_route.route_name,
+                    trip_id=str(trip_item.id),
+                    trip_date=str(trip_item.trip_date),
+                    trip_status=trip_item.status,
+                    trip_shift=trip_item.shift,
+                    trip_vehicle_assignment_id=str(
+                        trip_item.vehicle_assignment.id
+                    ),
+                    trip_route_id=str(
+                        trip_item.vehicle_assignment.route.id
+                    ),
+                    trip_route_name=(
+                        trip_item.vehicle_assignment.route.route_name
+                    ),
+                    scheduled_start_time=str(
+                        trip_item.scheduled_start_time
+                    ),
+                    actual_start_time=(
+                        str(trip_item.actual_start_time)
+                        if trip_item.actual_start_time
+                        else None
+                    ),
+                )
+
+            # =========================================================
+            # SELECT CURRENT TRIP
+            # =========================================================
+
+            trip = started_trips.first()
+
+            application_logger.info(
+                "student_bus_trip_selected",
+                student_id=str(student.id),
+                vehicle_id=str(assigned_vehicle.id),
+                today=str(today),
+                trip_id=str(trip.id) if trip else None,
+                trip_status=trip.status if trip else None,
+                trip_shift=trip.shift if trip else None,
+                trip_route_id=(
+                    str(trip.vehicle_assignment.route.id)
+                    if trip
+                    else None
+                ),
+                trip_route_name=(
+                    trip.vehicle_assignment.route.route_name
+                    if trip
+                    else None
+                ),
+                actual_start_time=(
+                    str(trip.actual_start_time)
+                    if trip and trip.actual_start_time
+                    else None
+                ),
+            )
+
+            # =========================================================
+            # USE CURRENT TRIP ASSIGNMENT IF TRIP IS STARTED
+            # =========================================================
+
+            if trip:
+                vehicle_assignment = trip.vehicle_assignment
+                vehicle = vehicle_assignment.vehicle
+                driver = vehicle_assignment.driver
+                attendant = vehicle_assignment.attendant
+                route = vehicle_assignment.route
+            else:
+                vehicle_assignment = assigned_vehicle_assignment
+                vehicle = assigned_vehicle
+                driver = vehicle_assignment.driver
+                attendant = vehicle_assignment.attendant
+                route = assigned_route
+
+            # =========================================================
+            # GET STOP STATUS
+            # =========================================================
 
             stop_statuses = {}
 
@@ -177,9 +267,9 @@ class StudentBusAPIView(APIView):
                     )
                 }
 
-            # ---------------------------------------------------------
-            # GET ALL ROUTE STOPS
-            # ---------------------------------------------------------
+            # =========================================================
+            # GET ROUTE STOPS
+            # =========================================================
 
             route_stops = (
                 RouteStop.objects
@@ -217,8 +307,6 @@ class StudentBusAPIView(APIView):
                         "estimated_travel_time": (
                             route_stop.estimated_travel_time
                         ),
-
-                        # Added
                         "status": (
                             stop_status.status
                             if stop_status
@@ -232,8 +320,16 @@ class StudentBusAPIView(APIView):
                     }
                 )
 
+            # =========================================================
+            # STUDENT STOPS
+            # =========================================================
+
             pickup_stop = student_transport.pickup_stop
             drop_stop = student_transport.drop_stop
+
+            # =========================================================
+            # FINAL LOG
+            # =========================================================
 
             application_logger.info(
                 "student_transport_details_retrieved",
@@ -243,13 +339,23 @@ class StudentBusAPIView(APIView):
                 vehicle_id=str(vehicle.id),
                 vehicle_assignment_id=str(vehicle_assignment.id),
                 route_id=str(route.id),
+                route_name=route.route_name,
+                route_shift=route.shift,
                 trip_id=str(trip.id) if trip else None,
-                trip_status=trip.status if trip else None,
+                trip_status=trip.status if trip else "SCHEDULED",
+                trip_shift=trip.shift if trip else None,
                 route_stop_count=len(route_stops_data),
             )
 
+            # =========================================================
+            # RESPONSE
+            # =========================================================
+
             return CustomResponse.successResponse(
-                description="Student transport details retrieved successfully.",
+                description=(
+                    "Student transport details "
+                    "retrieved successfully."
+                ),
                 data={
                     "student": {
                         "id": str(student.id),
@@ -282,15 +388,21 @@ class StudentBusAPIView(APIView):
                     },
 
                     "attendant": {
-                        "id": str(attendant.id)
-                        if attendant
-                        else None,
-                        "name": attendant.name
-                        if attendant
-                        else None,
-                        "mobile": attendant.mobile
-                        if attendant
-                        else None,
+                        "id": (
+                            str(attendant.id)
+                            if attendant
+                            else None
+                        ),
+                        "name": (
+                            attendant.name
+                            if attendant
+                            else None
+                        ),
+                        "mobile": (
+                            attendant.mobile
+                            if attendant
+                            else None
+                        ),
                         "experience": (
                             attendant.experience
                             if attendant
@@ -314,12 +426,23 @@ class StudentBusAPIView(APIView):
                         "shift": route.shift,
                         "status": route.status,
                     },
-                    "trip_id":trip.id if trip else None,
+
+                    "trip_id": (
+                        str(trip.id)
+                        if trip
+                        else None
+                    ),
 
                     "trip_status": (
                         trip.status
                         if trip
                         else Trip.Status.SCHEDULED
+                    ),
+
+                    "trip_shift": (
+                        trip.shift
+                        if trip
+                        else route.shift
                     ),
 
                     "pickup_stop": {
@@ -415,6 +538,7 @@ class StudentBusAPIView(APIView):
             )
 
         except Exception as e:
+
             application_logger.exception(
                 "student_transport_details_failed",
                 user_id=str(user.id),
@@ -430,7 +554,6 @@ class StudentBusAPIView(APIView):
                 ),
                 error=str(e),
             )
-
 
             return CustomResponse.errorResponse(
                 description="Internal server error.",
