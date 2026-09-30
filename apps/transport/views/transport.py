@@ -8,6 +8,7 @@ from shared.mixins import CustomResponse
 from shared.utils.logger import application_logger
 from django.utils import timezone
 
+from django.db.models import Case, When, Value, IntegerField
 
 
 class StudentBusAPIView(APIView):
@@ -148,6 +149,17 @@ class StudentBusAPIView(APIView):
             # ---------------------------------------------------------
 
             today = timezone.localdate()
+            #
+            # trip = (
+            #     Trip.objects
+            #     .filter(
+            #         school=school,
+            #         vehicle_assignment=vehicle_assignment,
+            #         trip_date=today,
+            #     )
+            #     .order_by("scheduled_start_time")
+            #     .first()
+            # )
 
             trip = (
                 Trip.objects
@@ -156,7 +168,15 @@ class StudentBusAPIView(APIView):
                     vehicle_assignment=vehicle_assignment,
                     trip_date=today,
                 )
-                .order_by("scheduled_start_time")
+                .order_by(
+                    Case(
+                        When(status=Trip.Status.STARTED, then=Value(0)),
+                        When(status=Trip.Status.SCHEDULED, then=Value(1)),
+                        default=Value(2),
+                        output_field=IntegerField(),
+                    ),
+                    "scheduled_start_time",
+                )
                 .first()
             )
 
