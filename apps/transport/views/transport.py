@@ -150,32 +150,18 @@ class StudentBusAPIView(APIView):
 
             today = timezone.localdate()
 
-            # 1. First find currently started trip
             trip = (
                 Trip.objects
                 .filter(
                     school=school,
                     vehicle_assignment__vehicle=vehicle,
+                    vehicle_assignment__route=route,
                     status=Trip.Status.STARTED,
                     trip_date=today,
                 )
                 .order_by("-actual_start_time")
                 .first()
             )
-
-            # 2. If no started trip, find scheduled trip
-            if trip is None:
-                trip = (
-                    Trip.objects
-                    .filter(
-                        school=school,
-                        vehicle_assignment__vehicle=vehicle,
-                        status=Trip.Status.SCHEDULED,
-                        trip_date__isnull=True,
-                    )
-                    .order_by("scheduled_start_time")
-                    .first()
-                )
 
             # ---------------------------------------------------------
             # GET STOP STATUS FOR THIS TRIP
