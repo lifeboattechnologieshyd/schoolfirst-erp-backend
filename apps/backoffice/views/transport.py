@@ -2001,6 +2001,7 @@ class RouteListAPIView(APIView):
                             "vehicle_type": (
                                 vehicle.vehicle_type
                             ),
+                            "capacity": vehicle.capacity,
                         }
                         if vehicle
                         else None
