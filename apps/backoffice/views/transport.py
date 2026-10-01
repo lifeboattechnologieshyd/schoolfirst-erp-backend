@@ -2040,6 +2040,8 @@ class RouteListAPIView(APIView):
                          "mobile": attendant.mobile,
 
                         }
+                        if attendant
+                        else None
                     ),
 
                     # -------------------------------------------------
