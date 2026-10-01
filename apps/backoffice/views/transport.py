@@ -6698,12 +6698,7 @@ class MyAssignedVehicleAPIView(APIView):
             vehicle_photo = None
 
             if photo_document and photo_document.document_file:
-                file_name = photo_document.document_file.name
-
-                if file_name.startswith(("http://", "https://")):
-                    vehicle_photo = file_name
-                else:
-                    vehicle_photo = photo_document.document_file.url
+                vehicle_photo = photo_document.document_file
 
             data = {
                 "vehicle_assignment_id": str(assignment.id),
