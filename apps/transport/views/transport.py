@@ -153,7 +153,7 @@ class StudentBusAPIView(APIView):
 
             today = timezone.localdate()
 
-            started_trips = (
+            trips = (
                 Trip.objects
                 .select_related(
                     "vehicle_assignment",
@@ -164,18 +164,21 @@ class StudentBusAPIView(APIView):
                 )
                 .filter(
                     school=school,
-                    vehicle_assignment__vehicle=assigned_vehicle,
-                    status=Trip.Status.STARTED,
+                    vehicle_assignment=assigned_vehicle_assignment,
                     trip_date=today,
+                    status__in=[
+                        Trip.Status.SCHEDULED,
+                        Trip.Status.STARTED,
+                    ],
                 )
-                .order_by("-actual_start_time")
+                .order_by("scheduled_start_time")
             )
 
             # =========================================================
             # DEBUG ALL STARTED TRIPS
             # =========================================================
 
-            for trip_item in started_trips:
+            for trip_item in trips:
                 application_logger.info(
                     "student_bus_trip_candidate",
                     student_id=str(student.id),
@@ -209,7 +212,7 @@ class StudentBusAPIView(APIView):
             # SELECT CURRENT TRIP
             # =========================================================
 
-            trip = started_trips.first()
+            trip = trips.first()
 
             application_logger.info(
                 "student_bus_trip_selected",
