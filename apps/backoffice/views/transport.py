@@ -1833,6 +1833,7 @@ class RouteListAPIView(APIView):
                 .select_related(
                     "vehicle",
                     "driver",
+                    "attendant",
                 )
                 .order_by(
                     "-effective_from",
@@ -1927,6 +1928,12 @@ class RouteListAPIView(APIView):
                     if vehicle_assignment
                     else None
                 )
+                attendant = (
+                    vehicle_assignment.attendant
+                    if vehicle_assignment
+                    else None
+                )
+
 
                 # -----------------------------------------------------
                 # Student count
@@ -2022,6 +2029,17 @@ class RouteListAPIView(APIView):
                         }
                         if driver
                         else None
+                    ),
+
+                    "attendant": (
+                        {"id":str(attendant.id),
+                         "employee_id":(
+                             attendant.employee_id
+                         ),
+                         "name": attendant.name,
+                         "mobile": attendant.mobile,
+
+                        }
                     ),
 
                     # -------------------------------------------------
