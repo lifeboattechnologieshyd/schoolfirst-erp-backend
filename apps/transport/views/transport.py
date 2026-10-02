@@ -368,6 +368,8 @@ class StudentBusAPIView(APIView):
                     "bus": {
                         "id": str(vehicle.id),
                         "vehicle_number": vehicle.vehicle_number,
+                        "registration_number":vehicle.registration_number,
+                        "model":vehicle.model,
                         "vehicle_type": vehicle.vehicle_type,
                         "capacity": vehicle.capacity,
                         "status": vehicle.status,
