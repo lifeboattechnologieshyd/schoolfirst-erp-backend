@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 
 from apps.fee.models import FeeType, FeeTemplateItem, FeeTemplate, FeeCollectionPlan, FeeInstallment, \
     FeeInstallmentItem, LateFeeRule, FeeConcession, StudentFeeAssignment, StudentFee, StudentFeePayment, FeePlan, \
-    FeePlanInstallment
+    FeePlanInstallment, FeePlanGrade
 from apps.school.models.school import AcademicYear, Grade, Student
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
