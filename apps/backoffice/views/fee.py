@@ -4175,6 +4175,7 @@ class PendingStudentFeeAPIView(APIView):
 
 
 class FeePlanCreateAPIView(APIView):
+
     permission_classes = [
         IsAuthenticated,
         HasPermission,
@@ -4183,6 +4184,7 @@ class FeePlanCreateAPIView(APIView):
     required_permission = "fee_plan.create"
 
     def post(self, request):
+
         school = request.school
 
         if not school:
@@ -4191,12 +4193,27 @@ class FeePlanCreateAPIView(APIView):
             )
 
         try:
+
+            # =========================================================
+            # REQUEST DATA
+            # =========================================================
+
             academic_year_id = request.data.get("academic_year_id")
             grade_id = request.data.get("grade_id")
             name = request.data.get("name")
             total_amount = request.data.get("total_amount")
-            plan_type = request.data.get("plan_type", FeePlan.PlanType.ANNUAL)
-            number_of_terms = request.data.get("number_of_terms", 1)
+            plan_type = request.data.get(
+                "plan_type",
+                FeePlan.PlanType.ANNUAL,
+            )
+            number_of_terms = request.data.get(
+                "number_of_terms",
+                1,
+            )
+
+            # =========================================================
+            # VALIDATION
+            # =========================================================
 
             if not academic_year_id:
                 return CustomResponse.errorResponse(
@@ -4218,9 +4235,14 @@ class FeePlanCreateAPIView(APIView):
                     description="Total amount is required."
                 )
 
+            # =========================================================
+            # AMOUNT
+            # =========================================================
+
             try:
                 total_amount = Decimal(str(total_amount))
             except (InvalidOperation, ValueError):
+
                 return CustomResponse.errorResponse(
                     description="Invalid total amount."
                 )
@@ -4230,9 +4252,14 @@ class FeePlanCreateAPIView(APIView):
                     description="Total amount must be greater than zero."
                 )
 
+            # =========================================================
+            # NUMBER OF TERMS
+            # =========================================================
+
             try:
                 number_of_terms = int(number_of_terms)
             except (TypeError, ValueError):
+
                 return CustomResponse.errorResponse(
                     description="Invalid number of terms."
                 )
@@ -4242,97 +4269,164 @@ class FeePlanCreateAPIView(APIView):
                     description="Number of terms must be greater than zero."
                 )
 
+            # =========================================================
+            # PLAN TYPE
+            # =========================================================
+
             if plan_type not in FeePlan.PlanType.values:
+
                 return CustomResponse.errorResponse(
                     description="Invalid plan type."
                 )
 
-            academic_year = AcademicYear.objects.filter(
-                id=academic_year_id,
-                school=school,
-            ).first()
+            # =========================================================
+            # ACADEMIC YEAR
+            # =========================================================
+
+            academic_year = (
+                AcademicYear.objects
+                .filter(
+                    id=academic_year_id,
+                    school=school,
+                )
+                .first()
+            )
 
             if not academic_year:
+
                 return CustomResponse.errorResponse(
                     description="Academic year not found."
                 )
 
-            grade = Grade.objects.filter(
-                id=grade_id,
-                school=school,
-                academic_year=academic_year,
-            ).first()
+            # =========================================================
+            # GRADE
+            # =========================================================
+
+            grade = (
+                Grade.objects
+                .filter(
+                    id=grade_id,
+                    school=school,
+                    academic_year=academic_year,
+                )
+                .first()
+            )
 
             if not grade:
+
                 return CustomResponse.errorResponse(
                     description="Grade not found."
                 )
 
-            if FeePlan.objects.filter(
-                school=school,
-                academic_year=academic_year,
-                grade=grade,
-                name=name,
-            ).exists():
+            # =========================================================
+            # DUPLICATE FEE PLAN
+            # =========================================================
+
+            fee_plan_exists = (
+                FeePlan.objects
+                .filter(
+                    school=school,
+                    academic_year=academic_year,
+                    name=name,
+                )
+                .exists()
+            )
+
+            if fee_plan_exists:
+
                 return CustomResponse.errorResponse(
                     description="Fee plan already exists."
                 )
 
-            fee_plan = FeePlan.objects.create(
-                school=school,
-                academic_year=academic_year,
-                grade=grade,
-                name=name,
-                total_amount=total_amount,
-                plan_type=plan_type,
-                number_of_terms=number_of_terms,
-                is_active=True,
-            )
+            # =========================================================
+            # CREATE
+            # =========================================================
+
+            with transaction.atomic():
+
+                fee_plan = FeePlan.objects.create(
+                    school=school,
+                    academic_year=academic_year,
+                    name=name,
+                    total_amount=total_amount,
+                    plan_type=plan_type,
+                    number_of_terms=number_of_terms,
+                    is_active=True,
+                )
+
+                fee_plan_grade = FeePlanGrade.objects.create(
+                    fee_plan=fee_plan,
+                    grade=grade,
+                )
+
+            # =========================================================
+            # LOG
+            # =========================================================
 
             application_logger.info(
                 "fee_plan_created",
                 fee_plan_id=str(fee_plan.id),
+                fee_plan_grade_id=str(fee_plan_grade.id),
                 school_id=str(school.id),
                 academic_year_id=str(academic_year.id),
                 grade_id=str(grade.id),
             )
 
+            # =========================================================
+            # RESPONSE
+            # =========================================================
+
             return CustomResponse.successResponse(
                 data={
                     "id": str(fee_plan.id),
+
                     "name": fee_plan.name,
+
                     "academic_year": {
                         "id": str(academic_year.id),
                         "name": academic_year.name,
                     },
+
                     "grade": {
                         "id": str(grade.id),
                         "name": grade.name,
                     },
+
                     "total_amount": fee_plan.total_amount,
+
                     "plan_type": fee_plan.plan_type,
-                    "number_of_terms": fee_plan.number_of_terms,
+
+                    "plan_type_display": (
+                        fee_plan.get_plan_type_display()
+                    ),
+
+                    "number_of_terms": (
+                        fee_plan.number_of_terms
+                    ),
+
                     "is_active": fee_plan.is_active,
                 },
                 description="Fee plan created successfully.",
             )
 
         except IntegrityError:
+
             return CustomResponse.errorResponse(
                 description="Fee plan already exists."
             )
 
         except Exception as e:
+
             application_logger.exception(
                 "fee_plan_create_failed",
                 error=str(e),
+                error_type=type(e).__name__,
                 school_id=str(school.id),
             )
 
             return CustomResponse.errorResponse(
-                description="Failed to create fee plan."
+                description=f"{type(e).__name__}: {str(e)}",
             )
-
 
 class FeePlanListAPIView(APIView):
     permission_classes = [

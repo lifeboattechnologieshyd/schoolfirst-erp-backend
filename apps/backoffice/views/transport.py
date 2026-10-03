@@ -6610,7 +6610,7 @@ class UpdateStudentTransportAPIView(APIView):
                 error_type=type(e).__name__,
             )
 
-            # Development/testing
+            # testing
             return CustomResponse.errorResponse(
                 description=f"{type(e).__name__}: {str(e)}",
             )
