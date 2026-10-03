@@ -6190,104 +6190,101 @@ class UpdateStudentTransportAPIView(APIView):
             student_transport_id=str(student_transport_id),
         )
 
-        # =========================================================
-        # SCHOOL VALIDATION
-        # =========================================================
+        try:
 
-        if school is None:
+            # =========================================================
+            # SCHOOL VALIDATION
+            # =========================================================
 
-            application_logger.warning(
-                "student_transport_update_failed",
-                requested_by=str(request.user.id),
-                reason="school_not_found",
-            )
+            if school is None:
+                return CustomResponse.errorResponse(
+                    description="School not found."
+                )
 
-            return CustomResponse.errorResponse(
-                description="School not found."
-            )
+            # =========================================================
+            # GET STUDENT TRANSPORT
+            # =========================================================
 
-        # =========================================================
-        # GET STUDENT TRANSPORT
-        # =========================================================
-
-        student_transport = (
-            StudentTransport.objects
-            .select_related(
-                "academic_year",
-                "student",
-                "vehicle_assignment",
-                "vehicle_assignment__route",
-                "vehicle_assignment__vehicle",
-                "pickup_stop",
-                "drop_stop",
-                "branch",
-            )
-            .filter(
-                id=student_transport_id,
-                school=school,
-            )
-            .first()
-        )
-
-        if student_transport is None:
-
-            application_logger.warning(
-                "student_transport_update_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                student_transport_id=str(student_transport_id),
-                reason="student_transport_not_found",
-            )
-
-            return CustomResponse.errorResponse(
-                description="Student transport not found."
-            )
-
-        # =========================================================
-        # BRANCH
-        # =========================================================
-
-        branch = student_transport.branch
-
-        if "branch_id" in request.data:
-
-            branch_id = request.data.get("branch_id")
-
-            if branch_id:
-
-                branch = Branch.objects.filter(
-                    id=branch_id,
+            student_transport = (
+                StudentTransport.objects
+                .select_related(
+                    "academic_year",
+                    "student",
+                    "branch",
+                    "vehicle_assignment",
+                    "vehicle_assignment__route",
+                    "vehicle_assignment__vehicle",
+                    "vehicle_assignment__driver",
+                    "vehicle_assignment__attendant",
+                    "pickup_stop",
+                    "drop_stop",
+                )
+                .filter(
+                    id=student_transport_id,
                     school=school,
-                ).first()
+                )
+                .first()
+            )
 
-                if branch is None:
+            if student_transport is None:
+                return CustomResponse.errorResponse(
+                    description="Student transport not found."
+                )
 
-                    application_logger.warning(
-                        "student_transport_update_failed",
-                        requested_by=str(request.user.id),
-                        school_id=str(school.id),
-                        branch_id=branch_id,
-                        reason="branch_not_found",
+            # =========================================================
+            # CURRENT VEHICLE ASSIGNMENT / ROUTE
+            # =========================================================
+
+            vehicle_assignment = student_transport.vehicle_assignment
+
+            if vehicle_assignment is None:
+                return CustomResponse.errorResponse(
+                    description="Vehicle assignment not found."
+                )
+
+            route = vehicle_assignment.route
+
+            # =========================================================
+            # BRANCH
+            # =========================================================
+
+            branch = student_transport.branch
+
+            if "branch_id" in request.data:
+
+                branch_id = request.data.get("branch_id")
+
+                if branch_id:
+
+                    branch = (
+                        Branch.objects
+                        .filter(
+                            id=branch_id,
+                            school=school,
+                        )
+                        .first()
                     )
 
+                    if branch is None:
+                        return CustomResponse.errorResponse(
+                            description="Branch not found."
+                        )
+
+                else:
+                    branch = None
+
+            # =========================================================
+            # ROUTE
+            # =========================================================
+
+            if "route_id" in request.data:
+
+                route_id = request.data.get("route_id")
+
+                if not route_id:
                     return CustomResponse.errorResponse(
-                        description="Branch not found."
+                        description="route_id cannot be empty."
                     )
-
-            else:
-                branch = None
-
-        # =========================================================
-        # ROUTE
-        # =========================================================
-
-        route = student_transport.route
-
-        if "route_id" in request.data:
-
-            route_id = request.data.get("route_id")
-
-            if route_id:
 
                 route = (
                     Route.objects
@@ -6299,244 +6296,224 @@ class UpdateStudentTransportAPIView(APIView):
                 )
 
                 if route is None:
-
-                    application_logger.warning(
-                        "student_transport_update_failed",
-                        requested_by=str(request.user.id),
-                        school_id=str(school.id),
-                        route_id=route_id,
-                        reason="route_not_found",
-                    )
-
                     return CustomResponse.errorResponse(
                         description="Route not found."
                     )
 
-            else:
+                # -----------------------------------------------------
+                # Find active vehicle assignment for selected route
+                # -----------------------------------------------------
 
-                return CustomResponse.errorResponse(
-                    description="route_id cannot be empty."
+                vehicle_assignment = (
+                    VehicleAssignment.objects
+                    .select_related(
+                        "route",
+                        "vehicle",
+                        "driver",
+                        "attendant",
+                    )
+                    .filter(
+                        school=school,
+                        route=route,
+                        status=VehicleAssignment.Status.ACTIVE,
+                    )
+                    .filter(
+                        Q(effective_from__isnull=True)
+                        | Q(effective_from__lte=timezone.localdate())
+                    )
+                    .filter(
+                        Q(effective_to__isnull=True)
+                        | Q(effective_to__gte=timezone.localdate())
+                    )
+                    .order_by(
+                        "-effective_from",
+                        "-created_at",
+                    )
+                    .first()
                 )
 
-        # =========================================================
-        # PICKUP STOP
-        # =========================================================
-
-        pickup_stop = student_transport.pickup_stop
-
-        if "pickup_stop_id" in request.data:
-
-            pickup_stop_id = request.data.get(
-                "pickup_stop_id"
-            )
-
-            if pickup_stop_id:
-
-                pickup_stop = Stop.objects.filter(
-                    id=pickup_stop_id,
-                    school=school,
-                ).first()
-
-                if pickup_stop is None:
-
-                    application_logger.warning(
-                        "student_transport_update_failed",
-                        requested_by=str(request.user.id),
-                        school_id=str(school.id),
-                        pickup_stop_id=pickup_stop_id,
-                        reason="pickup_stop_not_found",
-                    )
-
-                    return CustomResponse.errorResponse(
-                        description="Pickup stop not found."
-                    )
-
-                if not RouteStop.objects.filter(
-                    route=route,
-                    stop=pickup_stop,
-                ).exists():
-
+                if vehicle_assignment is None:
                     return CustomResponse.errorResponse(
                         description=(
-                            "Pickup stop is not mapped "
-                            "to the selected route."
+                            "No active vehicle assignment found "
+                            "for the selected route."
                         )
                     )
 
-            else:
+            # =========================================================
+            # PICKUP STOP
+            # =========================================================
 
-                pickup_stop = None
+            pickup_stop = student_transport.pickup_stop
 
-        # =========================================================
-        # DROP STOP
-        # =========================================================
+            if "pickup_stop_id" in request.data:
 
-        drop_stop = student_transport.drop_stop
+                pickup_stop_id = request.data.get("pickup_stop_id")
 
-        if "drop_stop_id" in request.data:
+                if pickup_stop_id:
 
-            drop_stop_id = request.data.get(
-                "drop_stop_id"
-            )
-
-            if drop_stop_id:
-
-                drop_stop = Stop.objects.filter(
-                    id=drop_stop_id,
-                    school=school,
-                ).first()
-
-                if drop_stop is None:
-
-                    application_logger.warning(
-                        "student_transport_update_failed",
-                        requested_by=str(request.user.id),
-                        school_id=str(school.id),
-                        drop_stop_id=drop_stop_id,
-                        reason="drop_stop_not_found",
-                    )
-
-                    return CustomResponse.errorResponse(
-                        description="Drop stop not found."
-                    )
-
-                if not RouteStop.objects.filter(
-                    route=route,
-                    stop=drop_stop,
-                ).exists():
-
-                    return CustomResponse.errorResponse(
-                        description=(
-                            "Drop stop is not mapped "
-                            "to the selected route."
+                    pickup_stop = (
+                        Stop.objects
+                        .filter(
+                            id=pickup_stop_id,
+                            school=school,
                         )
+                        .first()
                     )
 
-            else:
+                    if pickup_stop is None:
+                        return CustomResponse.errorResponse(
+                            description="Pickup stop not found."
+                        )
 
-                drop_stop = None
+                    pickup_stop_exists = (
+                        RouteStop.objects
+                        .filter(
+                            route=route,
+                            stop=pickup_stop,
+                        )
+                        .exists()
+                    )
 
-        # =========================================================
-        # TRIP TYPE
-        # =========================================================
+                    if not pickup_stop_exists:
+                        return CustomResponse.errorResponse(
+                            description=(
+                                "Pickup stop is not mapped "
+                                "to the selected route."
+                            )
+                        )
 
-        if "trip_type" in request.data:
+                else:
+                    pickup_stop = None
 
-            trip_type = request.data.get(
-                "trip_type"
-            )
+            # =========================================================
+            # DROP STOP
+            # =========================================================
 
-            if trip_type not in StudentTransport.TripType.values:
+            drop_stop = student_transport.drop_stop
 
-                application_logger.warning(
-                    "student_transport_update_failed",
-                    requested_by=str(request.user.id),
-                    school_id=str(school.id),
-                    trip_type=trip_type,
-                    reason="invalid_trip_type",
-                )
+            if "drop_stop_id" in request.data:
 
-                return CustomResponse.errorResponse(
-                    description="Invalid trip type."
-                )
+                drop_stop_id = request.data.get("drop_stop_id")
 
-            student_transport.trip_type = trip_type
+                if drop_stop_id:
 
-        # =========================================================
-        # STATUS
-        # =========================================================
+                    drop_stop = (
+                        Stop.objects
+                        .filter(
+                            id=drop_stop_id,
+                            school=school,
+                        )
+                        .first()
+                    )
 
-        if "status" in request.data:
+                    if drop_stop is None:
+                        return CustomResponse.errorResponse(
+                            description="Drop stop not found."
+                        )
 
-            status = request.data.get("status")
+                    drop_stop_exists = (
+                        RouteStop.objects
+                        .filter(
+                            route=route,
+                            stop=drop_stop,
+                        )
+                        .exists()
+                    )
 
-            if status not in StudentTransport.Status.values:
+                    if not drop_stop_exists:
+                        return CustomResponse.errorResponse(
+                            description=(
+                                "Drop stop is not mapped "
+                                "to the selected route."
+                            )
+                        )
 
-                application_logger.warning(
-                    "student_transport_update_failed",
-                    requested_by=str(request.user.id),
-                    school_id=str(school.id),
-                    status=status,
-                    reason="invalid_status",
-                )
+                else:
+                    drop_stop = None
 
-                return CustomResponse.errorResponse(
-                    description="Invalid status."
-                )
+            # =========================================================
+            # TRIP TYPE
+            # =========================================================
 
-            student_transport.status = status
+            trip_type = student_transport.trip_type
 
-        # =========================================================
-        # UPDATE FIELDS
-        # =========================================================
+            if "trip_type" in request.data:
 
-        student_transport.branch = branch
-        student_transport.route = route
-        student_transport.pickup_stop = pickup_stop
-        student_transport.drop_stop = drop_stop
+                trip_type = request.data.get("trip_type")
 
-        if "remarks" in request.data:
+                if trip_type not in StudentTransport.TripType.values:
+                    return CustomResponse.errorResponse(
+                        description="Invalid trip type."
+                    )
 
-            student_transport.remarks = request.data.get(
-                "remarks"
-            )
+            # =========================================================
+            # STATUS
+            # =========================================================
 
-        # =========================================================
-        # SAVE
-        # =========================================================
+            status = student_transport.status
 
-        try:
+            if "status" in request.data:
+
+                status = request.data.get("status")
+
+                if status not in StudentTransport.Status.values:
+                    return CustomResponse.errorResponse(
+                        description="Invalid status."
+                    )
+
+            # =========================================================
+            # REMARKS
+            # =========================================================
+
+            remarks = student_transport.remarks
+
+            if "remarks" in request.data:
+                remarks = request.data.get("remarks")
+
+            # =========================================================
+            # UPDATE
+            # =========================================================
 
             with transaction.atomic():
 
+                student_transport.branch = branch
+                student_transport.vehicle_assignment = vehicle_assignment
+                student_transport.pickup_stop = pickup_stop
+                student_transport.drop_stop = drop_stop
+                student_transport.trip_type = trip_type
+                student_transport.status = status
+                student_transport.remarks = remarks
+
                 student_transport.save()
 
-        except Exception as e:
+            # =========================================================
+            # RESPONSE
+            # =========================================================
 
-            application_logger.exception(
-                "student_transport_update_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                student_transport_id=str(
-                    student_transport.id
-                ),
-                error=str(e),
-            )
+            vehicle = vehicle_assignment.vehicle
+            driver = vehicle_assignment.driver
+            attendant = vehicle_assignment.attendant
 
-            return CustomResponse.errorResponse(
-                description=str(e),
-            )
-
-        # =========================================================
-        # SUCCESS LOG
-        # =========================================================
-
-        application_logger.info(
-            "student_transport_updated",
-            requested_by=str(request.user.id),
-            school_id=str(school.id),
-            student_transport_id=str(
-                student_transport.id
-            ),
-            route_id=str(route.id),
-        )
-
-        # =========================================================
-        # RESPONSE
-        # =========================================================
-
-        return CustomResponse.successResponse(
-            description="Student transport updated successfully.",
-            data={
+            data = {
                 "id": str(student_transport.id),
 
                 "student": {
-                    "id": str(
-                        student_transport.student.id
-                    ),
-                    "name": (
-                        student_transport.student.name
-                    ),
+                    "id": str(student_transport.student.id),
+                    "name": student_transport.student.name,
+                },
+
+                "branch": (
+                    {
+                        "id": str(branch.id),
+                        "name": branch.name,
+                    }
+                    if branch
+                    else None
+                ),
+
+                "vehicle_assignment": {
+                    "id": str(vehicle_assignment.id),
                 },
 
                 "route": {
@@ -6545,14 +6522,42 @@ class UpdateStudentTransportAPIView(APIView):
                     "route_code": route.route_code,
                 },
 
+                "vehicle": (
+                    {
+                        "id": str(vehicle.id),
+                        "vehicle_number": vehicle.vehicle_number,
+                        "vehicle_type": vehicle.vehicle_type,
+                    }
+                    if vehicle
+                    else None
+                ),
+
+                "driver": (
+                    {
+                        "id": str(driver.id),
+                        "employee_id": driver.employee_id,
+                        "name": driver.name,
+                        "mobile": driver.mobile,
+                    }
+                    if driver
+                    else None
+                ),
+
+                "attendant": (
+                    {
+                        "id": str(attendant.id),
+                        "employee_id": attendant.employee_id,
+                        "name": attendant.name,
+                        "mobile": attendant.mobile,
+                    }
+                    if attendant
+                    else None
+                ),
+
                 "pickup_stop": (
                     {
-                        "id": str(
-                            pickup_stop.id
-                        ),
-                        "stop_name": (
-                            pickup_stop.stop_name
-                        ),
+                        "id": str(pickup_stop.id),
+                        "stop_name": pickup_stop.stop_name,
                     }
                     if pickup_stop
                     else None
@@ -6560,32 +6565,55 @@ class UpdateStudentTransportAPIView(APIView):
 
                 "drop_stop": (
                     {
-                        "id": str(
-                            drop_stop.id
-                        ),
-                        "stop_name": (
-                            drop_stop.stop_name
-                        ),
+                        "id": str(drop_stop.id),
+                        "stop_name": drop_stop.stop_name,
                     }
                     if drop_stop
                     else None
                 ),
 
                 "trip_type": student_transport.trip_type,
-
                 "trip_type_display": (
                     student_transport.get_trip_type_display()
                 ),
 
                 "status": student_transport.status,
-
                 "status_display": (
                     student_transport.get_status_display()
                 ),
 
                 "remarks": student_transport.remarks,
-            },
-        )
+            }
+
+            application_logger.info(
+                "student_transport_updated",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                student_transport_id=str(student_transport.id),
+                route_id=str(route.id),
+                vehicle_assignment_id=str(vehicle_assignment.id),
+            )
+
+            return CustomResponse.successResponse(
+                description="Student transport updated successfully.",
+                data=data,
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "student_transport_update_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id) if school else None,
+                student_transport_id=str(student_transport_id),
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+
+            # Development/testing
+            return CustomResponse.errorResponse(
+                description=f"{type(e).__name__}: {str(e)}",
+            )
 
 
 class MyAssignedVehicleAPIView(APIView):
