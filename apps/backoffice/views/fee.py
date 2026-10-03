@@ -4449,10 +4449,10 @@ class FeePlanListAPIView(APIView):
                 FeePlan.objects
                 .select_related(
                     "academic_year",
-                    "grade",
                 )
                 .prefetch_related(
-                    "installments"
+                    "grades__grade",
+                    "installments",
                 )
                 .filter(
                     school=school,
@@ -4474,7 +4474,7 @@ class FeePlanListAPIView(APIView):
 
             if grade_id:
                 queryset = queryset.filter(
-                    grade_id=grade_id
+                    grades__grade_id=grade_id
                 )
 
             if plan_type:
@@ -4487,12 +4487,16 @@ class FeePlanListAPIView(APIView):
                     is_active=is_active.lower() == "true"
                 )
 
+            # Avoid duplicate FeePlans when filtering through grades
+            queryset = queryset.distinct()
+
             total_count = queryset.count()
 
             data = []
 
             for plan in queryset:
                 installments = plan.installments.all()
+                fee_plan_grades = plan.grades.all()
 
                 scheduled_amount = sum(
                     (
@@ -4515,19 +4519,20 @@ class FeePlanListAPIView(APIView):
                         "id": str(
                             plan.academic_year.id
                         ),
-                        "name": (
-                            plan.academic_year.name
-                        ),
+                        "name": plan.academic_year.name,
                     },
 
-                    "grade": {
-                        "id": str(
-                            plan.grade.id
-                        ),
-                        "name": (
-                            plan.grade.name
-                        ),
-                    },
+                    "grades": [
+                        {
+                            "id": str(
+                                fee_plan_grade.grade.id
+                            ),
+                            "name": (
+                                fee_plan_grade.grade.name
+                            ),
+                        }
+                        for fee_plan_grade in fee_plan_grades
+                    ],
 
                     "total_amount": plan.total_amount,
 
@@ -4551,18 +4556,12 @@ class FeePlanListAPIView(APIView):
                             "id": str(
                                 installment.id
                             ),
-                            "name": (
-                                installment.name
-                            ),
+                            "name": installment.name,
                             "installment_number": (
                                 installment.installment_number
                             ),
-                            "amount": (
-                                installment.amount
-                            ),
-                            "due_date": (
-                                installment.due_date
-                            ),
+                            "amount": installment.amount,
+                            "due_date": installment.due_date,
                         }
                         for installment in installments
                     ],
