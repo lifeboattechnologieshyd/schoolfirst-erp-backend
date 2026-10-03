@@ -3489,7 +3489,6 @@ class CreateRouteStopAPIView(APIView):
             },
         )
 
-
 class RouteStopListAPIView(APIView):
 
     permission_classes = [IsAuthenticated, HasPermission]
@@ -3498,7 +3497,6 @@ class RouteStopListAPIView(APIView):
     def get(self, request):
 
         school = request.school
-
         route_id = request.GET.get("route_id")
         search = request.GET.get("search", "").strip()
 
@@ -3511,90 +3509,96 @@ class RouteStopListAPIView(APIView):
         )
 
         if school is None:
-
-            application_logger.warning(
-                "route_stop_list_failed",
-                requested_by=str(request.user.id),
-                reason="school_not_found",
-            )
-
             return CustomResponse.errorResponse(
                 description="School not found."
             )
 
         if not route_id:
-
-            application_logger.warning(
-                "route_stop_list_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                reason="route_id_required",
-            )
-
             return CustomResponse.errorResponse(
                 description="route_id is required."
             )
 
         try:
 
-            route = Route.objects.filter(
-                id=route_id,
-                school=school,
-            ).first()
+            # ---------------------------------------------------------
+            # Route
+            # ---------------------------------------------------------
+
+            route = (
+                Route.objects
+                .filter(
+                    id=route_id,
+                    school=school,
+                )
+                .first()
+            )
 
             if route is None:
-
-                application_logger.warning(
-                    "route_stop_list_failed",
-                    requested_by=str(request.user.id),
-                    school_id=str(school.id),
-                    route_id=route_id,
-                    reason="route_not_found",
-                )
-
                 return CustomResponse.errorResponse(
                     description="Route not found."
                 )
 
-            route_stops = RouteStop.objects.select_related(
-                "route",
-                "stop",
-            ).filter(
-                route=route,
+            # ---------------------------------------------------------
+            # Assigned stops
+            # ---------------------------------------------------------
+
+            route_stops = (
+                RouteStop.objects
+                .select_related("stop")
+                .filter(
+                    route=route,
+                )
+                .order_by("stop_order")
             )
 
             if search:
-
                 route_stops = route_stops.filter(
                     Q(stop__stop_name__icontains=search)
                     | Q(stop__stop_code__icontains=search)
                     | Q(stop__address__icontains=search)
                 )
 
-            route_stops = route_stops.order_by(
-                "stop_order",
-            )
+            # ---------------------------------------------------------
+            # Stop response
+            # ---------------------------------------------------------
 
-            data = []
+            stops = []
 
             for route_stop in route_stops:
 
-                data.append({
-                    "id": str(route_stop.id),
-                    "stop_order": route_stop.stop_order,
-                    "pickup_time": route_stop.pickup_time,
-                    "drop_time": route_stop.drop_time,
-                    "distance_from_previous_stop": route_stop.distance_from_previous_stop,
-                    "estimated_travel_time": route_stop.estimated_travel_time,
-                    "stop": {
-                        "id": str(route_stop.stop.id),
-                        "stop_name": route_stop.stop.stop_name,
-                        "stop_code": route_stop.stop.stop_code,
-                        "latitude": route_stop.stop.latitude,
-                        "longitude": route_stop.stop.longitude,
-                        "address": route_stop.stop.address,
-                    },
+                stop = route_stop.stop
+
+                stops.append({
+                    "id": str(stop.id),
+                    "stop_name": stop.stop_name,
+                    "stop_code": stop.stop_code,
+                    "latitude": stop.latitude,
+                    "longitude": stop.longitude,
+                    "address": stop.address,
                 })
+
+            data = {
+                "route": {
+                    "id": str(route.id),
+                    "route_name": route.route_name,
+                    "route_code": route.route_code,
+                },
+                "stops": stops,
+            }
+
+            application_logger.info(
+                "route_stop_list_fetched",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                route_id=str(route.id),
+                returned_count=len(stops),
+            )
+
+            return CustomResponse.successResponse(
+                description="Route and assigned stops fetched successfully.",
+                total=len(stops),
+                data=data,
+            )
 
         except Exception as e:
 
@@ -3603,32 +3607,12 @@ class RouteStopListAPIView(APIView):
                 requested_by=str(request.user.id),
                 school_id=str(school.id),
                 route_id=route_id,
-                reason="route_stop_fetch_failed",
                 error=str(e),
             )
 
             return CustomResponse.errorResponse(
-                description=str(e),
+                description="Failed to fetch route and assigned stops."
             )
-
-        application_logger.info(
-            "route_stop_list_fetched",
-            requested_by=str(request.user.id),
-            school_id=str(school.id),
-            route_id=str(route.id),
-            returned_count=len(data),
-        )
-
-        return CustomResponse.successResponse(
-            description="Route stops fetched successfully.",
-            total=len(data),
-            data={
-                "route_id": str(route.id),
-                "route_name": route.route_name,
-                "route_code": route.route_code,
-                "stops": data,
-            },
-        )
 
 
 class UpdateRouteStopAPIView(APIView):
