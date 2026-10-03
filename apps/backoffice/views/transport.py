@@ -6215,7 +6215,9 @@ class UpdateStudentTransportAPIView(APIView):
             .select_related(
                 "academic_year",
                 "student",
-                "route",
+                "vehicle_assignment",
+                "vehicle_assignment__route",
+                "vehicle_assignment__vehicle",
                 "pickup_stop",
                 "drop_stop",
                 "branch",
