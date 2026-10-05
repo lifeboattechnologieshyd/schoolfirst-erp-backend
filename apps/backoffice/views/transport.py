@@ -3576,6 +3576,8 @@ class RouteStopListAPIView(APIView):
                     "longitude": stop.longitude,
                     "address": stop.address,
                     "stop_type":stop.stop_type,
+                    "pickup_time":stop.pickup_time,
+                    "drop_time":stop.drop_time,
                 })
 
             data = {
