@@ -13,6 +13,12 @@ class FeeType(AuditModel):
     objects = SoftDeleteManager()
     all_objects = models.Manager()
 
+    class RefundType(models.TextChoices):
+        REFUNDABLE = "REFUNDABLE", "Refundable"
+        NON_REFUNDABLE = "NON_REFUNDABLE", "Non Refundable"
+        PARTIALLY_REFUNDABLE = "PARTIALLY_REFUNDABLE", "Partially Refundable"
+
+
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -42,6 +48,11 @@ class FeeType(AuditModel):
 
     is_optional = models.BooleanField(
         default=False,
+    )
+    refund_type = models.CharField(
+        max_length=30,
+        choices=RefundType.choices,
+        default=RefundType.NON_REFUNDABLE,
     )
 
     is_active = models.BooleanField(

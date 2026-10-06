@@ -32,9 +32,27 @@ class CreateFeeTypeAPIView(APIView):
         school = request.school
 
         if school is None:
-
             return CustomResponse.errorResponse(
                 description="School not found.",
+            )
+
+        academic_year_id = request.data.get(
+            "academic_year_id"
+        )
+
+        if not academic_year_id:
+            return CustomResponse.errorResponse(
+                description="Academic year is required.",
+            )
+
+        try:
+            academic_year = AcademicYear.objects.get(
+                id=academic_year_id,
+                school=school,
+            )
+        except AcademicYear.DoesNotExist:
+            return CustomResponse.errorResponse(
+                description="Academic year not found.",
             )
 
         name = str(
@@ -45,45 +63,58 @@ class CreateFeeTypeAPIView(APIView):
         ).strip()
 
         if not name:
-
             return CustomResponse.errorResponse(
                 description="Fee type name is required.",
             )
 
         if FeeType.objects.filter(
             school=school,
+            academic_year=academic_year,
             name=name,
         ).exists():
-
             return CustomResponse.errorResponse(
                 description="Fee type already exists.",
             )
 
+        is_optional = request.data.get(
+            "is_optional",
+            False,
+        )
+
+        refund_type = request.data.get(
+            "refund_type",
+            FeeType.RefundType.NON_REFUNDABLE,
+        )
+
+        valid_refund_types = [
+            choice[0]
+            for choice in FeeType.RefundType.choices
+        ]
+
+        if refund_type not in valid_refund_types:
+            return CustomResponse.errorResponse(
+                description=(
+                    "Invalid refund_type. "
+                    f"Allowed values: {', '.join(valid_refund_types)}."
+                ),
+            )
+
+        note = request.data.get("note")
+
         fee_type = FeeType.objects.create(
-
             school=school,
-
+            academic_year=academic_year,
             name=name,
-
-            is_optional=request.data.get(
-                "is_optional",
-                False,
-            ),
-
-            description=request.data.get(
-                "description",
-            ),
-
+            note=note,
+            is_optional=is_optional,
+            refund_type=refund_type,
         )
 
         return CustomResponse.successResponse(
-
             description="Fee type created successfully.",
-
             data={
                 "id": str(fee_type.id),
             },
-
         )
 
 class FeeTypeListAPIView(APIView):
@@ -99,18 +130,60 @@ class FeeTypeListAPIView(APIView):
 
         school = request.school
 
-        queryset = FeeType.objects.filter(
-            school=school,
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found.",
+            )
+
+        queryset = (
+            FeeType.objects
+            .select_related("academic_year")
+            .filter(
+                school=school,
+            )
         )
 
-        search = request.GET.get(
-            "search",
+        search = request.GET.get("search")
+
+        academic_year_id = request.GET.get(
+            "academic_year_id"
+        )
+
+        refund_type = request.GET.get(
+            "refund_type"
+        )
+
+        is_optional = request.GET.get(
+            "is_optional"
+        )
+
+        is_active = request.GET.get(
+            "is_active"
         )
 
         if search:
-
             queryset = queryset.filter(
                 name__icontains=search,
+            )
+
+        if academic_year_id:
+            queryset = queryset.filter(
+                academic_year_id=academic_year_id,
+            )
+
+        if refund_type:
+            queryset = queryset.filter(
+                refund_type=refund_type,
+            )
+
+        if is_optional is not None:
+            queryset = queryset.filter(
+                is_optional=is_optional.lower() == "true",
+            )
+
+        if is_active is not None:
+            queryset = queryset.filter(
+                is_active=is_active.lower() == "true",
             )
 
         paginator = CustomPageNumberPagination()
@@ -125,20 +198,34 @@ class FeeTypeListAPIView(APIView):
         for obj in queryset:
 
             data.append({
-
                 "id": str(obj.id),
 
                 "name": obj.name,
 
+                "academic_year": {
+                    "id": str(
+                        obj.academic_year.id
+                    ),
+                    "name": obj.academic_year.name,
+                },
+
+                "note": obj.note,
+
                 "is_optional": obj.is_optional,
 
-                "description": obj.description,
+                "refund_type": obj.refund_type,
 
+                "refund_type_display": (
+                    obj.get_refund_type_display()
+                ),
+
+                "is_active": obj.is_active,
             })
 
         return paginator.get_paginated_response(
             data,
         )
+
 
 class UpdateFeeTypeAPIView(APIView):
 
@@ -157,13 +244,17 @@ class UpdateFeeTypeAPIView(APIView):
 
         school = request.school
 
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found.",
+            )
+
         fee_type = FeeType.objects.filter(
             id=fee_type_id,
             school=school,
         ).first()
 
         if fee_type is None:
-
             return CustomResponse.errorResponse(
                 description="Fee type not found.",
             )
@@ -171,17 +262,72 @@ class UpdateFeeTypeAPIView(APIView):
         name = request.data.get(
             "name",
             fee_type.name,
-        ).strip()
+        )
+
+        name = str(name).strip()
+
+        if not name:
+            return CustomResponse.errorResponse(
+                description="Fee type name is required.",
+            )
 
         if FeeType.objects.filter(
             school=school,
+            academic_year=fee_type.academic_year,
             name=name,
         ).exclude(
             id=fee_type.id,
         ).exists():
-
             return CustomResponse.errorResponse(
                 description="Fee type already exists.",
+            )
+
+        if "academic_year_id" in request.data:
+
+            academic_year_id = request.data.get(
+                "academic_year_id"
+            )
+
+            academic_year = AcademicYear.objects.filter(
+                id=academic_year_id,
+                school=school,
+            ).first()
+
+            if academic_year is None:
+                return CustomResponse.errorResponse(
+                    description="Academic year not found.",
+                )
+
+            fee_type.academic_year = academic_year
+
+        # Check duplicate again if academic year is changed
+        if FeeType.objects.filter(
+            school=school,
+            academic_year=fee_type.academic_year,
+            name=name,
+        ).exclude(
+            id=fee_type.id,
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="Fee type already exists.",
+            )
+
+        refund_type = request.data.get(
+            "refund_type",
+            fee_type.refund_type,
+        )
+
+        valid_refund_types = [
+            choice[0]
+            for choice in FeeType.RefundType.choices
+        ]
+
+        if refund_type not in valid_refund_types:
+            return CustomResponse.errorResponse(
+                description=(
+                    "Invalid refund_type. "
+                    f"Allowed values: {', '.join(valid_refund_types)}."
+                ),
             )
 
         fee_type.name = name
@@ -191,16 +337,24 @@ class UpdateFeeTypeAPIView(APIView):
             fee_type.is_optional,
         )
 
-        fee_type.description = request.data.get(
-            "description",
-            fee_type.description,
+        fee_type.note = request.data.get(
+            "note",
+            fee_type.note,
         )
+
+        fee_type.refund_type = refund_type
+
+        if "is_active" in request.data:
+            fee_type.is_active = request.data.get(
+                "is_active"
+            )
 
         fee_type.save()
 
         return CustomResponse.successResponse(
             description="Fee type updated successfully.",
         )
+
 
 class DeleteFeeTypeAPIView(APIView):
 
