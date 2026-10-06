@@ -636,15 +636,6 @@ class FeeTemplateCollectionPlan(AuditModel):
             )
         ]
 
-        indexes = [
-            models.Index(
-                fields=["fee_template"],
-            ),
-            models.Index(
-                fields=["collection_plan"],
-            ),
-        ]
-
 class FeeInstallment(AuditModel):
     objects = SoftDeleteManager()
 

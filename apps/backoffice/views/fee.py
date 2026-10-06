@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 
 from apps.fee.models import FeeType, FeeTemplateItem, FeeTemplate, FeeCollectionPlan, FeeInstallment, \
     FeeInstallmentItem, LateFeeRule, FeeConcession, StudentFeeAssignment, StudentFee, StudentFeePayment, FeePlan, \
-    FeePlanInstallment, FeePlanGrade
+    FeePlanInstallment, FeePlanGrade, FeeTemplateCollectionPlan
 from apps.school.models.school import AcademicYear, Grade, Student
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
@@ -2145,6 +2145,218 @@ class UpdateFeeCollectionPlanAPIView(APIView):
             return CustomResponse.errorResponse(
                 description=(
                     "Failed to update collection plan."
+                ),
+            )
+
+class AddFeeCollectionPlansAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "fee_template.update"
+
+    @transaction.atomic
+    def post(
+        self,
+        request,
+        fee_template_id,
+    ):
+
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required.",
+            )
+
+        try:
+            # ---------------------------------------------------------
+            # 1. Validate Fee Template
+            # ---------------------------------------------------------
+
+            fee_template = (
+                FeeTemplate.objects
+                .select_related(
+                    "academic_year",
+                    "grade",
+                )
+                .filter(
+                    id=fee_template_id,
+                    school=school,
+                    is_active=True,
+                )
+                .first()
+            )
+
+            if not fee_template:
+                return CustomResponse.errorResponse(
+                    description="Fee template not found.",
+                )
+
+            # ---------------------------------------------------------
+            # 2. Get Collection Plan IDs
+            # ---------------------------------------------------------
+
+            collection_plan_ids = request.data.get(
+                "collection_plan_ids"
+            )
+
+            if not isinstance(
+                collection_plan_ids,
+                list,
+            ) or not collection_plan_ids:
+
+                return CustomResponse.errorResponse(
+                    description=(
+                        "collection_plan_ids must be a "
+                        "non-empty list."
+                    ),
+                )
+
+            # Remove duplicate IDs
+            collection_plan_ids = list(
+                dict.fromkeys(
+                    collection_plan_ids
+                )
+            )
+
+            # ---------------------------------------------------------
+            # 3. Validate Collection Plans
+            # ---------------------------------------------------------
+
+            collection_plans = list(
+                FeeCollectionPlan.objects.filter(
+                    id__in=collection_plan_ids,
+                    school=school,
+                    is_active=True,
+                )
+            )
+
+            found_ids = {
+                str(plan.id)
+                for plan in collection_plans
+            }
+
+            invalid_ids = [
+                str(plan_id)
+                for plan_id in collection_plan_ids
+                if str(plan_id) not in found_ids
+            ]
+
+            if invalid_ids:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Invalid or inactive collection plan(s): "
+                        + ", ".join(invalid_ids)
+                    ),
+                )
+
+            # ---------------------------------------------------------
+            # 4. Check Existing Plans
+            # ---------------------------------------------------------
+
+            existing_mappings = (
+                FeeTemplateCollectionPlan.objects
+                .filter(
+                    fee_template=fee_template,
+                    collection_plan_id__in=collection_plan_ids,
+                )
+                .select_related("collection_plan")
+            )
+
+            existing_plan_ids = {
+                str(mapping.collection_plan_id)
+                for mapping in existing_mappings
+            }
+
+            # ---------------------------------------------------------
+            # 5. Create New Mappings
+            # ---------------------------------------------------------
+
+            mappings_to_create = []
+
+            for collection_plan in collection_plans:
+
+                if str(collection_plan.id) in existing_plan_ids:
+                    continue
+
+                mappings_to_create.append(
+                    FeeTemplateCollectionPlan(
+                        fee_template=fee_template,
+                        collection_plan=collection_plan,
+                    )
+                )
+
+            if mappings_to_create:
+                FeeTemplateCollectionPlan.objects.bulk_create(
+                    mappings_to_create
+                )
+
+            # ---------------------------------------------------------
+            # 6. Get All Assigned Plans
+            # ---------------------------------------------------------
+
+            assigned_plans = (
+                FeeCollectionPlan.objects
+                .filter(
+                    template_mappings__fee_template=fee_template,
+                )
+                .order_by("name")
+                .distinct()
+            )
+
+            # ---------------------------------------------------------
+            # 7. Response
+            # ---------------------------------------------------------
+
+            return CustomResponse.successResponse(
+                description=(
+                    "Collection plans added to fee template "
+                    "successfully."
+                ),
+                data={
+                    "fee_template": {
+                        "id": str(
+                            fee_template.id
+                        ),
+                        "name": fee_template.name,
+                    },
+                    "collection_plans": [
+                        {
+                            "id": str(
+                                plan.id
+                            ),
+                            "name": plan.name,
+                            "plan_type": plan.plan_type,
+                            "plan_type_display": (
+                                plan.get_plan_type_display()
+                            ),
+                            "is_active": plan.is_active,
+                        }
+                        for plan in assigned_plans
+                    ],
+                },
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "fee_collection_plans_add_to_template_failed",
+                error=str(e),
+                fee_template_id=str(
+                    fee_template_id
+                ),
+                school_id=str(
+                    school.id
+                ),
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Failed to add collection plans "
+                    "to fee template."
                 ),
             )
 
