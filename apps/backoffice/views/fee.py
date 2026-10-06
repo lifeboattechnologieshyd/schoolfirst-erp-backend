@@ -2899,28 +2899,27 @@ class CreateLateFeeRuleAPIView(APIView):
 
         school = request.school
 
-        collection_plan = FeeCollectionPlan.objects.select_related(
-            "fee_template",
-        ).filter(
-            id=request.data.get("collection_plan_id"),
-            fee_template__school=school,
-        ).first()
-
-        if collection_plan is None:
-
+        if not school:
             return CustomResponse.errorResponse(
-                description="Collection plan not found.",
+                description="School is required.",
             )
+
+        # ---------------------------------------------------------
+        # 1. Validate Rule Type
+        # ---------------------------------------------------------
 
         rule_type = request.data.get(
             "rule_type",
         )
 
         if rule_type not in LateFeeRule.RuleType.values:
-
             return CustomResponse.errorResponse(
                 description="Invalid rule type.",
             )
+
+        # ---------------------------------------------------------
+        # 2. Validate Days
+        # ---------------------------------------------------------
 
         from_day = request.data.get(
             "from_day",
@@ -2931,54 +2930,131 @@ class CreateLateFeeRuleAPIView(APIView):
         )
 
         if from_day is None or to_day is None:
-
             return CustomResponse.errorResponse(
                 description="from_day and to_day are required.",
             )
 
-        if int(from_day) > int(to_day):
-
+        try:
+            from_day = int(from_day)
+            to_day = int(to_day)
+        except (TypeError, ValueError):
             return CustomResponse.errorResponse(
-                description="from_day should be less than or equal to to_day.",
+                description="from_day and to_day must be integers.",
             )
 
+        if from_day < 0 or to_day < 0:
+            return CustomResponse.errorResponse(
+                description="from_day and to_day cannot be negative.",
+            )
+
+        if from_day > to_day:
+            return CustomResponse.errorResponse(
+                description=(
+                    "from_day should be less than or equal to to_day."
+                ),
+            )
+
+        # ---------------------------------------------------------
+        # 3. Check Overlapping Rule
+        # ---------------------------------------------------------
+
         overlap = LateFeeRule.objects.filter(
-            collection_plan=collection_plan,
             from_day__lte=to_day,
             to_day__gte=from_day,
         ).exists()
 
         if overlap:
-
             return CustomResponse.errorResponse(
-                description="Late fee range overlaps existing rule.",
+                description=(
+                    "Late fee range overlaps existing rule."
+                ),
             )
 
+        # ---------------------------------------------------------
+        # 4. Validate Value
+        # ---------------------------------------------------------
+
+        value = request.data.get(
+            "value",
+        )
+
+        if value is None:
+            return CustomResponse.errorResponse(
+                description="Value is required.",
+            )
+
+        try:
+            value = Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return CustomResponse.errorResponse(
+                description="Invalid late fee value.",
+            )
+
+        if value < 0:
+            return CustomResponse.errorResponse(
+                description="Late fee value cannot be negative.",
+            )
+
+        # Percentage validation
+        if (
+            rule_type == LateFeeRule.RuleType.PERCENTAGE
+            and value > 100
+        ):
+            return CustomResponse.errorResponse(
+                description=(
+                    "Percentage value cannot be greater than 100."
+                ),
+            )
+
+        # ---------------------------------------------------------
+        # 5. Active / Enabled
+        # ---------------------------------------------------------
+
+        is_active = request.data.get(
+            "is_active",
+            True,
+        )
+
+        is_enabled = request.data.get(
+            "is_enabled",
+            True,
+        )
+
+        if not isinstance(is_active, bool):
+            return CustomResponse.errorResponse(
+                description="Invalid active status.",
+            )
+
+        if not isinstance(is_enabled, bool):
+            return CustomResponse.errorResponse(
+                description="Invalid enabled status.",
+            )
+
+        # ---------------------------------------------------------
+        # 6. Create Rule
+        # ---------------------------------------------------------
+
         late_fee_rule = LateFeeRule.objects.create(
-
-            collection_plan=collection_plan,
-
             from_day=from_day,
-
             to_day=to_day,
-
             rule_type=rule_type,
-
-            value=request.data.get(
-                "value",
+            value=value,
+            description=request.data.get(
+                "description",
             ),
-
+            is_active=is_active,
+            is_enabled=is_enabled,
         )
 
         return CustomResponse.successResponse(
-
             description="Late fee rule created successfully.",
-
             data={
-                "id": str(late_fee_rule.id),
+                "id": str(
+                    late_fee_rule.id
+                ),
             },
-
         )
+
 
 class LateFeeRuleListAPIView(APIView):
 
@@ -2993,62 +3069,58 @@ class LateFeeRuleListAPIView(APIView):
 
         school = request.school
 
-        queryset = LateFeeRule.objects.select_related(
-            "collection_plan",
-            "collection_plan__fee_template",
-        ).filter(
-            collection_plan__fee_template__school=school,
+        queryset = LateFeeRule.objects.filter(
+            school=school,
         )
 
-        collection_plan_id = request.GET.get(
-            "collection_plan_id",
-        )
+        rule_type = request.GET.get("rule_type")
+        is_active = request.GET.get("is_active")
+        is_enabled = request.GET.get("is_enabled")
 
-        if collection_plan_id:
-
+        if rule_type:
             queryset = queryset.filter(
-                collection_plan_id=collection_plan_id,
+                rule_type=rule_type,
             )
+
+        if is_active is not None:
+            queryset = queryset.filter(
+                is_active=is_active.lower() == "true",
+            )
+
+        if is_enabled is not None:
+            queryset = queryset.filter(
+                is_enabled=is_enabled.lower() == "true",
+            )
+
+        total = queryset.count()
 
         paginator = CustomPageNumberPagination()
 
         page = paginator.paginate_queryset(
-            queryset.order_by(
-                "from_day",
-            ),
+            queryset.order_by("from_day"),
             request,
         )
 
-        data = []
-
-        for obj in page:
-
-            data.append({
-
+        data = [
+            {
                 "id": str(obj.id),
-
-                "collection_plan": {
-
-                    "id": str(obj.collection_plan.id),
-
-                    "plan_type": obj.collection_plan.plan_type,
-
-                },
-
                 "from_day": obj.from_day,
-
                 "to_day": obj.to_day,
-
                 "rule_type": obj.rule_type,
-
+                "rule_type_display": obj.get_rule_type_display(),
                 "value": obj.value,
-
-            })
+                "description": obj.description,
+                "is_active": obj.is_active,
+                "is_enabled": obj.is_enabled,
+            }
+            for obj in page
+        ]
 
         return CustomResponse.successResponse(
             data=data,
-            total=queryset.count(),
+            total=total,
         )
+
 class LateFeeRuleDetailAPIView(APIView):
 
     permission_classes = [

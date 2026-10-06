@@ -773,10 +773,7 @@ class LateFeeRule(AuditModel):
 
         PERCENTAGE = "PERCENTAGE"
 
-    collection_plan = models.ForeignKey(
-        FeeCollectionPlan,
-        on_delete=models.CASCADE,
-    )
+
 
     from_day = models.PositiveIntegerField()
 
@@ -791,6 +788,17 @@ class LateFeeRule(AuditModel):
         max_digits=10,
         decimal_places=2,
     )
+    description = models.TextField(
+        null=True,
+        blank=True,
+    )
+    is_active = models.BooleanField(
+        default=True,
+    )
+    is_enabled = models.BooleanField(
+        default=True,
+    )
+
 
     class Meta:
         db_table = "late_fee_rules"
@@ -799,7 +807,6 @@ class LateFeeRule(AuditModel):
 
             models.UniqueConstraint(
                 fields=[
-                    "collection_plan",
                     "from_day",
                     "to_day",
                 ],
@@ -810,11 +817,7 @@ class LateFeeRule(AuditModel):
 
         indexes = [
 
-            models.Index(
-                fields=[
-                    "collection_plan",
-                ]
-            ),
+
 
             models.Index(
                 fields=[
