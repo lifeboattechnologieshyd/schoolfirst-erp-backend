@@ -257,7 +257,7 @@ urlpatterns = [
 
     path("fee-collection-plans/<uuid:collection_plan_id>",UpdateFeeCollectionPlanAPIView.as_view(),),
 
-    path("fee-templates/<uuid:fee_template_id>/collection-plans/",AddFeeCollectionPlansAPIView.as_view(),),
+    path("fee-templates/<uuid:fee_template_id>/collection-plans",AddFeeCollectionPlansAPIView.as_view(),),
 
     path("fee-installments/create",CreateFeeInstallmentAPIView.as_view(),),
 
