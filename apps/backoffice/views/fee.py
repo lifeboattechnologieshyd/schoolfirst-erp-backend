@@ -1152,50 +1152,7 @@ class CreateFeeCollectionPlanAPIView(APIView):
 
         try:
             # ---------------------------------------------------------
-            # 1. Validate Fee Template
-            # ---------------------------------------------------------
-
-            fee_template_id = request.data.get(
-                "fee_template_id",
-            )
-
-            if not fee_template_id:
-                return CustomResponse.errorResponse(
-                    description="Fee template is required.",
-                )
-
-            fee_template = (
-                FeeTemplate.objects
-                .filter(
-                    id=fee_template_id,
-                    school=school,
-                    is_active=True,
-                )
-                .first()
-            )
-
-            if not fee_template:
-                return CustomResponse.errorResponse(
-                    description="Fee template not found.",
-                )
-
-            # ---------------------------------------------------------
-            # 2. Check Collection Plan
-            # ---------------------------------------------------------
-
-            if FeeCollectionPlan.objects.filter(
-                fee_template=fee_template,
-            ).exists():
-
-                return CustomResponse.errorResponse(
-                    description=(
-                        "Collection plan already exists "
-                        "for this fee template."
-                    ),
-                )
-
-            # ---------------------------------------------------------
-            # 3. Validate Name
+            # 1. Validate Name
             # ---------------------------------------------------------
 
             name = str(
@@ -1211,7 +1168,19 @@ class CreateFeeCollectionPlanAPIView(APIView):
                 )
 
             # ---------------------------------------------------------
-            # 4. Validate Plan Type
+            # 2. Check Duplicate Name
+            # ---------------------------------------------------------
+
+            if FeeCollectionPlan.objects.filter(
+                school=school,
+                name=name,
+            ).exists():
+                return CustomResponse.errorResponse(
+                    description="Collection plan already exists.",
+                )
+
+            # ---------------------------------------------------------
+            # 3. Validate Plan Type
             # ---------------------------------------------------------
 
             plan_type = request.data.get(
@@ -1225,7 +1194,7 @@ class CreateFeeCollectionPlanAPIView(APIView):
                 )
 
             # ---------------------------------------------------------
-            # 5. Validate Active Status
+            # 4. Validate Active Status
             # ---------------------------------------------------------
 
             is_active = request.data.get(
@@ -1237,13 +1206,12 @@ class CreateFeeCollectionPlanAPIView(APIView):
                 is_active,
                 bool,
             ):
-
                 return CustomResponse.errorResponse(
                     description="Invalid active status.",
                 )
 
             # ---------------------------------------------------------
-            # 6. Validate Installments
+            # 5. Validate Installments
             # ---------------------------------------------------------
 
             installments_data = request.data.get(
@@ -1251,11 +1219,10 @@ class CreateFeeCollectionPlanAPIView(APIView):
                 [],
             )
 
-            if not isinstance(
-                installments_data,
-                list,
-            ) or not installments_data:
-
+            if (
+                not isinstance(installments_data, list)
+                or not installments_data
+            ):
                 return CustomResponse.errorResponse(
                     description="At least one installment is required.",
                 )
@@ -1276,15 +1243,15 @@ class CreateFeeCollectionPlanAPIView(APIView):
                     installment_data,
                     dict,
                 ):
-
                     return CustomResponse.errorResponse(
                         description=(
-                            f"Invalid installment data at position {index}."
+                            f"Invalid installment data at position "
+                            f"{index}."
                         ),
                     )
 
                 # -----------------------------------------------------
-                # Installment name
+                # Installment Name
                 # -----------------------------------------------------
 
                 installment_name = str(
@@ -1295,7 +1262,6 @@ class CreateFeeCollectionPlanAPIView(APIView):
                 ).strip()
 
                 if not installment_name:
-
                     return CustomResponse.errorResponse(
                         description=(
                             f"Installment {index}: "
@@ -1306,7 +1272,6 @@ class CreateFeeCollectionPlanAPIView(APIView):
                 name_key = installment_name.lower()
 
                 if name_key in installment_names:
-
                     return CustomResponse.errorResponse(
                         description=(
                             f"Installment {index}: "
@@ -1314,12 +1279,10 @@ class CreateFeeCollectionPlanAPIView(APIView):
                         ),
                     )
 
-                installment_names.add(
-                    name_key,
-                )
+                installment_names.add(name_key)
 
                 # -----------------------------------------------------
-                # Due date
+                # Due Date
                 # -----------------------------------------------------
 
                 due_date = installment_data.get(
@@ -1327,7 +1290,6 @@ class CreateFeeCollectionPlanAPIView(APIView):
                 )
 
                 if not due_date:
-
                     return CustomResponse.errorResponse(
                         description=(
                             f"Installment {index}: "
@@ -1340,7 +1302,6 @@ class CreateFeeCollectionPlanAPIView(APIView):
                 )
 
                 if not parsed_due_date:
-
                     return CustomResponse.errorResponse(
                         description=(
                             f"Installment {index}: "
@@ -1369,7 +1330,6 @@ class CreateFeeCollectionPlanAPIView(APIView):
                     )
 
                 if order <= 0:
-
                     return CustomResponse.errorResponse(
                         description=(
                             f"Installment {index}: "
@@ -1378,7 +1338,6 @@ class CreateFeeCollectionPlanAPIView(APIView):
                     )
 
                 if order in installment_orders:
-
                     return CustomResponse.errorResponse(
                         description=(
                             f"Installment {index}: "
@@ -1386,12 +1345,10 @@ class CreateFeeCollectionPlanAPIView(APIView):
                         ),
                     )
 
-                installment_orders.add(
-                    order,
-                )
+                installment_orders.add(order)
 
                 # -----------------------------------------------------
-                # Allocation percentage
+                # Allocation Percentage
                 # -----------------------------------------------------
 
                 allocation = installment_data.get(
@@ -1403,8 +1360,10 @@ class CreateFeeCollectionPlanAPIView(APIView):
                     allocation = Decimal(
                         str(allocation)
                     )
-                except (InvalidOperation, ValueError):
-
+                except (
+                    InvalidOperation,
+                    ValueError,
+                ):
                     return CustomResponse.errorResponse(
                         description=(
                             f"Installment {index}: "
@@ -1413,7 +1372,6 @@ class CreateFeeCollectionPlanAPIView(APIView):
                     )
 
                 if allocation < 0 or allocation > 100:
-
                     return CustomResponse.errorResponse(
                         description=(
                             f"Installment {index}: "
@@ -1424,21 +1382,18 @@ class CreateFeeCollectionPlanAPIView(APIView):
 
                 total_allocation += allocation
 
-                validated_installments.append(
-                    {
-                        "name": installment_name,
-                        "due_date": parsed_due_date,
-                        "order": order,
-                        "allocation_percentage": allocation,
-                    }
-                )
+                validated_installments.append({
+                    "name": installment_name,
+                    "due_date": parsed_due_date,
+                    "order": order,
+                    "allocation_percentage": allocation,
+                })
 
             # ---------------------------------------------------------
-            # 7. Allocation must be exactly 100%
+            # 6. Allocation Must Be Exactly 100%
             # ---------------------------------------------------------
 
             if total_allocation != Decimal("100"):
-
                 return CustomResponse.errorResponse(
                     description=(
                         "Total installment allocation must be 100%. "
@@ -1447,36 +1402,18 @@ class CreateFeeCollectionPlanAPIView(APIView):
                 )
 
             # ---------------------------------------------------------
-            # 8. Get Fee Template Items
-            # ---------------------------------------------------------
-
-            template_items = list(
-                fee_template.items.all()
-            )
-
-            if not template_items:
-
-                return CustomResponse.errorResponse(
-                    description=(
-                        "Fee template does not contain "
-                        "any fee items."
-                    ),
-                )
-
-            # ---------------------------------------------------------
-            # 9. Create Collection Plan
+            # 7. Create Collection Plan
             # ---------------------------------------------------------
 
             collection_plan = FeeCollectionPlan.objects.create(
-                fee_template=fee_template,
+                school=school,
                 name=name,
                 plan_type=plan_type,
                 is_active=is_active,
             )
 
             # ---------------------------------------------------------
-            # 10. Create Installments
-            #     + Installment Items
+            # 8. Create Installments
             # ---------------------------------------------------------
 
             created_installments = []
@@ -1499,28 +1436,8 @@ class CreateFeeCollectionPlanAPIView(APIView):
                     installment
                 )
 
-                # -----------------------------------------------------
-                # Create FeeInstallmentItems
-                # -----------------------------------------------------
-
-                for template_item in template_items:
-
-                    amount = (
-                        template_item.amount
-                        * installment_data[
-                            "allocation_percentage"
-                        ]
-                        / Decimal("100")
-                    )
-
-                    FeeInstallmentItem.objects.create(
-                        installment=installment,
-                        fee_template_item=template_item,
-                        amount=amount,
-                    )
-
             # ---------------------------------------------------------
-            # 11. Response
+            # 9. Response
             # ---------------------------------------------------------
 
             return CustomResponse.successResponse(
@@ -1580,36 +1497,39 @@ class FeeCollectionPlanListAPIView(APIView):
                 description="School is required.",
             )
 
-        queryset = FeeCollectionPlan.objects.select_related(
-            "fee_template",
-            "fee_template__grade",
-            "fee_template__academic_year",
-        ).prefetch_related(
-            "installments__items__fee_template_item__fee_type",
-        ).filter(
-            fee_template__school=school,
+        queryset = (
+            FeeCollectionPlan.objects
+            .filter(
+                school=school,
+            )
+            .prefetch_related(
+                "installments__items__fee_template_item__fee_type",
+                "template_mappings__fee_template__grade",
+                "template_mappings__fee_template__academic_year",
+            )
+            .order_by("name")
         )
 
-        academic_year_id = request.GET.get(
-            "academic_year_id",
+        plan_type = request.GET.get(
+            "plan_type",
         )
 
-        grade_id = request.GET.get(
-            "grade_id",
+        is_active = request.GET.get(
+            "is_active",
         )
 
         search = request.GET.get(
             "search",
         )
 
-        if academic_year_id:
+        if plan_type:
             queryset = queryset.filter(
-                fee_template__academic_year_id=academic_year_id,
+                plan_type=plan_type,
             )
 
-        if grade_id:
+        if is_active is not None:
             queryset = queryset.filter(
-                fee_template__grade_id=grade_id,
+                is_active=is_active.lower() == "true",
             )
 
         if search:
@@ -1622,16 +1542,17 @@ class FeeCollectionPlanListAPIView(APIView):
         paginator = CustomPageNumberPagination()
 
         page = paginator.paginate_queryset(
-            queryset.order_by(
-                "fee_template__grade__display_order",
-                "name",
-            ),
+            queryset,
             request,
         )
 
         data = []
 
         for obj in page:
+
+            # ---------------------------------------------------------
+            # Installments
+            # ---------------------------------------------------------
 
             installments = []
 
@@ -1641,27 +1562,35 @@ class FeeCollectionPlanListAPIView(APIView):
 
                 for item in installment.items.all():
 
+                    template_item = (
+                        item.fee_template_item
+                    )
+
+                    fee_type = (
+                        template_item.fee_type
+                    )
+
                     items.append({
                         "id": str(item.id),
 
                         "fee_template_item_id": str(
-                            item.fee_template_item.id
+                            template_item.id
                         ),
 
                         "fee_type": {
                             "id": str(
-                                item.fee_template_item.fee_type.id
+                                fee_type.id
                             ),
-                            "name": (
-                                item.fee_template_item.fee_type.name
-                            ),
+                            "name": fee_type.name,
                         },
 
                         "amount": item.amount,
                     })
 
                 installments.append({
-                    "id": str(installment.id),
+                    "id": str(
+                        installment.id
+                    ),
 
                     "name": installment.name,
 
@@ -1676,6 +1605,46 @@ class FeeCollectionPlanListAPIView(APIView):
                     "items": items,
                 })
 
+            # ---------------------------------------------------------
+            # Fee Templates
+            # ---------------------------------------------------------
+
+            fee_templates = []
+
+            for mapping in obj.template_mappings.all():
+
+                fee_template = mapping.fee_template
+
+                fee_templates.append({
+                    "id": str(
+                        fee_template.id
+                    ),
+
+                    "name": fee_template.name,
+
+                    "grade": {
+                        "id": str(
+                            fee_template.grade.id
+                        ),
+                        "name": fee_template.grade.name,
+                    },
+
+                    "academic_year": {
+                        "id": str(
+                            fee_template.academic_year.id
+                        ),
+                        "name": (
+                            fee_template
+                            .academic_year
+                            .name
+                        ),
+                    },
+                })
+
+            # ---------------------------------------------------------
+            # Response
+            # ---------------------------------------------------------
+
             data.append({
 
                 "id": str(obj.id),
@@ -1684,26 +1653,13 @@ class FeeCollectionPlanListAPIView(APIView):
 
                 "plan_type": obj.plan_type,
 
+                "plan_type_display": (
+                    obj.get_plan_type_display()
+                ),
+
                 "is_active": obj.is_active,
 
-                "fee_template": {
-                    "id": str(obj.fee_template.id),
-                    "name": obj.fee_template.name,
-                },
-
-                "grade": {
-                    "id": str(obj.fee_template.grade.id),
-                    "name": obj.fee_template.grade.name,
-                },
-
-                "academic_year": {
-                    "id": str(
-                        obj.fee_template.academic_year.id
-                    ),
-                    "name": (
-                        obj.fee_template.academic_year.name
-                    ),
-                },
+                "fee_templates": fee_templates,
 
                 "installments": installments,
             })
@@ -1712,8 +1668,6 @@ class FeeCollectionPlanListAPIView(APIView):
             data=data,
             total=total,
         )
-
-
 
 class FeeCollectionPlanDetailAPIView(APIView):
 
@@ -1782,6 +1736,8 @@ class FeeCollectionPlanDetailAPIView(APIView):
             }
 
         )
+
+
 class UpdateFeeCollectionPlanAPIView(APIView):
 
     permission_classes = [
@@ -1806,34 +1762,58 @@ class UpdateFeeCollectionPlanAPIView(APIView):
             )
 
         try:
+            # ---------------------------------------------------------
+            # 1. Get Collection Plan
+            # ---------------------------------------------------------
 
-            collection_plan = FeeCollectionPlan.objects.select_related(
-                "fee_template",
-            ).filter(
-                id=collection_plan_id,
-                fee_template__school=school,
-            ).first()
+            collection_plan = (
+                FeeCollectionPlan.objects
+                .filter(
+                    id=collection_plan_id,
+                    school=school,
+                )
+                .first()
+            )
 
             if collection_plan is None:
                 return CustomResponse.errorResponse(
                     description="Collection plan not found.",
                 )
 
-            # ---------------------------------
-            # Basic fields
-            # ---------------------------------
+            # ---------------------------------------------------------
+            # 2. Basic Fields
+            # ---------------------------------------------------------
 
-            name = str(
-                request.data.get(
-                    "name",
-                    collection_plan.name,
-                )
-            ).strip()
+            name = request.data.get(
+                "name",
+                collection_plan.name,
+            )
+
+            name = str(name).strip()
 
             if not name:
                 return CustomResponse.errorResponse(
                     description="Collection plan name is required.",
                 )
+
+            # ---------------------------------------------------------
+            # 3. Check Duplicate Name
+            # ---------------------------------------------------------
+
+            if FeeCollectionPlan.objects.filter(
+                school=school,
+                name=name,
+            ).exclude(
+                id=collection_plan.id,
+            ).exists():
+
+                return CustomResponse.errorResponse(
+                    description="Collection plan already exists.",
+                )
+
+            # ---------------------------------------------------------
+            # 4. Plan Type
+            # ---------------------------------------------------------
 
             plan_type = request.data.get(
                 "plan_type",
@@ -1841,23 +1821,32 @@ class UpdateFeeCollectionPlanAPIView(APIView):
             )
 
             if plan_type not in FeeCollectionPlan.PlanType.values:
+
                 return CustomResponse.errorResponse(
                     description="Invalid plan type.",
                 )
+
+            # ---------------------------------------------------------
+            # 5. Active Status
+            # ---------------------------------------------------------
 
             is_active = request.data.get(
                 "is_active",
                 collection_plan.is_active,
             )
 
-            if not isinstance(is_active, bool):
+            if not isinstance(
+                is_active,
+                bool,
+            ):
+
                 return CustomResponse.errorResponse(
                     description="Invalid active status.",
                 )
 
-            # ---------------------------------
-            # Installments
-            # ---------------------------------
+            # ---------------------------------------------------------
+            # 6. Installments
+            # ---------------------------------------------------------
 
             installments_data = request.data.get(
                 "installments",
@@ -1869,11 +1858,16 @@ class UpdateFeeCollectionPlanAPIView(APIView):
                 )
 
             if (
-                not isinstance(installments_data, list)
+                not isinstance(
+                    installments_data,
+                    list,
+                )
                 or not installments_data
             ):
                 return CustomResponse.errorResponse(
-                    description="At least one installment is required.",
+                    description=(
+                        "At least one installment is required."
+                    ),
                 )
 
             total_allocation = Decimal("0")
@@ -1894,13 +1888,14 @@ class UpdateFeeCollectionPlanAPIView(APIView):
                 ):
                     return CustomResponse.errorResponse(
                         description=(
-                            f"Invalid installment data at position {index}."
+                            f"Invalid installment data at position "
+                            f"{index}."
                         ),
                     )
 
-                # -------------------------
+                # -----------------------------------------------------
                 # Name
-                # -------------------------
+                # -----------------------------------------------------
 
                 installment_name = str(
                     installment_data.get(
@@ -1927,11 +1922,13 @@ class UpdateFeeCollectionPlanAPIView(APIView):
                         ),
                     )
 
-                installment_names.add(name_key)
+                installment_names.add(
+                    name_key
+                )
 
-                # -------------------------
-                # Due date
-                # -------------------------
+                # -----------------------------------------------------
+                # Due Date
+                # -----------------------------------------------------
 
                 due_date = installment_data.get(
                     "due_date",
@@ -1957,9 +1954,9 @@ class UpdateFeeCollectionPlanAPIView(APIView):
                         ),
                     )
 
-                # -------------------------
+                # -----------------------------------------------------
                 # Order
-                # -------------------------
+                # -----------------------------------------------------
 
                 order = installment_data.get(
                     "order",
@@ -1968,8 +1965,10 @@ class UpdateFeeCollectionPlanAPIView(APIView):
 
                 try:
                     order = int(order)
-                except (TypeError, ValueError):
-
+                except (
+                    TypeError,
+                    ValueError,
+                ):
                     return CustomResponse.errorResponse(
                         description=(
                             f"Installment {index}: "
@@ -1995,9 +1994,9 @@ class UpdateFeeCollectionPlanAPIView(APIView):
 
                 installment_orders.add(order)
 
-                # -------------------------
+                # -----------------------------------------------------
                 # Allocation
-                # -------------------------
+                # -----------------------------------------------------
 
                 allocation = installment_data.get(
                     "allocation_percentage",
@@ -2012,7 +2011,6 @@ class UpdateFeeCollectionPlanAPIView(APIView):
                     InvalidOperation,
                     ValueError,
                 ):
-
                     return CustomResponse.errorResponse(
                         description=(
                             f"Installment {index}: "
@@ -2024,58 +2022,36 @@ class UpdateFeeCollectionPlanAPIView(APIView):
                     return CustomResponse.errorResponse(
                         description=(
                             f"Installment {index}: "
-                            "allocation percentage "
-                            "must be between 0 and 100."
+                            "allocation percentage must be "
+                            "between 0 and 100."
                         ),
                     )
 
                 total_allocation += allocation
 
-                validated_installments.append(
-                    {
-                        "name": installment_name,
-                        "due_date": parsed_due_date,
-                        "order": order,
-                        "allocation_percentage": allocation,
-                    }
-                )
+                validated_installments.append({
+                    "name": installment_name,
+                    "due_date": parsed_due_date,
+                    "order": order,
+                    "allocation_percentage": allocation,
+                })
 
-            # ---------------------------------
-            # Allocation validation
-            # ---------------------------------
+            # ---------------------------------------------------------
+            # 7. Allocation Validation
+            # ---------------------------------------------------------
 
             if total_allocation != Decimal("100"):
                 return CustomResponse.errorResponse(
                     description=(
-                        "Total installment allocation "
-                        "must be 100%. "
+                        "Total installment allocation must be 100%. "
                         f"Current allocation is "
                         f"{total_allocation}%."
                     ),
                 )
 
-            # ---------------------------------
-            # Fee template items
-            # ---------------------------------
-
-            template_items = list(
-                collection_plan
-                .fee_template
-                .items
-                .all()
-            )
-
-            if not template_items:
-                return CustomResponse.errorResponse(
-                    description=(
-                        "Fee template does not contain "
-                        "any fee items."
-                    ),
-                )
-
-            # ---------------------------------
-            # Update collection plan
-            # ---------------------------------
+            # ---------------------------------------------------------
+            # 8. Update Collection Plan
+            # ---------------------------------------------------------
 
             collection_plan.name = name
             collection_plan.plan_type = plan_type
@@ -2089,9 +2065,9 @@ class UpdateFeeCollectionPlanAPIView(APIView):
                 ]
             )
 
-            # ---------------------------------
-            # Replace installments
-            # ---------------------------------
+            # ---------------------------------------------------------
+            # 9. Replace Installments
+            # ---------------------------------------------------------
 
             FeeInstallment.objects.filter(
                 collection_plan=collection_plan,
@@ -2117,43 +2093,35 @@ class UpdateFeeCollectionPlanAPIView(APIView):
                     installment
                 )
 
-                # -------------------------
-                # Create installment items
-                # -------------------------
-
-                for template_item in template_items:
-
-                    amount = (
-                        template_item.amount
-                        * installment_data[
-                            "allocation_percentage"
-                        ]
-                        / Decimal("100")
-                    )
-
-                    FeeInstallmentItem.objects.create(
-                        installment=installment,
-                        fee_template_item=template_item,
-                        amount=amount,
-                    )
+            # ---------------------------------------------------------
+            # 10. Response
+            # ---------------------------------------------------------
 
             return CustomResponse.successResponse(
                 description=(
                     "Collection plan updated successfully."
                 ),
                 data={
-                    "id": str(collection_plan.id),
+                    "id": str(
+                        collection_plan.id
+                    ),
                     "name": collection_plan.name,
                     "plan_type": collection_plan.plan_type,
+                    "plan_type_display": (
+                        collection_plan.get_plan_type_display()
+                    ),
                     "is_active": collection_plan.is_active,
                     "installments": [
                         {
-                            "id": str(installment.id),
+                            "id": str(
+                                installment.id
+                            ),
                             "name": installment.name,
                             "due_date": installment.due_date,
                             "order": installment.order,
                             "allocation_percentage": (
-                                installment.allocation_percentage
+                                installment
+                                .allocation_percentage
                             ),
                         }
                         for installment in created_installments
@@ -2169,7 +2137,9 @@ class UpdateFeeCollectionPlanAPIView(APIView):
                 collection_plan_id=str(
                     collection_plan_id
                 ),
-                school_id=str(school.id),
+                school_id=str(
+                    school.id
+                ),
             )
 
             return CustomResponse.errorResponse(
@@ -2177,8 +2147,6 @@ class UpdateFeeCollectionPlanAPIView(APIView):
                     "Failed to update collection plan."
                 ),
             )
-
-
 
 class CreateFeeInstallmentAPIView(APIView):
 

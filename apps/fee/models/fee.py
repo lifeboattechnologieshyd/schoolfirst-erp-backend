@@ -554,28 +554,27 @@ class FeeTemplateItem(AuditModel):
 
 class FeeCollectionPlan(AuditModel):
     objects = SoftDeleteManager()
-
     all_objects = models.Manager()
 
     class PlanType(models.TextChoices):
+        ANNUAL = "ANNUAL", "Annual"
+        TERM = "TERM", "Term"
+        MONTHLY = "MONTHLY", "Monthly"
+        QUARTERLY = "QUARTERLY", "Quarterly"
+        CUSTOM = "CUSTOM", "Custom"
 
-        ANNUAL = "ANNUAL"
-
-        TERM = "TERM"
-
-        MONTHLY = "MONTHLY"
-
-        QUARTERLY = "QUARTERLY"
-
-        CUSTOM = "CUSTOM"
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-
-
-    fee_template = models.OneToOneField(
-        FeeTemplate,
-        on_delete=models.CASCADE,
-        related_name="collection_plan",
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
     )
+
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="fee_collection_plans",
+    )
+
     name = models.CharField(
         max_length=100,
     )
@@ -592,14 +591,58 @@ class FeeCollectionPlan(AuditModel):
     class Meta:
         db_table = "fee_collection_plans"
 
-        indexes = [
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "school",
+                    "name",
+                ],
+                name="unique_fee_collection_plan",
+            )
+        ]
 
-            models.Index(
+class FeeTemplateCollectionPlan(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    fee_template = models.ForeignKey(
+        FeeTemplate,
+        on_delete=models.CASCADE,
+        related_name="collection_plan_mappings",
+    )
+
+    collection_plan = models.ForeignKey(
+        FeeCollectionPlan,
+        on_delete=models.CASCADE,
+        related_name="template_mappings",
+    )
+
+    class Meta:
+        db_table = "fee_template_collection_plans"
+
+        constraints = [
+            models.UniqueConstraint(
                 fields=[
                     "fee_template",
-                ]
-            ),
+                    "collection_plan",
+                ],
+                name="unique_fee_template_collection_plan",
+            )
+        ]
 
+        indexes = [
+            models.Index(
+                fields=["fee_template"],
+            ),
+            models.Index(
+                fields=["collection_plan"],
+            ),
         ]
 
 class FeeInstallment(AuditModel):
