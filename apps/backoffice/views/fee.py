@@ -4164,6 +4164,16 @@ class StudentFeeListAPIView(APIView):
                             "admission_number": (
                                 fee.student.admission_number
                             ),
+                            "grade_name": (
+                                fee.fee_template.grade.name
+                                if fee.fee_template and fee.fee_template.grade
+                                else None
+                            ),
+                            "section_name": (
+                                fee.student.section.name
+                                if fee.student.section
+                                else None
+                            ),
                         },
 
                         # =============================
