@@ -314,6 +314,17 @@ class StudentFee(AuditModel):
     class Meta:
         db_table = "student_fees"
 
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "student",
+                    "fee_template",
+                    "fee_type",
+                ],
+                name="unique_student_fee",
+            ),
+        ]
+
         indexes = [
             models.Index(fields=["student"]),
             models.Index(fields=["status"]),
