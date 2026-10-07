@@ -2869,15 +2869,28 @@ class UpdateStudentAPIView(APIView):
                         concession = None
 
                     # Update existing assignment
-                    fee_assignment = StudentFeeAssignment.objects.filter(
-                        student=student
+                    # fee_assignment = StudentFeeAssignment.objects.filter(
+                    #     student=student
+                    # ).first()
+
+                    # if fee_assignment:
+                    #     fee_assignment.concession = concession
+                    #     fee_assignment.save(
+                    #         update_fields=["concession"]
+                    #     )
+
+                    fee_template = FeeTemplate.objects.filter(
+                        school=school,
+                        academic_year=academic_year,
+                        grade=grade,
                     ).first()
 
-                    if fee_assignment:
-                        fee_assignment.concession = concession
-                        fee_assignment.save(
-                            update_fields=["concession"]
-                        )
+                    if fee_template is None:
+                        raise Exception(f"Fee template not configured for grade '{grade.name}'.")
+                    generate_student_fees(
+                        student=student,
+                        fee_template=fee_template,
+                    )
 
                 student.save()
 
