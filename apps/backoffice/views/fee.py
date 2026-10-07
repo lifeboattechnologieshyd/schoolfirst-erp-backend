@@ -508,12 +508,18 @@ class FeeTemplateListAPIView(APIView):
                 description="School is required.",
             )
 
-        queryset = FeeTemplate.objects.select_related(
-            "academic_year",
-            "grade",
-            "collection_plan",
-        ).filter(
-            school=school,
+        queryset = (
+            FeeTemplate.objects
+            .select_related(
+                "academic_year",
+                "grade",
+            )
+            .prefetch_related(
+                "collection_plan_mappings__collection_plan",
+            )
+            .filter(
+                school=school,
+            )
         )
 
         academic_year_id = request.GET.get(
@@ -559,14 +565,17 @@ class FeeTemplateListAPIView(APIView):
 
         for obj in page:
 
-            collection_plan = getattr(
-                obj,
-                "collection_plan",
-                None,
-            )
+            collection_plans = [
+                {
+                    "id": str(mapping.collection_plan.id),
+                    "name": mapping.collection_plan.name,
+                    "plan_type": mapping.collection_plan.plan_type,
+                    "is_active": mapping.collection_plan.is_active,
+                }
+                for mapping in obj.collection_plan_mappings.all()
+            ]
 
             data.append({
-
                 "id": str(obj.id),
 
                 "name": obj.name,
@@ -583,22 +592,14 @@ class FeeTemplateListAPIView(APIView):
 
                 "is_active": obj.is_active,
 
-                "collection_plan": (
-                    {
-                        "id": str(collection_plan.id),
-                        "name": collection_plan.name,
-                        "plan_type": collection_plan.plan_type,
-                        "is_active": collection_plan.is_active,
-                    }
-                    if collection_plan
-                    else None
-                ),
+                "collection_plans": collection_plans,
             })
 
         return CustomResponse.successResponse(
             total=total,
             data=data,
         )
+
 
 class FeeTemplateDetailAPIView(APIView):
 
@@ -684,7 +685,6 @@ class UpdateFeeTemplateAPIView(APIView):
         ).first()
 
         if fee_template is None:
-
             return CustomResponse.errorResponse(
                 description="Fee template not found.",
             )
@@ -693,6 +693,11 @@ class UpdateFeeTemplateAPIView(APIView):
             "name",
             fee_template.name,
         ).strip()
+
+        if not name:
+            return CustomResponse.errorResponse(
+                description="Name is required.",
+            )
 
         if FeeTemplate.objects.filter(
             school=school,
@@ -707,18 +712,93 @@ class UpdateFeeTemplateAPIView(APIView):
                 description="Fee template already exists.",
             )
 
-        fee_template.name = name
-
-        fee_template.is_active = request.data.get(
+        is_active = request.data.get(
             "is_active",
             fee_template.is_active,
         )
 
-        fee_template.save()
+        if not isinstance(is_active, bool):
+            return CustomResponse.errorResponse(
+                description="is_active must be a boolean.",
+            )
+
+        collection_plan_ids = request.data.get(
+            "collection_plan_ids",
+        )
+
+        fee_template.name = name
+        fee_template.is_active = is_active
+        fee_template.save(
+            update_fields=[
+                "name",
+                "is_active",
+            ],
+        )
+
+        if collection_plan_ids is not None:
+
+            if not isinstance(collection_plan_ids, list):
+                return CustomResponse.errorResponse(
+                    description="collection_plan_ids must be a list.",
+                )
+
+            collection_plans = FeeCollectionPlan.objects.filter(
+                id__in=collection_plan_ids,
+                school=school,
+                is_active=True,
+            )
+
+            found_plan_ids = {
+                str(plan.id)
+                for plan in collection_plans
+            }
+
+            requested_plan_ids = {
+                str(plan_id)
+                for plan_id in collection_plan_ids
+            }
+
+            invalid_plan_ids = requested_plan_ids - found_plan_ids
+
+            if invalid_plan_ids:
+                return CustomResponse.errorResponse(
+                    description="One or more collection plans are invalid.",
+                )
+
+            FeeTemplateCollectionPlan.objects.filter(
+                fee_template=fee_template,
+            ).exclude(
+                collection_plan_id__in=collection_plan_ids,
+            ).delete()
+
+            existing_plan_ids = set(
+                FeeTemplateCollectionPlan.objects.filter(
+                    fee_template=fee_template,
+                    collection_plan_id__in=collection_plan_ids,
+                ).values_list(
+                    "collection_plan_id",
+                    flat=True,
+                )
+            )
+
+            mappings = [
+                FeeTemplateCollectionPlan(
+                    fee_template=fee_template,
+                    collection_plan=collection_plan,
+                )
+                for collection_plan in collection_plans
+                if collection_plan.id not in existing_plan_ids
+            ]
+
+            if mappings:
+                FeeTemplateCollectionPlan.objects.bulk_create(
+                    mappings,
+                )
 
         return CustomResponse.successResponse(
             description="Fee template updated successfully.",
         )
+
 
 class DeleteFeeTemplateAPIView(APIView):
 
