@@ -3499,10 +3499,10 @@ class GetStaffAPIView(APIView):
             )
 
         # staff_type is required
-        if not staff_type:
-            return CustomResponse.errorResponse(
-                description="staff_type is required."
-            )
+        # if not staff_type:
+        #     return CustomResponse.errorResponse(
+        #         description="staff_type is required."
+        #     )
 
         # Validate staff type
         valid_staff_types = [
