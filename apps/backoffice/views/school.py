@@ -1831,12 +1831,12 @@ class CreateStudentAPIView(APIView):
                 if fee_template is None:
                     raise Exception(f"Fee template not configured for grade '{grade.name}'.")
 
-                StudentFeeAssignment.objects.create(
-                    student=student,
-                    fee_template=fee_template,
-                    concession=concession,
-                    assigned_by=request.user,
-                )
+                # StudentFeeAssignment.objects.create(
+                #     student=student,
+                #     fee_template=fee_template,
+                #     concession=concession,
+                #     assigned_by=request.user,
+                # )
 
                 generate_student_fees(
                     student=student,
