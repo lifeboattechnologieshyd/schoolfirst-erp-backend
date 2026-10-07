@@ -764,6 +764,12 @@ class LateFeeRule(AuditModel):
     all_objects = models.Manager()
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="late_fee_rules",
+    )
+
 
     class RuleType(models.TextChoices):
 
