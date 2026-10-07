@@ -3149,6 +3149,26 @@ class LateFeeRuleListAPIView(APIView):
 
         school = request.school
 
+        application_logger.info(
+            "Late fee rule list requested",
+            extra={
+                "school_id": str(school.id) if school else None,
+                "user_id": str(request.user.id),
+            },
+        )
+
+        if not school:
+            application_logger.warning(
+                "Late fee rule list failed: school not found",
+                extra={
+                    "user_id": str(request.user.id),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="School is required.",
+            )
+
         queryset = LateFeeRule.objects.filter(
             school=school,
         )
@@ -3173,6 +3193,18 @@ class LateFeeRuleListAPIView(APIView):
             )
 
         total = queryset.count()
+
+        application_logger.info(
+            "Late fee rule list fetched",
+            extra={
+                "school_id": str(school.id),
+                "user_id": str(request.user.id),
+                "rule_type": rule_type,
+                "is_active": is_active,
+                "is_enabled": is_enabled,
+                "total": total,
+            },
+        )
 
         paginator = CustomPageNumberPagination()
 
@@ -3275,15 +3307,43 @@ class UpdateLateFeeRuleAPIView(APIView):
 
         school = request.school
 
-        rule = LateFeeRule.objects.select_related(
-            "collection_plan",
-            "collection_plan__fee_template",
-        ).filter(
+        application_logger.info(
+            "Late fee rule update requested",
+            extra={
+                "school_id": str(school.id) if school else None,
+                "user_id": str(request.user.id),
+                "late_fee_rule_id": str(late_fee_rule_id),
+            },
+        )
+
+        if not school:
+            application_logger.warning(
+                "Late fee rule update failed: school not found",
+                extra={
+                    "user_id": str(request.user.id),
+                    "late_fee_rule_id": str(late_fee_rule_id),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="School is required.",
+            )
+
+        rule = LateFeeRule.objects.filter(
             id=late_fee_rule_id,
-            collection_plan__fee_template__school=school,
+            school=school,
         ).first()
 
         if rule is None:
+
+            application_logger.warning(
+                "Late fee rule not found",
+                extra={
+                    "school_id": str(school.id),
+                    "user_id": str(request.user.id),
+                    "late_fee_rule_id": str(late_fee_rule_id),
+                },
+            )
 
             return CustomResponse.errorResponse(
                 description="Late fee rule not found.",
@@ -3299,14 +3359,48 @@ class UpdateLateFeeRuleAPIView(APIView):
             rule.to_day,
         )
 
-        if int(from_day) > int(to_day):
+        try:
+            from_day = int(from_day)
+            to_day = int(to_day)
+        except (TypeError, ValueError):
+
+            application_logger.warning(
+                "Late fee rule update failed: invalid day range",
+                extra={
+                    "school_id": str(school.id),
+                    "user_id": str(request.user.id),
+                    "late_fee_rule_id": str(rule.id),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="from_day and to_day must be valid integers.",
+            )
+
+        if from_day < 0 or to_day < 0:
+            return CustomResponse.errorResponse(
+                description="from_day and to_day cannot be negative.",
+            )
+
+        if from_day > to_day:
+
+            application_logger.warning(
+                "Late fee rule update failed: invalid day range",
+                extra={
+                    "school_id": str(school.id),
+                    "user_id": str(request.user.id),
+                    "late_fee_rule_id": str(rule.id),
+                    "from_day": from_day,
+                    "to_day": to_day,
+                },
+            )
 
             return CustomResponse.errorResponse(
                 description="from_day should be less than or equal to to_day.",
             )
 
         overlap = LateFeeRule.objects.filter(
-            collection_plan=rule.collection_plan,
+            school=school,
             from_day__lte=to_day,
             to_day__gte=from_day,
         ).exclude(
@@ -3314,6 +3408,17 @@ class UpdateLateFeeRuleAPIView(APIView):
         ).exists()
 
         if overlap:
+
+            application_logger.warning(
+                "Late fee rule update failed: overlapping range",
+                extra={
+                    "school_id": str(school.id),
+                    "user_id": str(request.user.id),
+                    "late_fee_rule_id": str(rule.id),
+                    "from_day": from_day,
+                    "to_day": to_day,
+                },
+            )
 
             return CustomResponse.errorResponse(
                 description="Late fee range overlaps existing rule.",
@@ -3326,26 +3431,97 @@ class UpdateLateFeeRuleAPIView(APIView):
 
         if rule_type not in LateFeeRule.RuleType.values:
 
+            application_logger.warning(
+                "Late fee rule update failed: invalid rule type",
+                extra={
+                    "school_id": str(school.id),
+                    "user_id": str(request.user.id),
+                    "late_fee_rule_id": str(rule.id),
+                    "rule_type": rule_type,
+                },
+            )
+
             return CustomResponse.errorResponse(
                 description="Invalid rule type.",
             )
 
-        rule.from_day = from_day
-
-        rule.to_day = to_day
-
-        rule.rule_type = rule_type
-
-        rule.value = request.data.get(
+        value = request.data.get(
             "value",
             rule.value,
         )
 
+        try:
+            value = Decimal(str(value))
+        except (TypeError, ValueError, InvalidOperation):
+
+            return CustomResponse.errorResponse(
+                description="Value must be a valid number.",
+            )
+
+        if value < 0:
+            return CustomResponse.errorResponse(
+                description="Value cannot be negative.",
+            )
+
+        if (
+            rule_type == LateFeeRule.RuleType.PERCENTAGE
+            and value > 100
+        ):
+            return CustomResponse.errorResponse(
+                description="Percentage value cannot exceed 100.",
+            )
+
+        description = request.data.get(
+            "description",
+            rule.description,
+        )
+
+        is_active = request.data.get(
+            "is_active",
+            rule.is_active,
+        )
+
+        is_enabled = request.data.get(
+            "is_enabled",
+            rule.is_enabled,
+        )
+
+        if not isinstance(is_active, bool):
+            return CustomResponse.errorResponse(
+                description="is_active must be a boolean.",
+            )
+
+        if not isinstance(is_enabled, bool):
+            return CustomResponse.errorResponse(
+                description="is_enabled must be a boolean.",
+            )
+
+        rule.from_day = from_day
+        rule.to_day = to_day
+        rule.rule_type = rule_type
+        rule.value = value
+        rule.description = description
+        rule.is_active = is_active
+        rule.is_enabled = is_enabled
+
         rule.save()
+
+        application_logger.info(
+            "Late fee rule updated successfully",
+            extra={
+                "school_id": str(school.id),
+                "user_id": str(request.user.id),
+                "late_fee_rule_id": str(rule.id),
+                "from_day": from_day,
+                "to_day": to_day,
+                "rule_type": rule_type,
+            },
+        )
 
         return CustomResponse.successResponse(
             description="Late fee rule updated successfully.",
         )
+
 
 class CreateFeeConcessionAPIView(APIView):
 
