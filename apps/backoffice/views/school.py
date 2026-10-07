@@ -3498,19 +3498,20 @@ class GetStaffAPIView(APIView):
                 description="School not found."
             )
 
-        # Validate staff type
-        valid_staff_types = [
-            choice[0]
-            for choice in Staff.StaffType.choices
-        ]
+        if staff_type:
+            valid_staff_types = [
+                choice[0]
+                for choice in Staff.StaffType.choices
+            ]
 
-        if staff_type not in valid_staff_types:
-            return CustomResponse.errorResponse(
-                description=(
-                    f"Invalid staff_type. "
-                    f"Allowed values: {', '.join(valid_staff_types)}."
+            if staff_type not in valid_staff_types:
+                return CustomResponse.errorResponse(
+                    description=(
+                        f"Invalid staff_type. "
+                        f"Allowed values: "
+                        f"{', '.join(valid_staff_types)}."
+                    )
                 )
-            )
 
         try:
 
