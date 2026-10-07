@@ -3208,10 +3208,9 @@ class LateFeeRuleListAPIView(APIView):
 
         paginator = CustomPageNumberPagination()
 
-        page = paginator.paginate_queryset(
-            queryset.order_by("from_day"),
-            request,
-        )
+        queryset = LateFeeRule.objects.filter(
+            school=school,
+        ).order_by("from_day")
 
         data = [
             {
@@ -3225,12 +3224,12 @@ class LateFeeRuleListAPIView(APIView):
                 "is_active": obj.is_active,
                 "is_enabled": obj.is_enabled,
             }
-            for obj in page
+            for obj in queryset
         ]
 
         return CustomResponse.successResponse(
             data=data,
-            total=total,
+            total=queryset.count(),
         )
 
 class LateFeeRuleDetailAPIView(APIView):
