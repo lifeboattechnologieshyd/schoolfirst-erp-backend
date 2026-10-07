@@ -3146,7 +3146,6 @@ class LateFeeRuleListAPIView(APIView):
     required_permission = "late_fee_rule.view"
 
     def get(self, request):
-
         school = request.school
 
         application_logger.info(
@@ -3158,59 +3157,58 @@ class LateFeeRuleListAPIView(APIView):
         )
 
         if not school:
-            application_logger.warning(
-                "Late fee rule list failed: school not found",
-                extra={
-                    "user_id": str(request.user.id),
-                },
-            )
-
             return CustomResponse.errorResponse(
                 description="School is required.",
             )
+
+        application_logger.info(
+            "Before late fee queryset",
+            extra={
+                "school_id": str(school.id),
+            },
+        )
 
         queryset = LateFeeRule.objects.filter(
             school=school,
         )
 
-        rule_type = request.GET.get("rule_type")
-        is_active = request.GET.get("is_active")
-        is_enabled = request.GET.get("is_enabled")
-
-        if rule_type:
-            queryset = queryset.filter(
-                rule_type=rule_type,
-            )
-
-        if is_active is not None:
-            queryset = queryset.filter(
-                is_active=is_active.lower() == "true",
-            )
-
-        if is_enabled is not None:
-            queryset = queryset.filter(
-                is_enabled=is_enabled.lower() == "true",
-            )
+        application_logger.info(
+            "After late fee queryset",
+            extra={
+                "school_id": str(school.id),
+            },
+        )
 
         total = queryset.count()
 
         application_logger.info(
-            "Late fee rule list fetched",
+            "Late fee rule count completed",
             extra={
                 "school_id": str(school.id),
-                "user_id": str(request.user.id),
-                "rule_type": rule_type,
-                "is_active": is_active,
-                "is_enabled": is_enabled,
                 "total": total,
             },
         )
 
         paginator = CustomPageNumberPagination()
 
-        queryset = LateFeeRule.objects.filter(
-            school=school,
-        ).order_by("from_day")
+        application_logger.info(
+            "Before late fee pagination",
+            extra={
+                "school_id": str(school.id),
+            },
+        )
+
+        page = paginator.paginate_queryset(
+            queryset.order_by("from_day"),
+            request,
+        )
+
+        application_logger.info(
+            "After late fee pagination",
+            extra={
+                "school_id": str(school.id),
+            },
+        )
 
         data = [
             {
@@ -3224,12 +3222,21 @@ class LateFeeRuleListAPIView(APIView):
                 "is_active": obj.is_active,
                 "is_enabled": obj.is_enabled,
             }
-            for obj in queryset
+            for obj in page
         ]
+
+        application_logger.info(
+            "Late fee rule list completed",
+            extra={
+                "school_id": str(school.id),
+                "user_id": str(request.user.id),
+                "total": total,
+            },
+        )
 
         return CustomResponse.successResponse(
             data=data,
-            total=queryset.count(),
+            total=total,
         )
 
 class LateFeeRuleDetailAPIView(APIView):
