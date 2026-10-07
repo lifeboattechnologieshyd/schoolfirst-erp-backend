@@ -3498,12 +3498,6 @@ class GetStaffAPIView(APIView):
                 description="School not found."
             )
 
-        # staff_type is required
-        # if not staff_type:
-        #     return CustomResponse.errorResponse(
-        #         description="staff_type is required."
-        #     )
-
         # Validate staff type
         valid_staff_types = [
             choice[0]
@@ -3555,9 +3549,22 @@ class GetStaffAPIView(APIView):
 
             staffs = staffs.order_by("name")
 
+            # -------------------------------------------------
+            # Pagination
+            # -------------------------------------------------
+
+            total = staffs.count()
+
+            paginator = CustomPageNumberPagination()
+
+            paginated_staffs = paginator.paginate_queryset(
+                staffs,
+                request,
+            )
+
             data = []
 
-            for staff in staffs:
+            for staff in paginated_staffs:
 
                 user_roles = staff.user.school_roles
 
@@ -3583,12 +3590,20 @@ class GetStaffAPIView(APIView):
                     "status": staff.status,
                     "profile_image": staff.profile_image,
                     "address": staff.address,
-                    "emergency_contact_name": staff.emergency_contact_name,
-                    "emergency_contact_mobile": staff.emergency_contact_mobile,
-                    "branch": {
-                        "id": str(staff.branch.id),
-                        "name": staff.branch.name,
-                    } if staff.branch else None,
+                    "emergency_contact_name": (
+                        staff.emergency_contact_name
+                    ),
+                    "emergency_contact_mobile": (
+                        staff.emergency_contact_mobile
+                    ),
+                    "branch": (
+                        {
+                            "id": str(staff.branch.id),
+                            "name": staff.branch.name,
+                        }
+                        if staff.branch
+                        else None
+                    ),
                     "created_at": staff.created_at,
                 })
 
@@ -3612,7 +3627,9 @@ class GetStaffAPIView(APIView):
         return CustomResponse.successResponse(
             description="Staff fetched successfully.",
             data=data,
+            total=total,
         )
+
 
 class UpdateStaffAPIView(APIView):
 
