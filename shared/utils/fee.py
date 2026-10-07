@@ -1,14 +1,20 @@
 from apps.calendar.models import CalendarEvent, CalendarEventTarget
-from apps.fee.models import FeeInstallmentItem, StudentFee, StudentFeeAssignment, FeeTemplateItem
+from apps.fee.models import FeeInstallmentItem, StudentFee, StudentFeeAssignment, FeeTemplateItem, FeeConcession
 from shared.utils.calendar import create_calendar_event
+
+
+
+
+from decimal import Decimal
 
 
 def generate_student_fees(
     *,
     student,
     fee_template,
+    concession=None,
 ):
-    fee_template_items = (
+    fee_items = (
         FeeTemplateItem.objects
         .select_related("fee_type")
         .filter(
@@ -18,13 +24,38 @@ def generate_student_fees(
 
     student_fees = []
 
-    for item in fee_template_items:
+    for item in fee_items:
+        total_amount = item.amount
+        concession_amount = Decimal("0.00")
+
+        if concession:
+            if concession.concession_type == FeeConcession.Type.FLAT:
+                concession_amount = concession.value
+
+            elif concession.concession_type == FeeConcession.Type.PERCENTAGE:
+                concession_amount = (
+                    total_amount * concession.value
+                ) / Decimal("100")
+
+            # Never allow concession greater than fee amount
+            concession_amount = min(
+                concession_amount,
+                total_amount,
+            )
+
         student_fees.append(
             StudentFee(
+                school=student.school,
                 student=student,
-                fee_template_item=item,
+                fee_template=fee_template,
+                fee_type=item.fee_type,
+                concession=concession,
+                total_amount=total_amount,
+                concession_amount=concession_amount,
+                late_fee=Decimal("0.00"),
+                paid_amount=Decimal("0.00"),
                 due_date=None,
-                amount=item.amount,
+                status=StudentFee.Status.PENDING,
             )
         )
 
@@ -33,36 +64,4 @@ def generate_student_fees(
         ignore_conflicts=True,
     )
 
-    student_fees = (
-        StudentFee.objects
-        .filter(
-            student=student,
-            fee_template_item__fee_template=fee_template,
-        )
-        .select_related(
-            "fee_template_item__fee_type",
-        )
-    )
-
-    for student_fee in student_fees:
-        if CalendarEvent.objects.filter(
-            event_type=CalendarEvent.EventType.FEE,
-            reference_id=student_fee.id,
-        ).exists():
-            continue
-
-        create_calendar_event(
-            school=student.school,
-            title=(
-                f"{student_fee.fee_template_item.fee_type.name} Fee Due"
-            ),
-            description="",
-            event_type=CalendarEvent.EventType.FEE,
-            event_date=student_fee.due_date,
-            reference_id=student_fee.id,
-            target_type=CalendarEventTarget.TargetType.STUDENT,
-            students=[student],
-        )
-
     return student_fees
-
