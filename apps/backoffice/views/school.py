@@ -3536,6 +3536,11 @@ class GetStaffAPIView(APIView):
                 )
             )
 
+            if staff_type:
+                staffs = staffs.filter(
+                    staff_type=staff_type,
+                )
+
             if branch_id:
                 staffs = staffs.filter(
                     branch_id=branch_id,
