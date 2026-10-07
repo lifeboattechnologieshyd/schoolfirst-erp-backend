@@ -3115,6 +3115,7 @@ class CreateLateFeeRuleAPIView(APIView):
         # ---------------------------------------------------------
 
         late_fee_rule = LateFeeRule.objects.create(
+            school=school,
             from_day=from_day,
             to_day=to_day,
             rule_type=rule_type,
