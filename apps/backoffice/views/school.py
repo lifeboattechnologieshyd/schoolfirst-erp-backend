@@ -3127,6 +3127,7 @@ class StudentDocumentListAPIView(APIView):
                     "file_url": document.file_url,
                     "remarks": document.remarks,
                     "status": document.status,
+                    "created_at":document.created_at,
                 })
 
         except Exception as e:
