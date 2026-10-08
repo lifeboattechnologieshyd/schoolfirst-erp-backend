@@ -2476,6 +2476,8 @@ class StudentListAPIView(APIView):
                     "admission_date":student.admission_date,
                     "address":student.address,
                     "email":student.email,
+                    "religion":student.religion,
+                    "previous_school_name":student.previous_school_name,
                     "hostel_type": student.hostel_type,
                     "transport_required": student.transport_required,
                 })
