@@ -3545,7 +3545,6 @@ class GetStaffAPIView(APIView):
                 )
                 .filter(
                     school=school,
-                    staff_type=staff_type,
                 )
             )
 
