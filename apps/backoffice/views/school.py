@@ -2,7 +2,7 @@ from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
-from django.db.models import Q, Prefetch
+from django.db.models import Q, Prefetch, Count
 from apps.core.models import Roles, UserMaster, UserRoles
 from apps.fee.models import FeeTemplate, StudentFeeAssignment, FeeConcession
 from apps.school.models import School
@@ -1329,7 +1329,9 @@ class SectionListAPIView(APIView):
             branch_id=branch_id,
         )
 
-        sections = Section.objects.select_related("grade", "grade__school", "branch", "class_teacher",).filter(grade__school=school)
+        sections = Section.objects.select_related("grade", "grade__school", "branch", "class_teacher",).annotate(
+        student_count=Count("students", distinct=True)
+    ).filter(grade__school=school)
 
         if grade_id:
             sections = sections.filter(grade_id=grade_id)
@@ -1360,6 +1362,7 @@ class SectionListAPIView(APIView):
                     "staff_type": section.class_teacher.staff_type,
                 } if section.class_teacher else None,
                 "capacity": section.capacity,
+                "student_count": section.student_count,
                 "status": section.status,
             }
             for section in sections
