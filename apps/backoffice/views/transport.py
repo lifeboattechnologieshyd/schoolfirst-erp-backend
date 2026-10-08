@@ -5627,6 +5627,7 @@ class CreateStudentTransportAPIView(APIView):
 
 
 
+
 class StudentTransportListAPIView(APIView):
 
     permission_classes = [IsAuthenticated, HasPermission]
@@ -5683,12 +5684,31 @@ class StudentTransportListAPIView(APIView):
                     "academic_year",
                     "branch",
                     "student",
+
+                    # Vehicle assignment
                     "vehicle_assignment",
+
+                    # Vehicle
                     "vehicle_assignment__vehicle",
+
+                    # Route
                     "vehicle_assignment__route",
+
+                    # Driver
                     "vehicle_assignment__driver",
+
+                    # Student pickup/drop stops
                     "pickup_stop",
                     "drop_stop",
+                )
+                .prefetch_related(
+                    Prefetch(
+                        "vehicle_assignment__route__stops",
+                        queryset=RouteStop.objects.select_related(
+                            "stop"
+                        ),
+                        to_attr="route_stops",
+                    )
                 )
                 .filter(
                     school=school,
@@ -5712,6 +5732,7 @@ class StudentTransportListAPIView(APIView):
                 )
 
             if route_id:
+
                 transports = transports.filter(
                     vehicle_assignment__route_id=route_id,
                 )
@@ -5733,9 +5754,14 @@ class StudentTransportListAPIView(APIView):
             # =====================================================
 
             if search:
+
                 transports = transports.filter(
-                    Q(student__name__icontains=search)
-                    | Q(student__admission_number__icontains=search)
+                    Q(
+                        student__name__icontains=search
+                    )
+                    | Q(
+                        student__admission_number__icontains=search
+                    )
                     | Q(
                         vehicle_assignment__vehicle__vehicle_number__icontains=search
                     )
@@ -5752,41 +5778,120 @@ class StudentTransportListAPIView(APIView):
             # =====================================================
 
             transports = transports.order_by(
-                "student__name",
+                "student__name"
             )
 
+            # =====================================================
+            # RESPONSE DATA
+            # =====================================================
 
             data = []
 
             for transport in transports:
 
+                route = transport.vehicle_assignment.route
+
+                # -------------------------------------------------
+                # ROUTE STOPS
+                # -------------------------------------------------
+
+                route_stops = getattr(
+                    route,
+                    "route_stops",
+                    []
+                )
+
+                pickup_route_stop = next(
+                    (
+                        route_stop
+                        for route_stop in route_stops
+                        if (
+                            transport.pickup_stop
+                            and route_stop.stop_id
+                            == transport.pickup_stop_id
+                        )
+                    ),
+                    None,
+                )
+
+                drop_route_stop = next(
+                    (
+                        route_stop
+                        for route_stop in route_stops
+                        if (
+                            transport.drop_stop
+                            and route_stop.stop_id
+                            == transport.drop_stop_id
+                        )
+                    ),
+                    None,
+                )
+
+                # -------------------------------------------------
+                # VEHICLE
+                # -------------------------------------------------
+
+                vehicle = (
+                    transport.vehicle_assignment.vehicle
+                    if transport.vehicle_assignment
+                    else None
+                )
+
+                # -------------------------------------------------
+                # DRIVER
+                # -------------------------------------------------
+
+                driver = (
+                    transport.vehicle_assignment.driver
+                    if transport.vehicle_assignment
+                    else None
+                )
+
                 data.append(
                     {
                         "id": str(transport.id),
+
+                        # =========================================
+                        # ACADEMIC YEAR
+                        # =========================================
 
                         "academic_year": {
                             "id": str(
                                 transport.academic_year.id
                             ),
-                            "name": transport.academic_year.name,
+                            "name": (
+                                transport.academic_year.name
+                            ),
                         },
+
+                        # =========================================
+                        # BRANCH
+                        # =========================================
 
                         "branch": (
                             {
                                 "id": str(
                                     transport.branch.id
                                 ),
-                                "name": transport.branch.name,
+                                "name": (
+                                    transport.branch.name
+                                ),
                             }
                             if transport.branch
                             else None
                         ),
 
+                        # =========================================
+                        # STUDENT
+                        # =========================================
+
                         "student": {
                             "id": str(
                                 transport.student.id
                             ),
-                            "name": transport.student.name,
+                            "name": (
+                                transport.student.name
+                            ),
                             "admission_number": (
                                 transport.student.admission_number
                             ),
@@ -5797,22 +5902,52 @@ class StudentTransportListAPIView(APIView):
                         # =========================================
 
                         "route": {
-                            "id": str(
-                                transport.vehicle_assignment.route.id
-                            ),
+                            "id": str(route.id),
                             "route_name": (
-                                transport.vehicle_assignment.route.route_name
+                                route.route_name
                             ),
                             "route_code": (
-                                transport.vehicle_assignment.route.route_code
+                                route.route_code
                             ),
                             "shift": (
-                                transport.vehicle_assignment.route.shift
+                                route.shift
                             ),
                             "shift_display": (
-                                transport.vehicle_assignment.route.get_shift_display()
+                                route.get_shift_display()
                             ),
                         },
+
+                        # =========================================
+                        # VEHICLE
+                        # =========================================
+
+                        "vehicle": (
+                            {
+                                "id": str(vehicle.id),
+                                "vehicle_number": (
+                                    vehicle.vehicle_number
+                                ),
+                            }
+                            if vehicle
+                            else None
+                        ),
+
+                        # =========================================
+                        # DRIVER
+                        # =========================================
+
+                        "driver": (
+                            {
+                                "id": str(driver.id),
+                                "employee_id": (
+                                    driver.employee_id
+                                ),
+                                "name": driver.name,
+                                "mobile": driver.mobile,
+                            }
+                            if driver
+                            else None
+                        ),
 
                         # =========================================
                         # PICKUP STOP
@@ -5825,6 +5960,11 @@ class StudentTransportListAPIView(APIView):
                                 ),
                                 "stop_name": (
                                     transport.pickup_stop.stop_name
+                                ),
+                                "pickup_time": (
+                                    pickup_route_stop.pickup_time
+                                    if pickup_route_stop
+                                    else None
                                 ),
                             }
                             if transport.pickup_stop
@@ -5843,16 +5983,31 @@ class StudentTransportListAPIView(APIView):
                                 "stop_name": (
                                     transport.drop_stop.stop_name
                                 ),
+                                "drop_time": (
+                                    drop_route_stop.drop_time
+                                    if drop_route_stop
+                                    else None
+                                ),
                             }
                             if transport.drop_stop
                             else None
                         ),
 
-                        "trip_type": transport.trip_type,
+                        # =========================================
+                        # TRIP TYPE
+                        # =========================================
+
+                        "trip_type": (
+                            transport.trip_type
+                        ),
 
                         "trip_type_display": (
                             transport.get_trip_type_display()
                         ),
+
+                        # =========================================
+                        # STATUS
+                        # =========================================
 
                         "status": transport.status,
 
@@ -5860,11 +6015,19 @@ class StudentTransportListAPIView(APIView):
                             transport.get_status_display()
                         ),
 
+                        # =========================================
+                        # OTHER
+                        # =========================================
+
                         "remarks": transport.remarks,
 
-                        "created_at": transport.created_at,
+                        "created_at": (
+                            transport.created_at
+                        ),
 
-                        "updated_at": transport.updated_at,
+                        "updated_at": (
+                            transport.updated_at
+                        ),
                     }
                 )
 
@@ -5874,6 +6037,12 @@ class StudentTransportListAPIView(APIView):
                 "student_transport_list_failed",
                 requested_by=str(request.user.id),
                 school_id=str(school.id),
+                academic_year_id=academic_year_id,
+                branch_id=branch_id,
+                route_id=route_id,
+                student_id=student_id,
+                status=status,
+                search=search,
                 reason="student_transport_fetch_failed",
                 error=str(e),
             )
@@ -5882,7 +6051,9 @@ class StudentTransportListAPIView(APIView):
                 description=str(e),
             )
 
-
+        # =========================================================
+        # SUCCESS LOG
+        # =========================================================
 
         application_logger.info(
             "student_transport_list_fetched",
@@ -5890,8 +6061,6 @@ class StudentTransportListAPIView(APIView):
             school_id=str(school.id),
             returned_count=len(data),
         )
-
-
 
         return CustomResponse.successResponse(
             description=(
