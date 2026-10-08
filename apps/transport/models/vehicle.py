@@ -647,15 +647,15 @@ class StudentTransport(AuditModel):
     class Meta:
         db_table = "student_transport"
 
-        constraints = [
-            models.UniqueConstraint(
-                fields=[
-                    "academic_year",
-                    "student",
-                ],
-                name="unique_student_transport",
-            ),
-        ]
+        # constraints = [
+        #     models.UniqueConstraint(
+        #         fields=[
+        #             "academic_year",
+        #             "student",
+        #         ],
+        #         name="unique_student_transport",
+        #     ),
+        # ]
 
         indexes = [
             models.Index(fields=["school"]),

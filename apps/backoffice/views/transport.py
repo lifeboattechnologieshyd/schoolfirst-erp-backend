@@ -5493,25 +5493,25 @@ class CreateStudentTransportAPIView(APIView):
         # EXISTING STUDENT TRANSPORT
         # =========================================================
 
-        if StudentTransport.objects.filter(
-            academic_year=academic_year,
-            student=student,
-        ).exists():
-
-            application_logger.warning(
-                "student_transport_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                student_id=str(student.id),
-                academic_year_id=str(academic_year.id),
-                reason="student_transport_already_exists",
-            )
-
-            return CustomResponse.errorResponse(
-                description=(
-                    "Transport is already assigned to this student."
-                )
-            )
+        # if StudentTransport.objects.filter(
+        #     academic_year=academic_year,
+        #     student=student,
+        # ).exists():
+        #
+        #     application_logger.warning(
+        #         "student_transport_create_failed",
+        #         requested_by=str(request.user.id),
+        #         school_id=str(school.id),
+        #         student_id=str(student.id),
+        #         academic_year_id=str(academic_year.id),
+        #         reason="student_transport_already_exists",
+        #     )
+        #
+        #     return CustomResponse.errorResponse(
+        #         description=(
+        #             "Transport is already assigned to this student."
+        #         )
+        #     )
 
         # =========================================================
         # CREATE
