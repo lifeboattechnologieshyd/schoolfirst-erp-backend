@@ -3039,6 +3039,7 @@ class CreateLateFeeRuleAPIView(APIView):
         # ---------------------------------------------------------
 
         overlap = LateFeeRule.objects.filter(
+            school=school,
             from_day__lte=to_day,
             to_day__gte=from_day,
         ).exists()
