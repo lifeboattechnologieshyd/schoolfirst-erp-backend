@@ -826,6 +826,7 @@ class LateFeeRule(AuditModel):
                 fields=[
                     "from_day",
                     "to_day",
+                    "school"
                 ],
                 name="unique_late_fee_rule",
             )
