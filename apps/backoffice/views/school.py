@@ -4760,7 +4760,6 @@ class GradeSubjectAssignAPIView(APIView):
                 data={
                     "grade_id": grade.id,
                     "grade_name": grade.name,
-                    "assigned_subjects": len(subject_grade_objects),
                 },
                 description="Subjects assigned to grade successfully.",
             )
