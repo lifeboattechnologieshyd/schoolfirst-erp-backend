@@ -412,8 +412,8 @@ class BranchAPIView(APIView):
                 description=str(e),
             )
 
-class BranchLISTAPIView(APIView):
 
+class BranchLISTAPIView(APIView):
     permission_classes = [
         IsAuthenticated,
         HasPermission,
@@ -422,7 +422,6 @@ class BranchLISTAPIView(APIView):
     required_permission = "branch.view"
 
     def get(self, request):
-
         school = request.school
         search = request.query_params.get("search")
 
@@ -434,27 +433,27 @@ class BranchLISTAPIView(APIView):
         )
 
         if school is None:
-
             return CustomResponse.errorResponse(
                 description="School not found.",
             )
 
         try:
-
             check_permission(
                 request,
                 "branch.view",
                 school.id,
             )
 
-            queryset = Branch.objects.filter(
-                school=school,
-            ).select_related(
-                "school",
+            queryset = (
+                Branch.objects.filter(school=school)
+                .select_related("school")
+                .annotate(
+                    total_students=Count("students", distinct=True),
+                    total_staffs=Count("staffs", distinct=True),
+                )
             )
 
             if search:
-
                 queryset = queryset.filter(
                     name__icontains=search,
                 )
@@ -462,7 +461,6 @@ class BranchLISTAPIView(APIView):
             data = []
 
             for branch in queryset:
-
                 data.append({
                     "id": str(branch.id),
                     "school_id": str(branch.school_id),
@@ -478,6 +476,8 @@ class BranchLISTAPIView(APIView):
                     "pincode": branch.pincode,
                     "branch_head_name": branch.branch_head_name,
                     "status": branch.status,
+                    "total_students": branch.total_students,
+                    "total_staffs": branch.total_staffs,
                 })
 
             application_logger.info(
@@ -494,7 +494,6 @@ class BranchLISTAPIView(APIView):
             )
 
         except Exception as e:
-
             application_logger.exception(
                 "branch_list_failed",
                 requested_by=str(request.user.id),
