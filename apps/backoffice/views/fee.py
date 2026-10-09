@@ -6057,3 +6057,223 @@ class StudentFeePaymentCreateAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Failed to record student fee payment."
             )
+        
+        
+class StudentFeePaymentListAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "student_fee_payment.view"
+
+    def get(self, request):
+        school = request.school
+
+        grade_id = request.query_params.get("grade_id")
+        student_id = request.query_params.get("student_id")
+        receipt_number = request.query_params.get("receipt_number")
+        payment_mode = request.query_params.get("payment_mode")
+        start_date = request.query_params.get("start_date")
+        end_date = request.query_params.get("end_date")
+
+        application_logger.info(
+            "student_fee_payment_list_requested",
+            extra={
+                "school_id": str(school.id) if school else None,
+                "grade_id": grade_id,
+                "student_id": student_id,
+                "receipt_number": receipt_number,
+                "payment_mode": payment_mode,
+                "requested_by": str(request.user.id),
+            },
+        )
+
+        try:
+            if school is None:
+                return CustomResponse.errorResponse(
+                    description="School not found."
+                )
+
+
+
+            # --------------------------------------------------
+            # Validate filters
+            # --------------------------------------------------
+
+            if start_date:
+                parsed_start_date = parse_date(start_date)
+
+                if parsed_start_date is None:
+                    return CustomResponse.errorResponse(
+                        description="Invalid start_date. Use YYYY-MM-DD."
+                    )
+
+            if end_date:
+                parsed_end_date = parse_date(end_date)
+
+                if parsed_end_date is None:
+                    return CustomResponse.errorResponse(
+                        description="Invalid end_date. Use YYYY-MM-DD."
+                    )
+
+            if start_date and end_date and parsed_start_date > parsed_end_date:
+                return CustomResponse.errorResponse(
+                    description="start_date cannot be later than end_date."
+                )
+
+            valid_modes = [
+                choice[0]
+                for choice in StudentFeePayment.PaymentMode.choices
+            ]
+
+            if payment_mode and payment_mode not in valid_modes:
+                return CustomResponse.errorResponse(
+                    description="Invalid payment mode."
+                )
+
+            # --------------------------------------------------
+            # Base queryset
+            # --------------------------------------------------
+
+            queryset = (
+                StudentFeePayment.objects
+                .filter(school=school)
+                .select_related(
+                    "student_fee",
+                    "student_fee__student",
+                    "student_fee__fee_type",
+                    "collected_by",
+                )
+                .order_by("-payment_date", "-created_at")
+            )
+
+            # --------------------------------------------------
+            # Apply filters
+            # --------------------------------------------------
+
+            if grade_id:
+                queryset = queryset.filter(
+                    student_fee__student__grade_id=grade_id,
+                )
+
+            if student_id:
+                queryset = queryset.filter(
+                    student_fee__student_id=student_id,
+                )
+
+            if receipt_number:
+                queryset = queryset.filter(
+                    receipt_number__icontains=receipt_number,
+                )
+
+            if payment_mode:
+                queryset = queryset.filter(
+                    payment_mode=payment_mode,
+                )
+
+            if start_date:
+                queryset = queryset.filter(
+                    payment_date__date__gte=parsed_start_date,
+                )
+
+            if end_date:
+                queryset = queryset.filter(
+                    payment_date__date__lte=parsed_end_date,
+                )
+
+            # --------------------------------------------------
+            # Exclude cancelled payments
+            # --------------------------------------------------
+
+            queryset = queryset.filter(is_cancelled=False)
+
+            # --------------------------------------------------
+            # Calculate totals
+            # --------------------------------------------------
+
+            aggregates = queryset.aggregate(
+                total_amount=Sum("amount"),
+            )
+
+            total_amount = (
+                aggregates["total_amount"] or Decimal("0.00")
+            )
+
+            total_count = queryset.count()
+
+            # --------------------------------------------------
+            # Build response
+            # --------------------------------------------------
+
+            payments = []
+
+            for payment in queryset:
+                fee = payment.student_fee
+                student = fee.student
+
+                payments.append({
+                    "payment_id": str(payment.id),
+                    "receipt_number": payment.receipt_number,
+                    "student": {
+                        "id": str(student.id),
+                        "name": student.name,
+                        "admission_number": student.admission_number,
+                    },
+                    "grade": {
+                        "id": str(student.grade_id),
+                        "name": student.grade.name,
+                    } if student.grade else None,
+                    "student_fee": {
+                        "id": str(fee.id),
+                        "fee_type": fee.fee_type.name,
+                        "total_amount": str(fee.total_amount),
+                        "concession_amount": str(
+                            fee.concession_amount
+                        ),
+                        "late_fee": str(fee.late_fee),
+                        "paid_amount": str(fee.paid_amount),
+                        "status": fee.status,
+                    },
+                    "amount": str(payment.amount),
+                    "payment_mode": payment.payment_mode,
+                    "payment_date": payment.payment_date,
+                    "transaction_id": payment.transaction_id,
+                    "gateway_name": payment.gateway_name,
+                    "remarks": payment.remarks,
+                    "collected_by": (
+                        str(payment.collected_by_id)
+                        if payment.collected_by_id
+                        else None
+                    ),
+                })
+
+            application_logger.info(
+                "student_fee_payment_list_fetched",
+                extra={
+                    "school_id": str(school.id),
+                    "returned_count": total_count,
+                    "total_amount": str(total_amount),
+                    "requested_by": str(request.user.id),
+                },
+            )
+
+            return CustomResponse.successResponse(
+                description="Student fee payments fetched successfully.",
+                data={
+                    "total_count": total_count,
+                    "total_amount": str(total_amount),
+                    "payments": payments,
+                },
+            )
+
+        except Exception:
+            application_logger.exception(
+                "student_fee_payment_list_failed",
+                extra={
+                    "school_id": str(school.id) if school else None,
+                    "grade_id": grade_id,
+                    "student_id": student_id,
+                    "requested_by": str(request.user.id),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to fetch student fee payments."
+            )
