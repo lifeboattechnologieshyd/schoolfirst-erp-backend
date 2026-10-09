@@ -2892,18 +2892,18 @@ class UpdateStudentAPIView(APIView):
                     #         update_fields=["concession"]
                     #     )
 
-                    # fee_template = FeeTemplate.objects.filter(
-                    #     school=school,
-                    #     academic_year=academic_year,
-                    #     grade=grade,
-                    # ).first()
-                    #
-                    # if fee_template is None:
-                    #     raise Exception(f"Fee template not configured for grade '{grade.name}'.")
-                    # generate_student_fees(
-                    #     student=student,
-                    #     fee_template=fee_template,
-                    # )
+                    fee_template = FeeTemplate.objects.filter(
+                        school=school,
+                        academic_year=academic_year,
+                        grade=grade,
+                    ).first()
+
+                    if fee_template is None:
+                        raise Exception(f"Fee template not configured for grade '{grade.name}'.")
+                    generate_student_fees(
+                        student=student,
+                        fee_template=fee_template,
+                    )
 
                 student.save()
 
