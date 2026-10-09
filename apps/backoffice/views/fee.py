@@ -6011,6 +6011,7 @@ class StudentFeePaymentCreateAPIView(APIView):
                     description="Student fee payment recorded successfully.",
                     data={
                         "student_id": str(student.id),
+                        "receipt_number": receipt_number,
                         "payment_amount": str(payment_amount),
                         "payments": created_payments,
                         "fee_summary": {
