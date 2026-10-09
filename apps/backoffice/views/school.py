@@ -507,6 +507,7 @@ class BranchLISTAPIView(APIView):
             )
 
 
+
 class BranchUpdateAPIView(APIView):
 
     permission_classes = [
