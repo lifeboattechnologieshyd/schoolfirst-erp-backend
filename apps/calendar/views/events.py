@@ -173,6 +173,7 @@ class CalendarEventListAPIView(APIView):
                 "end_time": event.end_time,
                 "is_all_day": event.is_all_day,
                 "status": event.status,
+                "color": event.color,
                 "reference_id": (
                     str(event.reference_id)
                     if event.reference_id
