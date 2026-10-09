@@ -2,7 +2,8 @@ import uuid
 from decimal import Decimal
 
 from django.db.models import Q, Sum
-from django.utils.dateparse import parse_date
+from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
@@ -5651,4 +5652,407 @@ class FeePlanInstallmentUpdateAPIView(APIView):
 
             return CustomResponse.errorResponse(
                 description="Failed to update fee plan installment."
+            )
+
+
+
+
+class StudentFeePaymentCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "student_fee_payment.create"
+
+    def post(self, request):
+        school = request.school
+
+        student_id = request.data.get("student_id")
+        receipt_number = request.data.get("receipt_number")
+        amount = request.data.get("amount")
+        payment_mode = request.data.get("payment_mode")
+        payment_date = request.data.get("payment_date")
+
+        transaction_id = request.data.get("transaction_id")
+        gateway_name = request.data.get("gateway_name")
+        remarks = request.data.get("remarks")
+
+        application_logger.info(
+            "student_fee_payment_started",
+            extra={
+                "school_id": str(school.id),
+                "student_id": str(student_id),
+                "receipt_number": receipt_number,
+            },
+        )
+
+        try:
+            # --------------------------------------------------
+            # Validate required fields
+            # --------------------------------------------------
+
+            if not student_id:
+                return CustomResponse.errorResponse(
+                    description="Student ID is required."
+                )
+
+            if not receipt_number:
+                return CustomResponse.errorResponse(
+                    description="Receipt number is required."
+                )
+
+            if amount in (None, ""):
+                return CustomResponse.errorResponse(
+                    description="Payment amount is required."
+                )
+
+            if not payment_mode:
+                return CustomResponse.errorResponse(
+                    description="Payment mode is required."
+                )
+
+            # --------------------------------------------------
+            # Validate amount
+            # --------------------------------------------------
+
+            try:
+                payment_amount = Decimal(str(amount))
+            except (InvalidOperation, ValueError, TypeError):
+                return CustomResponse.errorResponse(
+                    description="Invalid payment amount."
+                )
+
+            if (
+                not payment_amount.is_finite()
+                or payment_amount <= Decimal("0.00")
+                or payment_amount.as_tuple().exponent < -2
+            ):
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Payment amount must be positive "
+                        "and have at most two decimal places."
+                    )
+                )
+
+            # --------------------------------------------------
+            # Validate payment mode
+            # --------------------------------------------------
+
+            valid_modes = [
+                choice[0]
+                for choice in StudentFeePayment.PaymentMode.choices
+            ]
+
+            if payment_mode not in valid_modes:
+                return CustomResponse.errorResponse(
+                    description="Invalid payment mode."
+                )
+
+            # --------------------------------------------------
+            # Validate payment date
+            # --------------------------------------------------
+
+            if payment_date:
+                parsed_payment_date = parse_datetime(payment_date)
+
+                if (
+                    parsed_payment_date is None
+                    or timezone.is_naive(parsed_payment_date)
+                ):
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Payment date must be valid "
+                            "and include a timezone."
+                        )
+                    )
+            else:
+                parsed_payment_date = timezone.now()
+
+            # --------------------------------------------------
+            # Process payment
+            # --------------------------------------------------
+
+            with transaction.atomic():
+
+                # Lock fee records to avoid concurrent payment updates.
+                # This assumes StudentFee has a fee_template FK.
+                student_fees = list(
+                    StudentFee.objects
+                    .select_for_update()
+                    .filter(
+                        school=school,
+                        student_id=student_id,
+                        fee_template__academic_year=(
+                            Student.objects.get(
+                                id=student_id,
+                                school=school,
+                            ).academic_year
+                        ),
+                    )
+                    .exclude(
+                        status=StudentFee.Status.WAIVED
+                    )
+                    .order_by("due_date", "created_at", "id")
+                )
+
+                if not student_fees:
+                    return CustomResponse.errorResponse(
+                        description="No student fee records found."
+                    )
+
+                if StudentFeePayment.objects.filter(
+                    school=school,
+                    receipt_number=receipt_number,
+                ).exists():
+                    return CustomResponse.errorResponse(
+                        description="Receipt number already exists."
+                    )
+
+                # --------------------------------------------------
+                # Calculate total outstanding amount
+                # --------------------------------------------------
+
+                total_outstanding = Decimal("0.00")
+
+                for fee in student_fees:
+                    payable = (
+                        Decimal(str(fee.total_amount))
+                        - Decimal(str(fee.concession_amount or 0))
+                        + Decimal(str(fee.late_fee or 0))
+                    )
+
+                    outstanding = (
+                        payable - Decimal(str(fee.paid_amount or 0))
+                    )
+
+                    if outstanding > Decimal("0.00"):
+                        total_outstanding += outstanding
+
+                if total_outstanding <= Decimal("0.00"):
+                    return CustomResponse.errorResponse(
+                        description="The student has no outstanding fees."
+                    )
+
+                if payment_amount > total_outstanding:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Payment exceeds the total outstanding "
+                            f"amount of {total_outstanding:.2f}."
+                        )
+                    )
+
+                # --------------------------------------------------
+                # Allocate payment to oldest outstanding fees
+                # --------------------------------------------------
+
+                remaining_payment = payment_amount
+                created_payments = []
+
+                for index, fee in enumerate(student_fees, start=1):
+
+                    if remaining_payment <= Decimal("0.00"):
+                        break
+
+                    payable = (
+                        Decimal(str(fee.total_amount))
+                        - Decimal(str(fee.concession_amount or 0))
+                        + Decimal(str(fee.late_fee or 0))
+                    )
+
+                    paid = Decimal(str(fee.paid_amount or 0))
+                    outstanding = payable - paid
+
+                    if outstanding <= Decimal("0.00"):
+                        continue
+
+                    allocated_amount = min(
+                        remaining_payment,
+                        outstanding,
+                    )
+
+                    # StudentFeePayment has a unique constraint on
+                    # (school, receipt_number). Use a unique number
+                    # for each fee allocation.
+                    allocation_receipt = (
+                        f"{receipt_number}-{index:02d}"
+                    )
+
+                    if StudentFeePayment.objects.filter(
+                        school=school,
+                        receipt_number=allocation_receipt,
+                    ).exists():
+                        raise ValueError(
+                            f"Receipt number {allocation_receipt} "
+                            "already exists."
+                        )
+
+                    payment = StudentFeePayment.objects.create(
+                        school=school,
+                        student_fee=fee,
+                        receipt_number=allocation_receipt,
+                        amount=allocated_amount,
+                        payment_mode=payment_mode,
+                        payment_date=parsed_payment_date,
+                        transaction_id=transaction_id or None,
+                        gateway_name=gateway_name or None,
+                        remarks=remarks or None,
+                        collected_by=request.user,
+                    )
+
+                    new_paid_amount = paid + allocated_amount
+                    remaining_balance = payable - new_paid_amount
+
+                    fee.paid_amount = new_paid_amount
+
+                    if remaining_balance <= Decimal("0.00"):
+                        fee.status = StudentFee.Status.PAID
+                    elif (
+                        fee.due_date
+                        and fee.due_date < timezone.localdate()
+                    ):
+                        fee.status = StudentFee.Status.OVERDUE
+                    else:
+                        fee.status = StudentFee.Status.PARTIAL
+
+                    fee.save(
+                        update_fields=[
+                            "paid_amount",
+                            "status",
+                            "updated_at",
+                        ]
+                    )
+
+                    created_payments.append({
+                        "payment_id": str(payment.id),
+                        "student_fee_id": str(fee.id),
+                        "receipt_number": payment.receipt_number,
+                        "amount": str(allocated_amount),
+                    })
+
+                    remaining_payment -= allocated_amount
+
+                if remaining_payment != Decimal("0.00"):
+                    raise ValueError(
+                        "Unable to allocate the entire payment."
+                    )
+
+                # --------------------------------------------------
+                # Recalculate StudentFeeSummary
+                # --------------------------------------------------
+
+                # Use the academic year of the student.
+                student = Student.objects.get(
+                    id=student_id,
+                    school=school,
+                )
+
+                fee_totals = StudentFee.objects.filter(
+                    school=school,
+                    student=student,
+                    fee_template__academic_year=student.academic_year,
+                ).exclude(
+                    status=StudentFee.Status.WAIVED
+                ).aggregate(
+                    total_fee=Sum("total_amount"),
+                    total_concession=Sum("concession_amount"),
+                    total_late_fee=Sum("late_fee"),
+                    total_paid=Sum("paid_amount"),
+                )
+
+                total_fee = (
+                    fee_totals["total_fee"] or Decimal("0.00")
+                )
+                total_concession = (
+                    fee_totals["total_concession"] or Decimal("0.00")
+                )
+                total_late_fee = (
+                    fee_totals["total_late_fee"] or Decimal("0.00")
+                )
+                total_paid = (
+                    fee_totals["total_paid"] or Decimal("0.00")
+                )
+
+                outstanding_amount = (
+                    total_fee
+                    - total_concession
+                    + total_late_fee
+                    - total_paid
+                )
+
+                summary, _ = StudentFeeSummary.objects.update_or_create(
+                    school=school,
+                    student=student,
+                    academic_year=student.academic_year,
+                    defaults={
+                        "total_fee": total_fee,
+                        "total_concession": total_concession,
+                        "total_late_fee": total_late_fee,
+                        "total_paid": total_paid,
+                        "outstanding_amount": max(
+                            outstanding_amount,
+                            Decimal("0.00"),
+                        ),
+                    },
+                )
+
+                application_logger.info(
+                    "student_fee_payment_completed",
+                    extra={
+                        "school_id": str(school.id),
+                        "student_id": str(student.id),
+                        "total_payment": str(payment_amount),
+                        "payment_count": len(created_payments),
+                        "summary_id": str(summary.id),
+                        "total_paid": str(total_paid),
+                        "outstanding_amount": str(
+                            summary.outstanding_amount
+                        ),
+                    },
+                )
+
+                return CustomResponse.successResponse(
+                    description="Student fee payment recorded successfully.",
+                    data={
+                        "student_id": str(student.id),
+                        "payment_amount": str(payment_amount),
+                        "payments": created_payments,
+                        "fee_summary": {
+                            "total_fee": str(summary.total_fee),
+                            "total_concession": str(
+                                summary.total_concession
+                            ),
+                            "total_late_fee": str(
+                                summary.total_late_fee
+                            ),
+                            "total_paid": str(summary.total_paid),
+                            "outstanding_amount": str(
+                                summary.outstanding_amount
+                            ),
+                        },
+                    },
+                )
+
+        except ValueError as e:
+            application_logger.warning(
+                "student_fee_payment_validation_failed",
+                extra={
+                    "school_id": str(school.id),
+                    "student_id": str(student_id),
+                    "error": str(e),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(e)
+            )
+
+        except Exception:
+            application_logger.exception(
+                "student_fee_payment_failed",
+                extra={
+                    "school_id": str(school.id),
+                    "student_id": str(student_id),
+                    "receipt_number": receipt_number,
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to record student fee payment."
             )

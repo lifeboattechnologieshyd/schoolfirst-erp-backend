@@ -332,6 +332,83 @@ class StudentFee(AuditModel):
             models.Index(fields=["student", "status"]),
         ]
 
+
+class StudentFeeSummary(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="student_fee_summaries",
+    )
+
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        related_name="fee_summaries",
+    )
+
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.PROTECT,
+        related_name="student_fee_summaries",
+    )
+
+    total_fee = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+
+    total_concession = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+
+    total_late_fee = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+
+    total_paid = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+
+    outstanding_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+
+    class Meta:
+        db_table = "student_fee_summaries"
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["school", "student", "academic_year"],
+                name="unique_student_fee_summary_per_year",
+            )
+        ]
+
+        indexes = [
+            models.Index(fields=["school", "academic_year"]),
+            models.Index(fields=["student"]),
+        ]
+
+    def __str__(self):
+        return f"Fee Summary - {self.student_id}"
+
 class StudentFeePayment(AuditModel):
     objects = SoftDeleteManager()
     all_objects = models.Manager()
