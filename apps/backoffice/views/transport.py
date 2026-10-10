@@ -5899,6 +5899,18 @@ class StudentTransportListAPIView(APIView):
                             "admission_number": (
                                 transport.student.admission_number
                             ),
+                            "father_mobile":(
+                                transport.student.father_mobile
+                            ),
+                            "mother_mobile":(transport.student.mother_mobile
+                                             ),
+                            "emergency_contact_mobile":(transport.student.emergency_contact_mobile
+
+                            ),
+                            "address":(
+                                transport.student.address
+                            )
+
                         },
 
                         # =========================================
