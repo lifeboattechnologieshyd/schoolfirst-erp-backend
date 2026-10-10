@@ -92,6 +92,8 @@ if "apps.transport" in settings.INSTALLED_APPS:
     urlpatterns.append(path("transport/", include("apps.transport.urls")))
 if "apps.examination" in settings.INSTALLED_APPS:
     urlpatterns.append(path("examination/", include("apps.examination.urls")))
+if "apps.gallery" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("gallery/", include("apps.gallery.urls")))
 
 
 ####################################

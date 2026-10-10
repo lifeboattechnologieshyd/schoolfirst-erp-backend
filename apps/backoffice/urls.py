@@ -24,6 +24,8 @@ from apps.backoffice.views.fee import CreateFeeTypeAPIView, FeeTypeListAPIView, 
     StudentFeeListAPIView, StudentFeeDetailAPIView, GenerateStudentFeesAPIView, FeePlanCreateAPIView, \
     FeePlanListAPIView, FeePlanUpdateAPIView, AddFeeCollectionPlansAPIView, StudentFeePaymentCreateAPIView, \
     StudentFeePaymentListAPIView
+from apps.backoffice.views.gallery import GalleryCategoryAPIView, GalleryCreateAPIView, GalleryListAPIView, \
+    GalleryDetailAPIView, GalleryUpdateAPIView, GalleryDeleteAPIView, GalleryImageDeleteAPIView
 from apps.backoffice.views.homework import CreateHomeworkAPIView, HomeworkListAPIView, HomeworkUpdateAPIView, \
     TeacherHomeworkSubmissionListAPIView, TeacherCheckHomeworkAPIView
 from apps.backoffice.views.leads import \
@@ -515,6 +517,23 @@ urlpatterns = [
     path("exam/<uuid:examination_id>/grades/<uuid:grade_id>/subjects/<uuid:subject_id>/marks/upload",ExaminationMarksUploadAPIView.as_view(),),
 
     path("exam/results/<uuid:examination_id>",ExaminationResultListAPIView.as_view(),),
+
+
+    path("gallery/category",GalleryCategoryAPIView.as_view(),),
+
+    path("gallery/category/<uuid:category_id>",GalleryCategoryAPIView.as_view(),),
+
+    path("gallery/create",GalleryCreateAPIView.as_view(),),
+
+    path("gallery",GalleryListAPIView.as_view(),),
+
+    path("gallery/<uuid:gallery_id>",GalleryDetailAPIView.as_view(),),
+
+    path("gallery/<uuid:gallery_id>",GalleryUpdateAPIView.as_view()),
+
+    path("gallery/<uuid:gallery_id>",GalleryDeleteAPIView.as_view(),),
+
+    path("gallery/<uuid:gallery_id>/image/<uuid:image_id>",GalleryImageDeleteAPIView.as_view())
 
 
 
