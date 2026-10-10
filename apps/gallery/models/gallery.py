@@ -146,6 +146,42 @@ class GalleryImage(AuditModel):
         return f"{self.gallery.title} - Image"
 
 
+class GalleryVideo(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    gallery = models.ForeignKey(
+        Gallery,
+        on_delete=models.CASCADE,
+        related_name="videos",
+    )
+
+    video = models.FileField(
+        upload_to="gallery/videos/",
+    )
+
+    caption = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+    )
+
+    display_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "gallery_videos"
+        ordering = ["display_order", "created_at"]
+
+    def __str__(self):
+        return f"{self.gallery.title} - Video"
+
+
 class GalleryStaff(AuditModel):
     objects = SoftDeleteManager()
     all_objects = models.Manager()

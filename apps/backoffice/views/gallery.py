@@ -3,7 +3,7 @@ from django.db.models import Count, Q
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.gallery.models import GalleryCategory, Gallery, GalleryImage
+from apps.gallery.models import GalleryCategory, Gallery, GalleryImage, GalleryVideo
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
@@ -256,6 +256,8 @@ class GalleryCreateAPIView(APIView):
             allow_downloads = request.data.get("allow_downloads", True)
             is_published = request.data.get("is_published", False)
             images = request.FILES.getlist("images")
+            videos = request.FILES.getlist("videos")
+
 
             if not title or not title.strip():
                 return CustomResponse.errorResponse(
@@ -293,6 +295,11 @@ class GalleryCreateAPIView(APIView):
                     GalleryImage.objects.create(
                         gallery=gallery,
                         image=image,
+                    )
+                for video in videos:
+                    GalleryVideo.objects.create(
+                        gallery=gallery,
+                        video=video,
                     )
 
             application_logger.info(
@@ -343,12 +350,21 @@ class GalleryListAPIView(APIView):
 
             category_id = request.query_params.get("category_id")
             search = request.query_params.get("search")
-            is_published = request.query_params.get("is_published")
 
-            queryset = (
-                Gallery.objects.filter(school=school)
-                .select_related("category")
-                .annotate(image_count=Count("images", distinct=True))
+            queryset = Gallery.objects.filter(
+                school=school,
+                is_deleted=False,
+            ).select_related("category").annotate(
+                image_count=Count(
+                    "images",
+                    filter=Q(images__is_deleted=False),
+                    distinct=True,
+                ),
+                video_count=Count(
+                    "videos",
+                    filter=Q(videos__is_deleted=False),
+                    distinct=True,
+                ),
             )
 
             if category_id:
@@ -358,16 +374,6 @@ class GalleryListAPIView(APIView):
                 queryset = queryset.filter(
                     Q(title__icontains=search)
                     | Q(description__icontains=search)
-                )
-
-            if is_published is not None:
-                if is_published.lower() not in ("true", "false"):
-                    return CustomResponse.errorResponse(
-                        description="is_published must be true or false."
-                    )
-
-                queryset = queryset.filter(
-                    is_published=is_published.lower() == "true"
                 )
 
             queryset = queryset.order_by("-event_date", "-created_at")
@@ -385,16 +391,10 @@ class GalleryListAPIView(APIView):
                     "allow_downloads": gallery.allow_downloads,
                     "is_published": gallery.is_published,
                     "image_count": gallery.image_count,
+                    "video_count": gallery.video_count,
                 }
                 for gallery in queryset
             ]
-
-            application_logger.info(
-                "gallery_list_fetched",
-                school_id=str(school.id),
-                returned_count=len(data),
-                user_id=str(request.user.id),
-            )
 
             return CustomResponse.successResponse(
                 description="Galleries fetched successfully.",
@@ -407,9 +407,11 @@ class GalleryListAPIView(APIView):
                 school_id=str(school.id) if school else None,
                 user_id=str(request.user.id),
             )
+
             return CustomResponse.errorResponse(
                 description="Failed to fetch galleries."
             )
+
 
 class GalleryDetailAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
@@ -424,15 +426,16 @@ class GalleryDetailAPIView(APIView):
                     description="School not found."
                 )
 
-            gallery = (
-                Gallery.objects.filter(
-                    id=gallery_id,
-                    school=school,
-                )
-                .select_related("category")
-                .prefetch_related("images")
-                .first()
-            )
+            gallery = Gallery.objects.filter(
+                id=gallery_id,
+                school=school,
+                is_deleted=False,
+            ).select_related(
+                "category"
+            ).prefetch_related(
+                "images",
+                "videos",
+            ).first()
 
             if gallery is None:
                 return CustomResponse.errorResponse(
@@ -447,6 +450,18 @@ class GalleryDetailAPIView(APIView):
                     "display_order": image.display_order,
                 }
                 for image in gallery.images.all()
+                if not image.is_deleted
+            ]
+
+            videos = [
+                {
+                    "id": str(video.id),
+                    "video": video.video.url if video.video else None,
+                    "caption": video.caption,
+                    "display_order": video.display_order,
+                }
+                for video in gallery.videos.all()
+                if not video.is_deleted
             ]
 
             return CustomResponse.successResponse(
@@ -463,6 +478,7 @@ class GalleryDetailAPIView(APIView):
                     "allow_downloads": gallery.allow_downloads,
                     "is_published": gallery.is_published,
                     "images": images,
+                    "videos": videos,
                 },
             )
 
@@ -473,9 +489,11 @@ class GalleryDetailAPIView(APIView):
                 school_id=str(school.id) if school else None,
                 user_id=str(request.user.id),
             )
+
             return CustomResponse.errorResponse(
                 description="Failed to fetch gallery."
             )
+
 
 class GalleryUpdateAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
@@ -673,4 +691,58 @@ class GalleryImageDeleteAPIView(APIView):
 
             return CustomResponse.errorResponse(
                 description="Failed to delete gallery image."
+            )
+
+
+class GalleryVideoDeleteAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "gallery.update"
+
+    def delete(self, request, gallery_id, video_id):
+        school = request.school
+
+        try:
+            if school is None:
+                return CustomResponse.errorResponse(
+                    description="School not found."
+                )
+
+            video = GalleryVideo.objects.filter(
+                id=video_id,
+                gallery_id=gallery_id,
+                gallery__school=school,
+                gallery__is_deleted=False,
+                is_deleted=False,
+            ).first()
+
+            if video is None:
+                return CustomResponse.errorResponse(
+                    description="Gallery video not found."
+                )
+
+            video.soft_delete(request.user)
+
+            application_logger.info(
+                "gallery_video_soft_deleted",
+                gallery_id=str(gallery_id),
+                video_id=str(video_id),
+                school_id=str(school.id),
+                user_id=str(request.user.id),
+            )
+
+            return CustomResponse.successResponse(
+                description="Gallery video deleted successfully."
+            )
+
+        except Exception:
+            application_logger.exception(
+                "gallery_video_soft_delete_failed",
+                gallery_id=str(gallery_id),
+                video_id=str(video_id),
+                school_id=str(school.id) if school else None,
+                user_id=str(request.user.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to delete gallery video."
             )
