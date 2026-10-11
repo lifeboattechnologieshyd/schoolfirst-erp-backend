@@ -637,7 +637,7 @@ class GalleryUpdateAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "gallery.update"
 
-    def patch(self, request, gallery_id):
+    def put(self, request, gallery_id):
         school = request.school
 
         try:
