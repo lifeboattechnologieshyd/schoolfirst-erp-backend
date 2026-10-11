@@ -75,7 +75,9 @@ class GalleryLISTAPIView(APIView):
                 Gallery.objects.filter(
                     school=school,
                     is_published=True,
+                    is_deleted=False,
                     category__is_active=True,
+                    category__is_deleted=False,
                 )
                 .select_related("category")
                 .prefetch_related("images", "videos")
@@ -94,7 +96,9 @@ class GalleryLISTAPIView(APIView):
             )
 
             if category_id:
-                queryset = queryset.filter(category_id=category_id)
+                queryset = queryset.filter(
+                    category_id=category_id
+                )
 
             if search:
                 queryset = queryset.filter(
@@ -113,7 +117,7 @@ class GalleryLISTAPIView(APIView):
                 images = [
                     {
                         "id": str(image.id),
-                        "image": image.image.url if image.image else None,
+                        "image": image.image,
                         "caption": image.caption,
                         "display_order": image.display_order,
                     }
@@ -124,7 +128,7 @@ class GalleryLISTAPIView(APIView):
                 videos = [
                     {
                         "id": str(video.id),
-                        "video": video.video.url if video.video else None,
+                        "video": video.video,
                         "caption": video.caption,
                         "display_order": video.display_order,
                     }
@@ -136,12 +140,17 @@ class GalleryLISTAPIView(APIView):
                     "id": str(gallery.id),
                     "title": gallery.title,
                     "description": gallery.description,
+                    "academic_year": {
+                        "id": str(gallery.academic_year_id),
+                        "name": gallery.academic_year.name,
+                    },
                     "category": {
                         "id": str(gallery.category_id),
                         "name": gallery.category.name,
                     },
                     "event_date": gallery.event_date,
                     "allow_downloads": gallery.allow_downloads,
+                    "is_published": gallery.is_published,
                     "image_count": gallery.image_count,
                     "video_count": gallery.video_count,
                     "images": images,
