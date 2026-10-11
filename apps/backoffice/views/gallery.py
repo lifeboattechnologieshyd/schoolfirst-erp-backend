@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.gallery.models import GalleryCategory, Gallery, GalleryImage, GalleryVideo
+from apps.school.models.school import AcademicYear
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
@@ -247,6 +248,22 @@ class GalleryCreateAPIView(APIView):
                 return CustomResponse.errorResponse(
                     description="School not found."
                 )
+            academic_year_id = request.data.get("academic_year_id")
+
+            if not academic_year_id:
+                return CustomResponse.errorResponse(
+                    description="Academic year ID is required."
+                )
+
+            academic_year = AcademicYear.objects.filter(
+                id=academic_year_id,
+                school=school,
+            ).first()
+
+            if academic_year is None:
+                return CustomResponse.errorResponse(
+                    description="Invalid academic year."
+                )
 
             title = request.data.get("title")
             category_id = request.data.get("category_id")
@@ -306,6 +323,7 @@ class GalleryCreateAPIView(APIView):
             with transaction.atomic():
                 gallery = Gallery.objects.create(
                     school=school,
+                    academic_year_id=academic_year_id,
                     category=category,
                     title=title.strip(),
                     description=description or None,
