@@ -552,86 +552,86 @@ class GalleryListAPIView(APIView):
             )
 
 
-class GalleryDetailAPIView(APIView):
-    permission_classes = [IsAuthenticated, HasPermission]
-    required_permission = "gallery.view"
-
-    def get(self, request, gallery_id):
-        school = request.school
-
-        try:
-            if school is None:
-                return CustomResponse.errorResponse(
-                    description="School not found."
-                )
-
-            gallery = Gallery.objects.filter(
-                id=gallery_id,
-                school=school,
-                is_deleted=False,
-            ).select_related(
-                "category"
-            ).prefetch_related(
-                "images",
-                "videos",
-            ).first()
-
-            if gallery is None:
-                return CustomResponse.errorResponse(
-                    description="Gallery not found."
-                )
-
-            images = [
-                {
-                    "id": str(image.id),
-                    "image": image.image.url if image.image else None,
-                    "caption": image.caption,
-                    "display_order": image.display_order,
-                }
-                for image in gallery.images.all()
-                if not image.is_deleted
-            ]
-
-            videos = [
-                {
-                    "id": str(video.id),
-                    "video": video.video.url if video.video else None,
-                    "caption": video.caption,
-                    "display_order": video.display_order,
-                }
-                for video in gallery.videos.all()
-                if not video.is_deleted
-            ]
-
-            return CustomResponse.successResponse(
-                description="Gallery fetched successfully.",
-                data={
-                    "id": str(gallery.id),
-                    "title": gallery.title,
-                    "description": gallery.description,
-                    "category": {
-                        "id": str(gallery.category_id),
-                        "name": gallery.category.name,
-                    },
-                    "event_date": gallery.event_date,
-                    "allow_downloads": gallery.allow_downloads,
-                    "is_published": gallery.is_published,
-                    "images": images,
-                    "videos": videos,
-                },
-            )
-
-        except Exception:
-            application_logger.exception(
-                "gallery_detail_failed",
-                gallery_id=str(gallery_id),
-                school_id=str(school.id) if school else None,
-                user_id=str(request.user.id),
-            )
-
-            return CustomResponse.errorResponse(
-                description="Failed to fetch gallery."
-            )
+# class GalleryDetailAPIView(APIView):
+#     permission_classes = [IsAuthenticated, HasPermission]
+#     required_permission = "gallery.view"
+#
+#     def get(self, request, gallery_id):
+#         school = request.school
+#
+#         try:
+#             if school is None:
+#                 return CustomResponse.errorResponse(
+#                     description="School not found."
+#                 )
+#
+#             gallery = Gallery.objects.filter(
+#                 id=gallery_id,
+#                 school=school,
+#                 is_deleted=False,
+#             ).select_related(
+#                 "category"
+#             ).prefetch_related(
+#                 "images",
+#                 "videos",
+#             ).first()
+#
+#             if gallery is None:
+#                 return CustomResponse.errorResponse(
+#                     description="Gallery not found."
+#                 )
+#
+#             images = [
+#                 {
+#                     "id": str(image.id),
+#                     "image": image.image.url if image.image else None,
+#                     "caption": image.caption,
+#                     "display_order": image.display_order,
+#                 }
+#                 for image in gallery.images.all()
+#                 if not image.is_deleted
+#             ]
+#
+#             videos = [
+#                 {
+#                     "id": str(video.id),
+#                     "video": video.video.url if video.video else None,
+#                     "caption": video.caption,
+#                     "display_order": video.display_order,
+#                 }
+#                 for video in gallery.videos.all()
+#                 if not video.is_deleted
+#             ]
+#
+#             return CustomResponse.successResponse(
+#                 description="Gallery fetched successfully.",
+#                 data={
+#                     "id": str(gallery.id),
+#                     "title": gallery.title,
+#                     "description": gallery.description,
+#                     "category": {
+#                         "id": str(gallery.category_id),
+#                         "name": gallery.category.name,
+#                     },
+#                     "event_date": gallery.event_date,
+#                     "allow_downloads": gallery.allow_downloads,
+#                     "is_published": gallery.is_published,
+#                     "images": images,
+#                     "videos": videos,
+#                 },
+#             )
+#
+#         except Exception:
+#             application_logger.exception(
+#                 "gallery_detail_failed",
+#                 gallery_id=str(gallery_id),
+#                 school_id=str(school.id) if school else None,
+#                 user_id=str(request.user.id),
+#             )
+#
+#             return CustomResponse.errorResponse(
+#                 description="Failed to fetch gallery."
+#             )
 
 class GalleryUpdateAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]

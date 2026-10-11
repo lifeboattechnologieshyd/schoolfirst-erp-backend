@@ -528,7 +528,7 @@ urlpatterns = [
 
     path("gallery",GalleryListAPIView.as_view(),),
 
-    path("gallery/<uuid:gallery_id>",GalleryDetailAPIView.as_view(),),
+    # path("gallery/<uuid:gallery_id>",GalleryDetailAPIView.as_view(),),
 
     path("gallery/<uuid:gallery_id>",GalleryUpdateAPIView.as_view()),
 
