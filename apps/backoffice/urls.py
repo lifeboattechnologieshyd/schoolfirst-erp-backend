@@ -25,7 +25,7 @@ from apps.backoffice.views.fee import CreateFeeTypeAPIView, FeeTypeListAPIView, 
     FeePlanListAPIView, FeePlanUpdateAPIView, AddFeeCollectionPlansAPIView, StudentFeePaymentCreateAPIView, \
     StudentFeePaymentListAPIView
 from apps.backoffice.views.gallery import GalleryCategoryAPIView, GalleryCreateAPIView, GalleryListAPIView, \
-    GalleryDetailAPIView, GalleryUpdateAPIView, GalleryDeleteAPIView, GalleryImageDeleteAPIView, \
+     GalleryUpdateAPIView, GalleryDeleteAPIView, GalleryImageDeleteAPIView, \
     GalleryVideoDeleteAPIView
 from apps.backoffice.views.homework import CreateHomeworkAPIView, HomeworkListAPIView, HomeworkUpdateAPIView, \
     TeacherHomeworkSubmissionListAPIView, TeacherCheckHomeworkAPIView
