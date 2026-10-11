@@ -1,4 +1,5 @@
 from django.db.models import Count, Q
+from google.api.visibility_pb2 import Visibility
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
@@ -75,10 +76,8 @@ class GalleryLISTAPIView(APIView):
                 Gallery.objects.filter(
                     school=school,
                     is_published=True,
-                    is_deleted=False,
                     category__is_active=True,
-                    category__is_deleted=False,
-                )
+                    visibility=Gallery.Visibility.SCHOOL)
                 .select_related("category")
                 .prefetch_related("images", "videos")
                 .annotate(
