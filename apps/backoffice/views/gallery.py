@@ -406,26 +406,38 @@ class GalleryListAPIView(APIView):
                 )
 
             category_id = request.query_params.get("category_id")
+            academic_year_id = request.query_params.get("academic_year_id")
             search = request.query_params.get("search")
 
-            queryset = Gallery.objects.filter(
-                school=school,
-                is_deleted=False,
-            ).select_related("category").annotate(
-                image_count=Count(
-                    "images",
-                    filter=Q(images__is_deleted=False),
-                    distinct=True,
-                ),
-                video_count=Count(
-                    "videos",
-                    filter=Q(videos__is_deleted=False),
-                    distinct=True,
-                ),
+            queryset = (
+                Gallery.objects.filter(
+                    school=school,
+                    is_deleted=False,
+                )
+                .select_related("category", "academic_year")
+                .annotate(
+                    image_count=Count(
+                        "images",
+                        filter=Q(images__is_deleted=False),
+                        distinct=True,
+                    ),
+                    video_count=Count(
+                        "videos",
+                        filter=Q(videos__is_deleted=False),
+                        distinct=True,
+                    ),
+                )
             )
 
             if category_id:
-                queryset = queryset.filter(category_id=category_id)
+                queryset = queryset.filter(
+                    category_id=category_id
+                )
+
+            if academic_year_id:
+                queryset = queryset.filter(
+                    academic_year_id=academic_year_id
+                )
 
             if search:
                 queryset = queryset.filter(
@@ -433,13 +445,20 @@ class GalleryListAPIView(APIView):
                     | Q(description__icontains=search)
                 )
 
-            queryset = queryset.order_by("-event_date", "-created_at")
+            queryset = queryset.order_by(
+                "-event_date",
+                "-created_at",
+            )
 
             data = [
                 {
                     "id": str(gallery.id),
                     "title": gallery.title,
                     "description": gallery.description,
+                    "academic_year": {
+                        "id": str(gallery.academic_year_id),
+                        "name": gallery.academic_year.name,
+                    },
                     "category": {
                         "id": str(gallery.category_id),
                         "name": gallery.category.name,
@@ -452,6 +471,15 @@ class GalleryListAPIView(APIView):
                 }
                 for gallery in queryset
             ]
+
+            application_logger.info(
+                "gallery_list_fetched",
+                school_id=str(school.id),
+                academic_year_id=academic_year_id,
+                category_id=category_id,
+                returned_count=len(data),
+                user_id=str(request.user.id),
+            )
 
             return CustomResponse.successResponse(
                 description="Galleries fetched successfully.",
