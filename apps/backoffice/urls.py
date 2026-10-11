@@ -536,7 +536,7 @@ urlpatterns = [
 
     path("gallery/<uuid:gallery_id>/image/<uuid:image_id>",GalleryImageDeleteAPIView.as_view()),
 
-    path("gallery/<uuid:gallery_id>/image/<uuid:video_id>",GalleryVideoDeleteAPIView.as_view(),),
+    path("gallery/<uuid:gallery_id>/video/<uuid:video_id>",GalleryVideoDeleteAPIView.as_view(),),
 
 
 
