@@ -996,3 +996,89 @@ class GalleryVideoDeleteAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Failed to delete gallery video."
             )
+
+
+class DeletedGalleryMediaAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "gallery.view"
+
+    def get(self, request):
+        school = request.school
+
+        try:
+            if not school:
+                return CustomResponse.errorResponse(
+                    description="School not found."
+                )
+
+            gallery_id = request.query_params.get("gallery_id")
+
+            # Get galleries belonging to the current school
+            galleries = Gallery.all_objects.filter(
+                school=school,
+                is_deleted=False,
+            )
+
+            if gallery_id:
+                galleries = galleries.filter(id=gallery_id)
+
+            gallery_ids = galleries.values_list("id", flat=True)
+
+            # Get deleted images
+            deleted_images = GalleryImage.all_objects.filter(
+                gallery_id__in=gallery_ids,
+                is_deleted=True,
+            ).select_related("gallery")
+
+            # Get deleted videos
+            deleted_videos = GalleryVideo.all_objects.filter(
+                gallery_id__in=gallery_ids,
+                is_deleted=True,
+            ).select_related("gallery")
+
+            images_data = [
+                {
+                    "id": str(image.id),
+                    "gallery_id": str(image.gallery_id),
+                    "gallery_title": image.gallery.title,
+                    "image": image.image,
+                    "caption": image.caption,
+                    "display_order": image.display_order,
+                    "deleted_at": image.deleted_at,
+                    "deleted_by": image.deleted_by,
+                }
+                for image in deleted_images
+            ]
+
+            videos_data = [
+                {
+                    "id": str(video.id),
+                    "gallery_id": str(video.gallery_id),
+                    "gallery_title": video.gallery.title,
+                    "video": video.video,
+                    "caption": video.caption,
+                    "display_order": video.display_order,
+                    "deleted_at": video.deleted_at,
+                    "deleted_by": video.deleted_by,
+                }
+                for video in deleted_videos
+            ]
+
+            return CustomResponse.successResponse(
+                description="Deleted gallery images and videos fetched successfully.",
+                data={
+                    "images": images_data,
+                    "videos": videos_data,
+                    "total_deleted_images": len(images_data),
+                    "total_deleted_videos": len(videos_data),
+                },
+            )
+
+        except Exception:
+            application_logger.exception(
+                "deleted_gallery_media_fetch_failed",
+                extra={"school_id": str(school.id) if school else None},
+            )
+            return CustomResponse.errorResponse(
+                description="Failed to fetch deleted gallery media."
+            )
