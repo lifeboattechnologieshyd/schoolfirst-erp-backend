@@ -861,7 +861,6 @@ class GalleryDeleteAPIView(APIView):
             gallery = Gallery.objects.filter(
                 id=gallery_id,
                 school=school,
-                is_deleted=False,
             ).first()
 
             if gallery is None:
@@ -912,8 +911,6 @@ class GalleryImageDeleteAPIView(APIView):
                 id=image_id,
                 gallery_id=gallery_id,
                 gallery__school=school,
-                gallery__is_deleted=False,
-                is_deleted=False,
             ).first()
 
             if image is None:
@@ -966,8 +963,6 @@ class GalleryVideoDeleteAPIView(APIView):
                 id=video_id,
                 gallery_id=gallery_id,
                 gallery__school=school,
-                gallery__is_deleted=False,
-                is_deleted=False,
             ).first()
 
             if video is None:
