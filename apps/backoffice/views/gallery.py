@@ -366,6 +366,8 @@ class GalleryCreateAPIView(APIView):
                 data={
                     "id": str(gallery.id),
                     "title": gallery.title,
+                    "academic_year_id": str(gallery.academic_year_id),
+                    "academic_year_name": academic_year.name,
                     "description": gallery.description,
                     "category_id": str(gallery.category_id),
                     "category_name": category.name,
