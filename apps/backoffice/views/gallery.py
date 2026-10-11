@@ -391,7 +391,6 @@ class GalleryCreateAPIView(APIView):
             )
 
 
-
 class GalleryListAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "gallery.view"
@@ -405,16 +404,38 @@ class GalleryListAPIView(APIView):
                     description="School not found."
                 )
 
-            category_id = request.query_params.get("category_id")
             academic_year_id = request.query_params.get("academic_year_id")
+            category_id = request.query_params.get("category_id")
             search = request.query_params.get("search")
+
+            # Pagination parameters
+            try:
+                page = int(request.query_params.get("page", 1))
+                page_size = int(request.query_params.get("page_size", 10))
+
+                if page < 1 or page_size < 1:
+                    raise ValueError
+
+                page_size = min(page_size, 100)
+
+            except (ValueError, TypeError):
+                return CustomResponse.errorResponse(
+                    description="Page and page_size must be positive integers."
+                )
 
             queryset = (
                 Gallery.objects.filter(
                     school=school,
                     is_deleted=False,
                 )
-                .select_related("category", "academic_year")
+                .select_related(
+                    "category",
+                    "academic_year",
+                )
+                .prefetch_related(
+                    "images",
+                    "videos",
+                )
                 .annotate(
                     image_count=Count(
                         "images",
@@ -429,14 +450,14 @@ class GalleryListAPIView(APIView):
                 )
             )
 
-            if category_id:
-                queryset = queryset.filter(
-                    category_id=category_id
-                )
-
             if academic_year_id:
                 queryset = queryset.filter(
                     academic_year_id=academic_year_id
+                )
+
+            if category_id:
+                queryset = queryset.filter(
+                    category_id=category_id
                 )
 
             if search:
@@ -450,8 +471,38 @@ class GalleryListAPIView(APIView):
                 "-created_at",
             )
 
-            data = [
-                {
+            # Pagination
+            total = queryset.count()
+            start = (page - 1) * page_size
+            end = start + page_size
+            galleries = queryset[start:end]
+
+            data = []
+
+            for gallery in galleries:
+                images = [
+                    {
+                        "id": str(image.id),
+                        "image": image.image,
+                        "caption": image.caption,
+                        "display_order": image.display_order,
+                    }
+                    for image in gallery.images.all()
+                    if not image.is_deleted
+                ]
+
+                videos = [
+                    {
+                        "id": str(video.id),
+                        "video": video.video,
+                        "caption": video.caption,
+                        "display_order": video.display_order,
+                    }
+                    for video in gallery.videos.all()
+                    if not video.is_deleted
+                ]
+
+                data.append({
                     "id": str(gallery.id),
                     "title": gallery.title,
                     "description": gallery.description,
@@ -468,9 +519,9 @@ class GalleryListAPIView(APIView):
                     "is_published": gallery.is_published,
                     "image_count": gallery.image_count,
                     "video_count": gallery.video_count,
-                }
-                for gallery in queryset
-            ]
+                    "images": images,
+                    "videos": videos,
+                })
 
             application_logger.info(
                 "gallery_list_fetched",
@@ -478,12 +529,15 @@ class GalleryListAPIView(APIView):
                 academic_year_id=academic_year_id,
                 category_id=category_id,
                 returned_count=len(data),
+                total=total,
+                page=page,
                 user_id=str(request.user.id),
             )
 
             return CustomResponse.successResponse(
                 description="Galleries fetched successfully.",
                 data=data,
+                total=total,
             )
 
         except Exception:
