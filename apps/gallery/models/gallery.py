@@ -126,8 +126,10 @@ class GalleryImage(AuditModel):
         related_name="images",
     )
 
-    image = models.ImageField(
-        upload_to="gallery/",
+    image = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
     )
 
     caption = models.CharField(
@@ -162,9 +164,7 @@ class GalleryVideo(AuditModel):
         related_name="videos",
     )
 
-    video = models.FileField(
-        upload_to="gallery/videos/",
-    )
+    video = models.CharField(max_length=500,null=True,blank=True)
 
     caption = models.CharField(
         max_length=255,

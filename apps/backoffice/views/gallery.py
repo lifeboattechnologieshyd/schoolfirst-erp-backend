@@ -229,7 +229,6 @@ class GalleryCategoryAPIView(APIView):
             )
 
 
-
 class GalleryCreateAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "gallery.create"
@@ -255,9 +254,9 @@ class GalleryCreateAPIView(APIView):
             event_date = request.data.get("event_date") or None
             allow_downloads = request.data.get("allow_downloads", True)
             is_published = request.data.get("is_published", False)
-            images = request.FILES.getlist("images")
-            videos = request.FILES.getlist("videos")
 
+            images = request.data.get("images", [])
+            videos = request.data.get("videos", [])
 
             if not title or not title.strip():
                 return CustomResponse.errorResponse(
@@ -267,6 +266,16 @@ class GalleryCreateAPIView(APIView):
             if not category_id:
                 return CustomResponse.errorResponse(
                     description="Category ID is required."
+                )
+
+            if not isinstance(images, list):
+                return CustomResponse.errorResponse(
+                    description="Images must be a list."
+                )
+
+            if not isinstance(videos, list):
+                return CustomResponse.errorResponse(
+                    description="Videos must be a list."
                 )
 
             category = GalleryCategory.objects.filter(
@@ -280,6 +289,20 @@ class GalleryCreateAPIView(APIView):
                     description="Invalid gallery category."
                 )
 
+            # Validate image URLs
+            for image in images:
+                if not isinstance(image, dict) or not image.get("url"):
+                    return CustomResponse.errorResponse(
+                        description="Each image must contain a URL."
+                    )
+
+            # Validate video URLs
+            for video in videos:
+                if not isinstance(video, dict) or not video.get("url"):
+                    return CustomResponse.errorResponse(
+                        description="Each video must contain a URL."
+                    )
+
             with transaction.atomic():
                 gallery = Gallery.objects.create(
                     school=school,
@@ -291,15 +314,24 @@ class GalleryCreateAPIView(APIView):
                     is_published=is_published,
                 )
 
-                for image in images:
+                for index, image_data in enumerate(images):
                     GalleryImage.objects.create(
                         gallery=gallery,
-                        image=image,
+                        image=image_data["url"],
+                        caption=image_data.get("caption") or None,
+                        display_order=image_data.get(
+                            "display_order", index
+                        ),
                     )
-                for video in videos:
+
+                for index, video_data in enumerate(videos):
                     GalleryVideo.objects.create(
                         gallery=gallery,
-                        video=video,
+                        video=video_data["url"],
+                        caption=video_data.get("caption") or None,
+                        display_order=video_data.get(
+                            "display_order", index
+                        ),
                     )
 
             application_logger.info(
@@ -307,6 +339,7 @@ class GalleryCreateAPIView(APIView):
                 gallery_id=str(gallery.id),
                 school_id=str(school.id),
                 image_count=len(images),
+                video_count=len(videos),
                 user_id=str(request.user.id),
             )
 
@@ -322,6 +355,7 @@ class GalleryCreateAPIView(APIView):
                     "allow_downloads": gallery.allow_downloads,
                     "is_published": gallery.is_published,
                     "image_count": len(images),
+                    "video_count": len(videos),
                 },
             )
 
@@ -331,9 +365,12 @@ class GalleryCreateAPIView(APIView):
                 school_id=str(school.id) if school else None,
                 user_id=str(request.user.id),
             )
+
             return CustomResponse.errorResponse(
                 description="Failed to create gallery."
             )
+
+
 
 class GalleryListAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
