@@ -633,7 +633,6 @@ class GalleryDetailAPIView(APIView):
                 description="Failed to fetch gallery."
             )
 
-
 class GalleryUpdateAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "gallery.update"
@@ -650,6 +649,7 @@ class GalleryUpdateAPIView(APIView):
             gallery = Gallery.objects.filter(
                 id=gallery_id,
                 school=school,
+                is_deleted=False,
             ).first()
 
             if gallery is None:
@@ -657,9 +657,9 @@ class GalleryUpdateAPIView(APIView):
                     description="Gallery not found."
                 )
 
-            if "title" in request.data:
-                title = request.data.get("title")
+            title = request.data.get("title")
 
+            if "title" in request.data:
                 if not title or not title.strip():
                     return CustomResponse.errorResponse(
                         description="Gallery title cannot be empty."
@@ -668,16 +668,34 @@ class GalleryUpdateAPIView(APIView):
                 gallery.title = title.strip()
 
             if "description" in request.data:
-                gallery.description = request.data.get("description") or None
+                gallery.description = (
+                    request.data.get("description") or None
+                )
 
             if "event_date" in request.data:
-                gallery.event_date = request.data.get("event_date") or None
+                gallery.event_date = (
+                    request.data.get("event_date") or None
+                )
+
+            if "academic_year_id" in request.data:
+                academic_year = AcademicYear.objects.filter(
+                    id=request.data.get("academic_year_id"),
+                    school=school,
+                ).first()
+
+                if academic_year is None:
+                    return CustomResponse.errorResponse(
+                        description="Invalid academic year."
+                    )
+
+                gallery.academic_year = academic_year
 
             if "category_id" in request.data:
                 category = GalleryCategory.objects.filter(
                     id=request.data.get("category_id"),
                     school=school,
                     is_active=True,
+                    is_deleted=False,
                 ).first()
 
                 if category is None:
@@ -688,33 +706,130 @@ class GalleryUpdateAPIView(APIView):
                 gallery.category = category
 
             if "allow_downloads" in request.data:
-                gallery.allow_downloads = request.data.get("allow_downloads")
+                gallery.allow_downloads = request.data.get(
+                    "allow_downloads"
+                )
 
             if "is_published" in request.data:
-                gallery.is_published = request.data.get("is_published")
+                gallery.is_published = request.data.get(
+                    "is_published"
+                )
+
+            images = request.data.get("images", [])
+            videos = request.data.get("videos", [])
+            delete_image_ids = request.data.get("delete_image_ids", [])
+            delete_video_ids = request.data.get("delete_video_ids", [])
+
+            if not isinstance(images, list):
+                return CustomResponse.errorResponse(
+                    description="Images must be a list."
+                )
+
+            if not isinstance(videos, list):
+                return CustomResponse.errorResponse(
+                    description="Videos must be a list."
+                )
+
+            if not isinstance(delete_image_ids, list):
+                return CustomResponse.errorResponse(
+                    description="delete_image_ids must be a list."
+                )
+
+            if not isinstance(delete_video_ids, list):
+                return CustomResponse.errorResponse(
+                    description="delete_video_ids must be a list."
+                )
+
+            for image in images:
+                if not isinstance(image, dict) or not image.get("url"):
+                    return CustomResponse.errorResponse(
+                        description="Each image must contain a URL."
+                    )
+
+            for video in videos:
+                if not isinstance(video, dict) or not video.get("url"):
+                    return CustomResponse.errorResponse(
+                        description="Each video must contain a URL."
+                    )
 
             with transaction.atomic():
                 gallery.save()
 
-                images = request.FILES.getlist("images")
-
-                for image in images:
+                # Add new images
+                for index, image_data in enumerate(images):
                     GalleryImage.objects.create(
                         gallery=gallery,
-                        image=image,
+                        image=image_data["url"],
+                        caption=image_data.get("caption") or None,
+                        display_order=image_data.get(
+                            "display_order", index
+                        ),
                     )
+
+                # Add new videos
+                for index, video_data in enumerate(videos):
+                    GalleryVideo.objects.create(
+                        gallery=gallery,
+                        video=video_data["url"],
+                        caption=video_data.get("caption") or None,
+                        display_order=video_data.get(
+                            "display_order", index
+                        ),
+                    )
+
+                # Soft-delete selected images
+                for image_id in delete_image_ids:
+                    image = GalleryImage.objects.filter(
+                        id=image_id,
+                        gallery=gallery,
+                        is_deleted=False,
+                    ).first()
+
+                    if image is None:
+                        return CustomResponse.errorResponse(
+                            description=f"Gallery image not found: {image_id}"
+                        )
+
+                    image.soft_delete(request.user)
+
+                # Soft-delete selected videos
+                for video_id in delete_video_ids:
+                    video = GalleryVideo.objects.filter(
+                        id=video_id,
+                        gallery=gallery,
+                        is_deleted=False,
+                    ).first()
+
+                    if video is None:
+                        return CustomResponse.errorResponse(
+                            description=f"Gallery video not found: {video_id}"
+                        )
+
+                    video.soft_delete(request.user)
 
             application_logger.info(
                 "gallery_updated",
                 gallery_id=str(gallery.id),
                 school_id=str(school.id),
                 added_image_count=len(images),
+                added_video_count=len(videos),
+                deleted_image_count=len(delete_image_ids),
+                deleted_video_count=len(delete_video_ids),
                 user_id=str(request.user.id),
             )
 
             return CustomResponse.successResponse(
                 description="Gallery updated successfully.",
-                data={"id": str(gallery.id)},
+                data={
+                    "id": str(gallery.id),
+                    "title": gallery.title,
+                    "academic_year_id": str(gallery.academic_year_id),
+                    "category_id": str(gallery.category_id),
+                    "added_image_count": len(images),
+                    "added_video_count": len(videos),
+                    "deleted_image_count": len(delete_image_ids),
+                    "deleted_video_count": len(delete_video_ids),
+                },
             )
 
         except Exception:
@@ -724,6 +839,7 @@ class GalleryUpdateAPIView(APIView):
                 school_id=str(school.id) if school else None,
                 user_id=str(request.user.id),
             )
+
             return CustomResponse.errorResponse(
                 description="Failed to update gallery."
             )
