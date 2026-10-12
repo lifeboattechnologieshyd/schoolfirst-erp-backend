@@ -25,7 +25,7 @@ from apps.backoffice.views.fee import CreateFeeTypeAPIView, FeeTypeListAPIView, 
     FeePlanListAPIView, FeePlanUpdateAPIView, AddFeeCollectionPlansAPIView, StudentFeePaymentCreateAPIView, \
     StudentFeePaymentListAPIView
 from apps.backoffice.views.feedback import FeedbackCategoryCreateAPIView, FeedbackCategoryListAPIView, \
-    FeedbackCategoryUpdateAPIView, FeedbackListAPIView, FeedbackResponseCreateAPIView
+    FeedbackCategoryUpdateAPIView, FeedbackListAPIView, FeedbackResponseCreateAPIView, FeedbackStatusUpdateAPIView
 from apps.backoffice.views.gallery import GalleryCategoryAPIView, GalleryCreateAPIView, GalleryListAPIView, \
     GalleryUpdateAPIView, GalleryDeleteAPIView, GalleryImageDeleteAPIView, \
     GalleryVideoDeleteAPIView, DeletedGalleryMediaAPIView
@@ -551,6 +551,8 @@ urlpatterns = [
     path("feedback",FeedbackListAPIView.as_view(),),
 
     path("feedback/<uuid:feedback_id>/responses",FeedbackResponseCreateAPIView.as_view(),),
+
+    path("feedback/<uuid:feedback_id>/status",FeedbackStatusUpdateAPIView.as_view(),),
 
 
 

@@ -695,3 +695,139 @@ class FeedbackResponseCreateAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Failed to submit feedback response."
             )
+
+
+class FeedbackStatusUpdateAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "feedback.update_status"
+
+    def patch(self, request, feedback_id):
+        school = request.school
+        status = request.data.get("status")
+
+        application_logger.info(
+            "feedback_status_update_started",
+            extra={
+                "school_id": str(school.id) if school else None,
+                "feedback_id": str(feedback_id),
+                "requested_by": str(request.user.id),
+                "requested_status": status,
+            },
+        )
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School information is required."
+            )
+
+        if not status:
+            return CustomResponse.errorResponse(
+                description="Feedback status is required."
+            )
+
+        valid_statuses = [
+            choice[0]
+            for choice in Feedback.Status.choices
+        ]
+
+        if status not in valid_statuses:
+            return CustomResponse.errorResponse(
+                description="Invalid feedback status."
+            )
+
+        try:
+            with transaction.atomic():
+                feedback = (
+                    Feedback.objects
+                    .select_for_update()
+                    .filter(
+                        id=feedback_id,
+                        school=school,
+                    )
+                    .first()
+                )
+
+                if not feedback:
+                    return CustomResponse.errorResponse(
+                        description="Feedback not found."
+                    )
+
+                current_status = feedback.status
+
+                # Prevent updates to terminal statuses
+                if current_status in [
+                    Feedback.Status.RESOLVED,
+                    Feedback.Status.REJECTED,
+                ]:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Feedback is already {current_status.lower()} "
+                            "and cannot be updated."
+                        )
+                    )
+
+                # Define allowed status transitions
+                allowed_transitions = {
+                    Feedback.Status.SUBMITTED: [
+                        Feedback.Status.IN_REVIEW,
+                    ],
+                    Feedback.Status.IN_REVIEW: [
+                        Feedback.Status.RESOLVED,
+                        Feedback.Status.REJECTED,
+                    ],
+                }
+
+                allowed_statuses = allowed_transitions.get(
+                    current_status,
+                    [],
+                )
+
+                if status not in allowed_statuses:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Cannot change feedback status from "
+                            f"{current_status} to {status}."
+                        )
+                    )
+
+                feedback.status = status
+                feedback.save(
+                    update_fields=["status", "updated_at"]
+                )
+
+            application_logger.info(
+                "feedback_status_updated",
+                extra={
+                    "school_id": str(school.id),
+                    "feedback_id": str(feedback.id),
+                    "previous_status": current_status,
+                    "new_status": feedback.status,
+                    "updated_by": str(request.user.id),
+                },
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "id": str(feedback.id),
+                    "previous_status": current_status,
+                    "status": feedback.status,
+                    "updated_at": feedback.updated_at,
+                },
+                description="Feedback status updated successfully.",
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "feedback_status_update_failed",
+                extra={
+                    "school_id": str(school.id),
+                    "feedback_id": str(feedback_id),
+                    "requested_by": str(request.user.id),
+                    "requested_status": status,
+                    "error": str(e),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to update feedback status."
+            )
