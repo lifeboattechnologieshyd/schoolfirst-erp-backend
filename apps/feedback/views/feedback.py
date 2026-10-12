@@ -225,7 +225,7 @@ class MyFeedbackAPIView(APIView):
 
             responses_queryset = (
                 FeedbackResponse.objects
-                .select_related("responded_by")
+                .select_related("parent")
                 .order_by("created_at")
             )
 
@@ -233,12 +233,12 @@ class MyFeedbackAPIView(APIView):
                 Feedback.objects
                 .filter(
                     school=school,
-                    submitted_by=request.user,
+                    parent=request.user,
                 )
                 .select_related(
                     "student",
                     "category",
-                    "submitted_by",
+                    "parent",
                 )
                 .prefetch_related(
                     Prefetch(
