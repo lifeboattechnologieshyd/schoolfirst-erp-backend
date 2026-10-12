@@ -94,6 +94,8 @@ if "apps.examination" in settings.INSTALLED_APPS:
     urlpatterns.append(path("examination/", include("apps.examination.urls")))
 if "apps.gallery" in settings.INSTALLED_APPS:
     urlpatterns.append(path("gallery/", include("apps.gallery.urls")))
+if "apps.feedback" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("feedback/", include("apps.feedback.urls")))
 
 
 ####################################
