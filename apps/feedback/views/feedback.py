@@ -225,7 +225,7 @@ class MyFeedbackAPIView(APIView):
 
             responses_queryset = (
                 FeedbackResponse.objects
-                .select_related("parent")
+                .select_related("responded_by")
                 .order_by("created_at")
             )
 
@@ -276,11 +276,7 @@ class MyFeedbackAPIView(APIView):
                         "responded_by": {
                             "id": str(response.responded_by_id),
                             "name": (
-                                getattr(
-                                    response.responded_by,
-                                    "name",
-                                    None,
-                                )
+                                getattr(response.responded_by, "name", None)
                                 if response.responded_by
                                 else None
                             ),
