@@ -4,7 +4,7 @@ from apps.feedback.views.feedback import CreateFeedbackAPIView, MyFeedbackAPIVie
 
 urlpatterns = [
 
-    path("create/feedback/",CreateFeedbackAPIView.as_view(),),
+    path("create/feedback",CreateFeedbackAPIView.as_view(),),
 
     path("feedbacks",MyFeedbackAPIView.as_view(),),
 ]
