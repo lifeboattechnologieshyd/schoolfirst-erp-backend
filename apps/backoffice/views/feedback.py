@@ -701,7 +701,7 @@ class FeedbackStatusUpdateAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "feedback.update_status"
 
-    def patch(self, request, feedback_id):
+    def put(self, request, feedback_id):
         school = request.school
         status = request.data.get("status")
 
