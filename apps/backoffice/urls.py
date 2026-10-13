@@ -38,6 +38,8 @@ from apps.backoffice.views.ptm import CreateParentTeacherMeetingAPIView, ParentT
 from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCreateAPIView, RoleListCreateAPIView, \
     AssignPermissionsToRoleAPIView, AssignRoleToUserAPIView, RBACDashboardAPIView, UserAccessAPIView, ModulesAPIView, \
     ModulePermissionsAPIView, RolesAPIView, RoleAccessAPIView, UpdateRoleToUserAPIView
+from apps.backoffice.views.remarks import RemarkCategoryCreateAPIView, RemarkCategoryListAPIView, \
+    RemarkCategoryUpdateAPIView, RemarkCreateAPIView, RemarkListAPIView, RemarkDeleteAPIView, RemarkUpdateAPIView
 from apps.backoffice.views.school import AcademicYearListAPIView, CreateAcademicYearAPIView, UpdateAcademicYearAPIView, \
     CreateGradeAPIView, GradeListAPIView, UpdateGradeAPIView, CreateSectionAPIView, SectionListAPIView, \
     UpdateSectionAPIView, CreateStudentAPIView, BulkUploadStudentAPIView, StudentListAPIView, \
@@ -553,6 +555,20 @@ urlpatterns = [
     path("feedback/<uuid:feedback_id>/responses",FeedbackResponseCreateAPIView.as_view(),),
 
     path("feedback/<uuid:feedback_id>/status",FeedbackStatusUpdateAPIView.as_view(),),
+
+    path("remarks-categories/create",RemarkCategoryCreateAPIView.as_view(),),
+
+    path("remarks-categories",RemarkCategoryListAPIView.as_view(),),
+
+    path("remarks-categories/<uuid:category_id>",RemarkCategoryUpdateAPIView.as_view(),),
+
+    path("remarks/create",RemarkCreateAPIView.as_view(),),
+
+    path("remarks",RemarkListAPIView.as_view()),
+
+    path("remarks/<uuid:remark_id>",RemarkUpdateAPIView.as_view(),),
+
+    path("remarks/delete/<uuid:remark_id>",RemarkDeleteAPIView.as_view(),),
 
 
 

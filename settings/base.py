@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "apps.examination",
     "apps.gallery",
     "apps.feedback",
+    "apps.remarks",
     # Third Party
     "rest_framework",
     "rest_framework.authtoken",

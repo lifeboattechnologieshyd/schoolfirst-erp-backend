@@ -96,6 +96,8 @@ if "apps.gallery" in settings.INSTALLED_APPS:
     urlpatterns.append(path("gallery/", include("apps.gallery.urls")))
 if "apps.feedback" in settings.INSTALLED_APPS:
     urlpatterns.append(path("feedback/", include("apps.feedback.urls")))
+if "apps.remarks" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("remarks/", include("apps.remarks.urls")))
 
 
 ####################################
