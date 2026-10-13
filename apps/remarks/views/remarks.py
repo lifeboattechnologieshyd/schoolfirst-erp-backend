@@ -5,10 +5,59 @@ from django.utils.dateparse import parse_date
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.remarks.models import Remark
+from apps.remarks.models import Remark, RemarkCategory
 from apps.school.models.school import Student
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.utils.logger import application_logger
+
+class RemarkCategoryLISTAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = request.school
+
+        try:
+            categories = RemarkCategory.objects.filter(
+                school=school,
+                is_active=True,
+            ).order_by("name")
+
+            data = [
+                {
+                    "id": str(category.id),
+                    "name": category.name,
+                    "description": category.description,
+                }
+                for category in categories
+            ]
+
+            application_logger.info(
+                "app_remark_categories_fetched",
+                extra={
+                    "school_id": str(school.id),
+                    "user_id": str(request.user.id),
+                    "total": len(data),
+                },
+            )
+
+            return CustomResponse.successResponse(
+                data=data,
+                total=len(data),
+                description="Remark categories fetched successfully.",
+            )
+
+        except Exception:
+            application_logger.exception(
+                "app_remark_categories_fetch_failed",
+                extra={
+                    "school_id": str(school.id),
+                    "user_id": str(request.user.id),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="Unable to fetch remark categories."
+            )
 
 
 class StudentRemarkLISTAPIView(APIView):
