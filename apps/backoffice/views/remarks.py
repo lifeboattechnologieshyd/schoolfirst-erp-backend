@@ -10,7 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.remarks.models import RemarkCategory, Remark
-from apps.school.models.school import Student, Subject, Section, Grade
+from apps.school.models.school import Student, Subject, Section, Grade, Staff
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
@@ -478,6 +478,17 @@ class RemarkCreateAPIView(APIView):
                     description="Invalid or inactive remark category.",
                     status_code=400,
                 )
+            teacher = Staff.objects.filter(
+                user=request.user,
+                school=school,
+                status=Staff.Status.ACTIVE,
+            ).first()
+
+            if teacher is None:
+                return CustomResponse.errorResponse(
+                    description="Active teacher record not found.",
+                    status_code=403,
+                )
 
             with transaction.atomic():
                 remark = Remark.objects.create(
@@ -487,7 +498,7 @@ class RemarkCreateAPIView(APIView):
                     section=section,
                     subject=subject,
                     category=category,
-                    teacher=request.user,
+                    teacher=teacher,
                     date=remark_date,
                     title=title.strip(),
                     description=description.strip(),
@@ -572,7 +583,6 @@ class RemarkListAPIView(APIView):
                 "subject",
                 "category",
                 "teacher",
-                "teacher__staff",
             ).order_by("-date", "-created_at")
 
             # Filters
@@ -696,7 +706,7 @@ class RemarkListAPIView(APIView):
                     },
                     "teacher": {
                         "id": str(remark.teacher_id),
-                        "name": remark.teacher.staff.name,
+                        "name": remark.teacher.name,
                     },
                     "date": remark.date,
                     "title": remark.title,

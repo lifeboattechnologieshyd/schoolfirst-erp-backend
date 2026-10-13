@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from apps.core.models import UserMaster
 from apps.school.models import School
-from apps.school.models.school import Student, Subject, Section, Grade
+from apps.school.models.school import Student, Subject, Section, Grade, Staff
 from shared.managers import SoftDeleteManager
 from shared.mixins import AuditModel
 
@@ -83,7 +83,7 @@ class Remark(AuditModel):
     )
 
     teacher = models.ForeignKey(
-        UserMaster,
+        Staff,
         on_delete=models.PROTECT,
         related_name="created_student_remarks",
     )
