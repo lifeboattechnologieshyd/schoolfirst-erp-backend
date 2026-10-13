@@ -303,7 +303,7 @@ class RemarkCategoryUpdateAPIView(APIView):
 
 class RemarkCreateAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
-    required_permission = "student_remark.create"
+    required_permission = "remark.create"
 
     def post(self, request):
         school = request.school
@@ -532,7 +532,7 @@ class RemarkCreateAPIView(APIView):
 
 class RemarkListAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
-    required_permission = "student_remark.view"
+    required_permission = "remark.view"
 
     def get(self, request):
         school = request.school
@@ -706,7 +706,7 @@ class RemarkListAPIView(APIView):
 
 class RemarkUpdateAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
-    required_permission = "student_remark.update"
+    required_permission = "remark.update"
 
     def patch(self, request, remark_id):
         school = request.school
@@ -1031,7 +1031,7 @@ class RemarkUpdateAPIView(APIView):
 
 class RemarkDeleteAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
-    required_permission = "student_remark.delete"
+    required_permission = "remark.delete"
 
     def delete(self, request, remark_id):
         school = request.school
