@@ -524,31 +524,7 @@ class RemarkCreateAPIView(APIView):
             return CustomResponse.successResponse(
                 data={
                     "id": str(remark.id),
-                    "student": {
-                        "id": str(student.id),
-                        "name": student.name,
-                        "admission_number": student.admission_number,
 
-                    },
-                    "section": {
-                        "id": str(section.id),
-                        "name": section.name,
-                    },
-                    "subject": {
-                        "id": str(subject.id),
-                        "name": subject.name,
-                    },
-                    "category": {
-                        "id": str(category.id),
-                        "name": category.name,
-                    },
-                    "date": remark.date,
-                    "title": remark.title,
-                    "description": remark.description,
-                    "context": remark.context,
-                    "is_visible_to_staff": remark.is_visible_to_staff,
-                    "is_visible_to_parent": remark.is_visible_to_parent,
-                    "created_at": remark.created_at,
                 },
                 description="Student remark created successfully.",
             )
@@ -689,6 +665,8 @@ class RemarkListAPIView(APIView):
                     "student": {
                         "id": str(remark.student_id),
                         "name": remark.student.name,
+                        "admission_number": remark.admission_number,
+
                     },
                     "grade": {
                         "id": str(remark.grade_id),
@@ -1057,34 +1035,7 @@ class RemarkUpdateAPIView(APIView):
             return CustomResponse.successResponse(
                 data={
                     "id": str(remark.id),
-                    "student": {
-                        "id": str(remark.student_id),
-                        "name": remark.student.name,
-                    },
-                    "section": {
-                        "id": str(remark.section_id),
-                        "name": remark.section.name,
-                    },
-                    "subject": {
-                        "id": str(remark.subject_id),
-                        "name": remark.subject.name,
-                    },
-                    "category": {
-                        "id": str(remark.category_id),
-                        "name": remark.category.name,
-                    },
-                    "teacher": {
-                        "id": str(remark.teacher_id),
-                        "name": remark.teacher.name,
-                    },
-                    "date": remark.date,
-                    "title": remark.title,
-                    "description": remark.description,
-                    "context": remark.context,
-                    "is_visible_to_staff": remark.is_visible_to_staff,
-                    "is_visible_to_parent": remark.is_visible_to_parent,
-                    "created_at": remark.created_at,
-                    "updated_at": remark.updated_at,
+
                 },
                 description="Student remark updated successfully.",
             )
