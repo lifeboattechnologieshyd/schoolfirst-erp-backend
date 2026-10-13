@@ -173,7 +173,7 @@ class RemarkCategoryUpdateAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "remark_category.update"
 
-    def patch(self, request, category_id):
+    def put(self, request, category_id):
         school = request.school
 
         try:
