@@ -665,7 +665,7 @@ class RemarkListAPIView(APIView):
                     "student": {
                         "id": str(remark.student_id),
                         "name": remark.student.name,
-                        "admission_number": remark.admission_number,
+                        "admission_number": remark.student.admission_number,
 
                     },
                     "grade": {
