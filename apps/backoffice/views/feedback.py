@@ -538,6 +538,7 @@ class FeedbackListAPIView(APIView):
                     "student": {
                         "id": str(feedback.student_id),
                         "name": feedback.student.name,
+                        "admission_number": feedback.student.admission_number,
                     },
                     "category": {
                         "id": str(feedback.category_id),
