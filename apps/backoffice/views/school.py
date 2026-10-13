@@ -3382,14 +3382,20 @@ class CreateStaffAPIView(APIView):
                 )
                 return CustomResponse.errorResponse(description="Invalid branch.")
 
-        if UserMaster.objects.filter(username=mobile).exists():
-            application_logger.warning(
-                "staff_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                reason="user_already_exists",
+        user = UserMaster.objects.filter(username=mobile).first()
+
+        if user:
+            # Check whether this user already has a staff record
+            if Staff.objects.filter(user=user).exists():
+                return CustomResponse.errorResponse(
+                    description="Staff already exists for this mobile number."
+                )
+        else:
+            # Create a new user only when one does not exist
+            user = UserMaster.objects.create(
+                username=mobile,
+                # Add your required UserMaster fields here
             )
-            return CustomResponse.errorResponse(description="User already exists.")
 
         if Staff.objects.filter(school=school, employee_id=employee_id).exists():
             application_logger.warning(
