@@ -708,7 +708,7 @@ class RemarkUpdateAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "remark.update"
 
-    def patch(self, request, remark_id):
+    def put(self, request, remark_id):
         school = request.school
 
         # Validate remark ID
