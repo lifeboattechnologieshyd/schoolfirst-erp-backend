@@ -3297,18 +3297,22 @@ class UpdateStudentDocumentAPIView(APIView):
         )
 
 
-class CreateStaffAPIView(APIView):
 
+
+class CreateStaffAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "staff.create"
 
     def post(self, request):
-
         school = request.school
+
         employee_id = request.data.get("employee_id")
         staff_type = request.data.get("staff_type")
-        mobile = str(request.data.get("mobile"))
+        name = request.data.get("name")
+        gender = request.data.get("gender")
+        mobile = str(request.data.get("mobile", "")).strip()
         branch_id = request.data.get("branch_id")
+        email = request.data.get("email")
 
         application_logger.info(
             "staff_create_requested",
@@ -3319,148 +3323,158 @@ class CreateStaffAPIView(APIView):
             branch_id=branch_id,
         )
 
+        # Validate school
         if school is None:
-            application_logger.warning("staff_create_failed", requested_by=str(request.user.id), reason="school_not_found")
-            return CustomResponse.errorResponse(description="School not found.")
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
 
-        required_fields = ["employee_id", "staff_type", "name", "gender", "mobile", "joining_date"]
+        # Validate required fields
+        required_fields = [
+            "employee_id",
+            "staff_type",
+            "name",
+            "gender",
+            "mobile",
+            "joining_date",
+        ]
 
         for field in required_fields:
             if request.data.get(field) in [None, ""]:
-                application_logger.warning(
-                    "staff_create_failed",
-                    requested_by=str(request.user.id),
-                    school_id=str(school.id),
-                    field=field,
-                    reason="required_field_missing",
+                return CustomResponse.errorResponse(
+                    description=f"{field} is required."
                 )
-                return CustomResponse.errorResponse(description=f"{field} is required.")
 
+        employee_id = employee_id.strip()
+        name = name.strip()
+
+        if not employee_id:
+            return CustomResponse.errorResponse(
+                description="Employee ID is required."
+            )
+
+        if not name:
+            return CustomResponse.errorResponse(
+                description="Name is required."
+            )
+
+        # Validate staff type
         if staff_type not in Staff.StaffType.values:
-            application_logger.warning(
-                "staff_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                staff_type=staff_type,
-                reason="invalid_staff_type",
+            return CustomResponse.errorResponse(
+                description="Invalid staff type."
             )
-            return CustomResponse.errorResponse(description="Invalid staff type.")
 
-        gender = request.data.get("gender")
-
+        # Validate gender
         if gender not in Staff.Gender.values:
-            application_logger.warning(
-                "staff_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                gender=gender,
-                reason="invalid_gender",
+            return CustomResponse.errorResponse(
+                description="Invalid gender."
             )
-            return CustomResponse.errorResponse(description="Invalid gender.")
 
+        # Validate mobile
         if not mobile.isdigit() or len(mobile) != 10:
-            application_logger.warning(
-                "staff_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                reason="invalid_mobile_number",
+            return CustomResponse.errorResponse(
+                description="Enter valid mobile number."
             )
-            return CustomResponse.errorResponse(description="Enter valid mobile number.")
 
+        # Validate branch
         branch = None
 
         if branch_id:
-            branch = Branch.objects.filter(id=branch_id, school=school).first()
+            branch = Branch.objects.filter(
+                id=branch_id,
+                school=school,
+            ).first()
 
             if branch is None:
-                application_logger.warning(
-                    "staff_create_failed",
-                    requested_by=str(request.user.id),
-                    school_id=str(school.id),
-                    branch_id=branch_id,
-                    reason="invalid_branch",
-                )
-                return CustomResponse.errorResponse(description="Invalid branch.")
-
-        user = UserMaster.objects.filter(username=mobile).first()
-
-        if user:
-            # Check whether this user already has a staff record
-            if Staff.objects.filter(user=user).exists():
                 return CustomResponse.errorResponse(
-                    description="Staff already exists for this mobile number."
+                    description="Invalid branch."
                 )
-        else:
-            # Create a new user only when one does not exist
-            user = UserMaster.objects.create(
-                username=mobile,
-                # Add your required UserMaster fields here
+
+        # Validate employee ID
+        if Staff.objects.filter(
+            school=school,
+            employee_id=employee_id,
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="Employee ID already exists."
             )
 
-        if Staff.objects.filter(school=school, employee_id=employee_id).exists():
-            application_logger.warning(
-                "staff_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                employee_id=employee_id,
-                reason="employee_id_already_exists",
+        # Validate staff mobile
+        if Staff.objects.filter(
+            school=school,
+            mobile=mobile,
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="Mobile number already exists in staff."
             )
-            return CustomResponse.errorResponse(description="Employee ID already exists.")
 
-        if Staff.objects.filter(school=school, mobile=mobile).exists():
-            application_logger.warning(
-                "staff_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                reason="mobile_already_exists",
+        # Validate email
+        if email and Staff.objects.filter(
+            school=school,
+            email=email,
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="Email already exists in staff."
             )
-            return CustomResponse.errorResponse(description="Mobile number already exists.")
 
-        email = request.data.get("email")
-
-        if email and Staff.objects.filter(school=school, email=email).exists():
-            application_logger.warning(
-                "staff_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                reason="email_already_exists",
-            )
-            return CustomResponse.errorResponse(description="Email already exists.")
-
-        role = Roles.objects.filter(role_name=staff_type).first()
+        # Validate role configuration
+        role = Roles.objects.filter(
+            role_name=staff_type
+        ).first()
 
         if role is None:
-            application_logger.warning(
-                "staff_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                staff_type=staff_type,
-                reason="role_not_configured",
+            return CustomResponse.errorResponse(
+                description=f"{staff_type.title()} role not configured."
             )
-            return CustomResponse.errorResponse(description=f"{staff_type.title()} role not configured.")
+
+        user = None
+        staff = None
 
         try:
-
             with transaction.atomic():
 
-                user = UserMaster.objects.create(
-                    username=mobile,
-                    first_name=request.data.get("name").strip(),
-                    email=email,
-                    mobile=mobile,
-                    gender=gender,
-                    date_of_birth=request.data.get("date_of_birth"),
-                    profile_image=request.data.get("profile_image"),
-                    is_active=True,
-                )
+                # Reuse the existing user when the mobile is already registered.
+                user = UserMaster.objects.filter(
+                    username=mobile
+                ).first()
 
+                if user:
+                    # OneToOneField permits only one staff record per user.
+                    if Staff.objects.filter(user=user).exists():
+                        application_logger.warning(
+                            "staff_create_failed",
+                            school_id=str(school.id),
+                            reason="user_already_linked_to_staff",
+                            mobile=mobile,
+                        )
+
+                        return CustomResponse.errorResponse(
+                            description=(
+                                "This user is already linked to a staff record."
+                            )
+                        )
+
+                else:
+                    # Create a user only when one does not already exist.
+                    user = UserMaster.objects.create(
+                        username=mobile,
+                        first_name=name,
+                        email=email,
+                        mobile=mobile,
+                        gender=gender,
+                        date_of_birth=request.data.get("date_of_birth"),
+                        profile_image=request.data.get("profile_image"),
+                        is_active=True,
+                    )
+
+                # Create staff linked to the existing or newly created user.
                 staff = Staff.objects.create(
                     user=user,
                     school=school,
                     branch=branch,
-                    employee_id=employee_id.strip(),
+                    employee_id=employee_id,
                     staff_type=staff_type,
-                    name=request.data.get("name").strip(),
+                    name=name,
                     gender=gender,
                     date_of_birth=request.data.get("date_of_birth"),
                     mobile=mobile,
@@ -3468,14 +3482,42 @@ class CreateStaffAPIView(APIView):
                     qualification=request.data.get("qualification"),
                     experience=request.data.get("experience", 0),
                     joining_date=request.data.get("joining_date"),
-                    status=request.data.get("status", Staff.Status.ACTIVE),
+                    status=request.data.get(
+                        "status",
+                        Staff.Status.ACTIVE,
+                    ),
                     profile_image=request.data.get("profile_image"),
                     address=request.data.get("address"),
-                    emergency_contact_name=request.data.get("emergency_contact_name"),
-                    emergency_contact_mobile=request.data.get("emergency_contact_mobile"),
+                    emergency_contact_name=request.data.get(
+                        "emergency_contact_name"
+                    ),
+                    emergency_contact_mobile=request.data.get(
+                        "emergency_contact_mobile"
+                    ),
                 )
 
-                UserRoles.objects.create(user=user, school=school, role=role)
+                # Avoid duplicate role assignments.
+                UserRoles.objects.get_or_create(
+                    user=user,
+                    school=school,
+                    role=role,
+                )
+
+        except IntegrityError:
+            application_logger.exception(
+                "staff_create_integrity_error",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                employee_id=employee_id,
+                reason="integrity_error",
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Staff could not be created because a duplicate "
+                    "record or database constraint was detected."
+                )
+            )
 
         except Exception as e:
             application_logger.exception(
@@ -3483,11 +3525,13 @@ class CreateStaffAPIView(APIView):
                 requested_by=str(request.user.id),
                 school_id=str(school.id),
                 employee_id=employee_id,
-                branch_id=branch_id,
                 reason="staff_creation_failed",
                 error=str(e),
             )
-            return CustomResponse.errorResponse(description=str(e))
+
+            return CustomResponse.errorResponse(
+                description="Failed to create staff."
+            )
 
         application_logger.info(
             "staff_created",
@@ -3505,8 +3549,11 @@ class CreateStaffAPIView(APIView):
             description="Staff created successfully.",
             data={
                 "id": str(staff.id),
+                "user_id": str(user.id),
                 "employee_id": staff.employee_id,
                 "name": staff.name,
+                "mobile": staff.mobile,
+                "staff_type": staff.staff_type,
                 "role": role.role_name,
             },
         )
