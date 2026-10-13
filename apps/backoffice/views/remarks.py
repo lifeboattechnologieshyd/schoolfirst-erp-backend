@@ -572,6 +572,7 @@ class RemarkListAPIView(APIView):
                 "subject",
                 "category",
                 "teacher",
+                "teacher__staff",
             ).order_by("-date", "-created_at")
 
             # Filters
@@ -695,7 +696,7 @@ class RemarkListAPIView(APIView):
                     },
                     "teacher": {
                         "id": str(remark.teacher_id),
-                        "name": remark.teacher.name,
+                        "name": remark.teacher.staff.name,
                     },
                     "date": remark.date,
                     "title": remark.title,
