@@ -82,6 +82,7 @@ class StudentRemarkLISTAPIView(APIView):
                 is_visible_to_parent=True,
             ).select_related(
                 "student",
+                "grade",
                 "section",
                 "subject",
                 "category",
@@ -168,6 +169,10 @@ class StudentRemarkLISTAPIView(APIView):
                     "student": {
                         "id": str(remark.student_id),
                         "name": remark.student.name,
+                    },
+                    "grade":{
+                        "id": str(remark.grade_id),
+                        "name": remark.grade.name,
                     },
                     "section": {
                         "id": str(remark.section_id),

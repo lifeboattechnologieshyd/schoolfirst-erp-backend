@@ -10,7 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.remarks.models import RemarkCategory, Remark
-from apps.school.models.school import Student, Subject, Section
+from apps.school.models.school import Student, Subject, Section, Grade
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
@@ -412,6 +412,29 @@ class RemarkCreateAPIView(APIView):
                     description="Student not found in this school.",
                     status_code=404,
                 )
+            grade_id = request.data.get("grade_id")
+
+            if not grade_id:
+                return CustomResponse.errorResponse(
+                    description="Grade is required."
+                )
+
+            try:
+                grade_uuid = uuid.UUID(str(grade_id))
+            except (ValueError, TypeError, AttributeError):
+                return CustomResponse.errorResponse(
+                    description="Invalid grade ID."
+                )
+
+            grade = Grade.objects.filter(
+                id=grade_uuid,
+                school=school,
+            ).first()
+
+            if grade is None:
+                return CustomResponse.errorResponse(
+                    description="Grade not found in this school."
+                )
 
             # Validate section belongs to the school
             section = Section.objects.filter(
@@ -459,6 +482,7 @@ class RemarkCreateAPIView(APIView):
             with transaction.atomic():
                 remark = Remark.objects.create(
                     school=school,
+                    grade=grade,
                     student=student,
                     section=section,
                     subject=subject,
@@ -477,6 +501,7 @@ class RemarkCreateAPIView(APIView):
                 extra={
                     "remark_id": str(remark.id),
                     "school_id": str(school.id),
+                    "grade_id": str(grade.id),
                     "student_id": str(student.id),
                     "section_id": str(section.id),
                     "subject_id": str(subject.id),
@@ -542,6 +567,7 @@ class RemarkListAPIView(APIView):
                 school=school
             ).select_related(
                 "student",
+                "grade",
                 "section",
                 "subject",
                 "category",
@@ -550,6 +576,7 @@ class RemarkListAPIView(APIView):
 
             # Filters
             student_id = request.query_params.get("student_id")
+            grade_id = request.query_params.get("grade_id")
             section_id = request.query_params.get("section_id")
             subject_id = request.query_params.get("subject_id")
             category_id = request.query_params.get("category_id")
@@ -560,6 +587,7 @@ class RemarkListAPIView(APIView):
             # Validate UUID filters
             uuid_filters = {
                 "student_id": student_id,
+                "grade_id": grade_id,
                 "section_id": section_id,
                 "subject_id": subject_id,
                 "category_id": category_id,
@@ -576,6 +604,8 @@ class RemarkListAPIView(APIView):
 
             if student_id:
                 remarks = remarks.filter(student_id=student_id)
+            if grade_id:
+                remarks = remarks.filter(grade_id=grade_id)
 
             if section_id:
                 remarks = remarks.filter(section_id=section_id)
@@ -646,6 +676,10 @@ class RemarkListAPIView(APIView):
                     "student": {
                         "id": str(remark.student_id),
                         "name": remark.student.name,
+                    },
+                    "grade": {
+                        "id": str(remark.grade_id),
+                        "name": remark.grade.name,
                     },
                     "section": {
                         "id": str(remark.section_id),
@@ -732,6 +766,7 @@ class RemarkUpdateAPIView(APIView):
 
         allowed_fields = {
             "student_id",
+            "grade_id",
             "section_id",
             "subject_id",
             "category_id",
@@ -790,6 +825,31 @@ class RemarkUpdateAPIView(APIView):
                         return CustomResponse.errorResponse(
                             description="Student not found in this school."
                         )
+
+                grade = remark.grade
+
+                if "grade_id" in request.data:
+                    grade_id = request.data.get("grade_id")
+
+                    try:
+                        grade_uuid = uuid.UUID(str(grade_id))
+                    except (ValueError, TypeError, AttributeError):
+                        return CustomResponse.errorResponse(
+                            description="Invalid grade ID."
+                        )
+
+                    grade = Grade.objects.filter(
+                        id=grade_uuid,
+                        school=school,
+                    ).first()
+
+                    if grade is None:
+                        return CustomResponse.errorResponse(
+                            description="Grade not found."
+                        )
+
+
+
 
                 # Validate section
                 section = remark.section
@@ -956,6 +1016,7 @@ class RemarkUpdateAPIView(APIView):
 
                 # Update remark
                 remark.student = student
+                remark.grade = grade
                 remark.section = section
                 remark.subject = subject
                 remark.category = category

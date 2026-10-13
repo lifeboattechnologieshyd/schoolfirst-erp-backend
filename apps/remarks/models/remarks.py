@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from apps.core.models import UserMaster
 from apps.school.models import School
-from apps.school.models.school import Student, Subject, Section
+from apps.school.models.school import Student, Subject, Section, Grade
 from shared.managers import SoftDeleteManager
 from shared.mixins import AuditModel
 
@@ -65,6 +65,11 @@ class Remark(AuditModel):
         on_delete=models.CASCADE,
         related_name="student_remarks",
     )
+    grade = models.ForeignKey(
+        Grade,
+        on_delete=models.PROTECT,
+        related_name="student_remarks",
+    )
     category = models.ForeignKey(
         RemarkCategory,
         on_delete=models.PROTECT,
@@ -92,6 +97,8 @@ class Remark(AuditModel):
         Section,
         on_delete=models.PROTECT,
         related_name="student_remarks",
+        null=True,
+        blank=True,
     )
 
     date = models.DateField(
