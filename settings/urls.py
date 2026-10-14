@@ -98,6 +98,9 @@ if "apps.feedback" in settings.INSTALLED_APPS:
     urlpatterns.append(path("feedback/", include("apps.feedback.urls")))
 if "apps.remarks" in settings.INSTALLED_APPS:
     urlpatterns.append(path("remarks/", include("apps.remarks.urls")))
+if "apps.attendance" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("attendance/", include("apps.attendance.urls")))
+
 
 
 ####################################
