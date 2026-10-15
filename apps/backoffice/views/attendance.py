@@ -1590,7 +1590,7 @@ class StudentLeaveReviewAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "student_leave.review"
 
-    def patch(self, request, leave_id):
+    def put(self, request, leave_id):
         school = request.school
 
         status = request.data.get("status")
@@ -1680,7 +1680,7 @@ class StaffLeaveReviewAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "staff_leave.review"
 
-    def patch(self, request, leave_id):
+    def put(self, request, leave_id):
         school = request.school
 
         status = request.data.get("status")
