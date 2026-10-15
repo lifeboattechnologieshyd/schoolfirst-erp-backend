@@ -44,17 +44,7 @@ class BulkMarkStudentAttendanceAPIView(APIView):
                 description="School not found."
             )
 
-        # Get the staff record for the authenticated user
-        staff = Staff.objects.filter(
-            user=request.user,
-            school=school,
-            status=Staff.Status.ACTIVE,
-        ).first()
 
-        if staff is None:
-            return CustomResponse.errorResponse(
-                description="Active staff record not found for this user."
-            )
 
         # Validate required fields
         required_fields = {
