@@ -594,9 +594,9 @@ urlpatterns = [
 
     path("staff/leaves",StaffLeaveListAPIView.as_view(),),
 
-    path("student/leave/review",StudentLeaveReviewAPIView.as_view(),),
+    path("student/leave/review/<uuid:leave_id>",StudentLeaveReviewAPIView.as_view(),),
 
-    path("staff/leave/review",StaffLeaveReviewAPIView.as_view(),),
+    path("staff/leave/review/<uuid:leave_id>",StaffLeaveReviewAPIView.as_view(),),
 
 
 
