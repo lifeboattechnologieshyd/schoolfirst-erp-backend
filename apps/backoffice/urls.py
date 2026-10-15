@@ -2,6 +2,9 @@ from django.urls import path
 
 from apps.backoffice.views.assignment import CreateAssignmentAPIView, AssignmentListAPIView, AssignmentUpdateAPIView, \
     TeacherAssignmentSubmissionListAPIView, TeacherCheckAssignmentAPIView
+from apps.backoffice.views.attendance import StaffAttendanceListAPIView, BulkMarkStaffAttendanceAPIView, \
+    UpdateStaffAttendanceAPIView, StaffAttendanceSummaryAPIView, StudentAttendanceListAPIView, \
+    UpdateStudentAttendanceAPIView, BulkMarkStudentAttendanceAPIView
 from apps.backoffice.views.events import CreateCalendarEventAPIView, CalendarEventListAPIView, \
     UpdateCalendarEventAPIView
 from apps.backoffice.views.examination import ExaminationTypeCreateAPIView, ExaminationTypeListAPIView, \
@@ -569,6 +572,20 @@ urlpatterns = [
     path("remarks/<uuid:remark_id>",RemarkUpdateAPIView.as_view(),),
 
     path("remarks/delete/<uuid:remark_id>",RemarkDeleteAPIView.as_view(),),
+
+    path("student-attendance/create",BulkMarkStudentAttendanceAPIView.as_view(),),
+
+    path("student-attendance",StudentAttendanceListAPIView.as_view(),),
+
+    path("student-attendance/<uuid:attendance_id>",UpdateStudentAttendanceAPIView.as_view(),),
+
+    path("staff-attendance/create",BulkMarkStaffAttendanceAPIView.as_view(),),
+
+    path("staff-attendance",StaffAttendanceListAPIView.as_view(),),
+
+    path("staff-attendance/<uuid:attendance_id>",UpdateStaffAttendanceAPIView.as_view(),),
+
+    path("staff-attendance/summary",StaffAttendanceSummaryAPIView.as_view(),    ),
 
 
 
