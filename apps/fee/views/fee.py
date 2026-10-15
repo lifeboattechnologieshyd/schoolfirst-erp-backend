@@ -17,7 +17,7 @@ from shared.utils.logger import payment_logger
 
 
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from django.db.models import Sum, F, ExpressionWrapper, DecimalField, Prefetch
 
 

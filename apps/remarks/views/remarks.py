@@ -67,18 +67,14 @@ class StudentRemarkLISTAPIView(APIView):
         school = request.school
 
         try:
-            # Get students associated with the logged-in parent
-            students = Student.objects.filter(
-                Q(father=request.user)
-                | Q(mother=request.user)
-                | Q(guardian=request.user),
-                school=school,
-            ).distinct()
+            student_id = request.query_params.get("student_id")
+
+
 
             # Get remarks visible to parents for their students
             remarks = Remark.objects.filter(
                 school=school,
-                student__in=students,
+                student_id=student_id,
                 is_visible_to_parent=True,
             ).select_related(
                 "student",
@@ -90,7 +86,6 @@ class StudentRemarkLISTAPIView(APIView):
             ).order_by("-date", "-created_at")
 
             # Filters
-            student_id = request.query_params.get("student_id")
             category_id = request.query_params.get("category_id")
             start_date = request.query_params.get("start_date")
             end_date = request.query_params.get("end_date")
