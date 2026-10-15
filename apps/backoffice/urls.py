@@ -4,7 +4,8 @@ from apps.backoffice.views.assignment import CreateAssignmentAPIView, Assignment
     TeacherAssignmentSubmissionListAPIView, TeacherCheckAssignmentAPIView
 from apps.backoffice.views.attendance import StaffAttendanceListAPIView, BulkMarkStaffAttendanceAPIView, \
     UpdateStaffAttendanceAPIView, StaffAttendanceSummaryAPIView, StudentAttendanceListAPIView, \
-    UpdateStudentAttendanceAPIView, BulkMarkStudentAttendanceAPIView
+    UpdateStudentAttendanceAPIView, BulkMarkStudentAttendanceAPIView, StudentLeaveListAPIView, StaffLeaveListAPIView, \
+    StaffLeaveRequestAPIView, StudentLeaveReviewAPIView, StaffLeaveReviewAPIView
 from apps.backoffice.views.events import CreateCalendarEventAPIView, CalendarEventListAPIView, \
     UpdateCalendarEventAPIView
 from apps.backoffice.views.examination import ExaminationTypeCreateAPIView, ExaminationTypeListAPIView, \
@@ -585,7 +586,18 @@ urlpatterns = [
 
     path("staff-attendance/<uuid:attendance_id>",UpdateStaffAttendanceAPIView.as_view(),),
 
-    path("staff-attendance/summary",StaffAttendanceSummaryAPIView.as_view(),    ),
+    path("staff-attendance/summary",StaffAttendanceSummaryAPIView.as_view(),),
+
+    path("staff/leave/apply",StaffLeaveRequestAPIView.as_view()),
+
+    path("student/leaves",StudentLeaveListAPIView.as_view(),),
+
+    path("staff/leaves",StaffLeaveListAPIView.as_view(),),
+
+    path("student/leave/review",StudentLeaveReviewAPIView.as_view(),),
+
+    path("staff/leave/review",StaffLeaveReviewAPIView.as_view(),),
+
 
 
 
