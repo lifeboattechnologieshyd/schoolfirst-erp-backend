@@ -135,7 +135,7 @@ class StudentLeaveRequestAPIView(APIView):
                     "duration": leave.duration,
                     "total_days": str(leave.total_days),
                     "reason": leave.reason,
-                    "medical_document": leave.medical_document,
+                    "pdf": leave.pdf,
                     "status": leave.status,
                 },
                 description="Student leave request submitted successfully."
