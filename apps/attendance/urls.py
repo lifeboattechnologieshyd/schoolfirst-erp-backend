@@ -4,5 +4,5 @@ from apps.attendance.views.attendance import StudentAttendanceAPIView, StudentLe
 
 urlpatterns = [
     path('apply/leave', StudentLeaveRequestAPIView.as_view()),
-    path("attendance/", StudentAttendanceAPIView.as_view()),
+    path("attendance", StudentAttendanceAPIView.as_view()),
 ]
