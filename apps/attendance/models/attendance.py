@@ -216,9 +216,9 @@ class Leave(AuditModel):
     objects = SoftDeleteManager()
     all_objects = models.Manager()
 
-    class LeaveDuration(models.TextChoices):
-        FULL_DAY = "FULL_DAY", "Full Day"
-        HALF_DAY = "HALF_DAY", "Half Day"
+    # class LeaveDuration(models.TextChoices):
+    #     FULL_DAY = "FULL_DAY", "Full Day"
+    #     HALF_DAY = "HALF_DAY", "Half Day"
 
     class LeaveType(models.TextChoices):
         SICK = "SICK", "Sick Leave"
@@ -300,11 +300,11 @@ class Leave(AuditModel):
         choices=LeaveStatus.choices,
         default=LeaveStatus.PENDING,
     )
-    duration = models.CharField(
-        max_length=20,
-        choices=LeaveDuration.choices,
-        default=LeaveDuration.FULL_DAY,
-    )
+    # duration = models.CharField(
+    #     max_length=20,
+    #     choices=LeaveDuration.choices,
+    #     default=LeaveDuration.FULL_DAY,
+    # )
 
     total_days = models.DecimalField(
         max_digits=5,
@@ -356,3 +356,45 @@ class Leave(AuditModel):
             f"{self.start_date} to {self.end_date} - "
             f"{self.status}"
         )
+
+
+class LeaveDay(AuditModel):
+
+    class Duration(models.TextChoices):
+        FULL_DAY = "FULL_DAY", "Full Day"
+        HALF_DAY = "HALF_DAY", "Half Day"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    leave = models.ForeignKey(
+        Leave,
+        on_delete=models.CASCADE,
+        related_name="leave_days",
+    )
+
+    leave_date = models.DateField()
+
+    duration = models.CharField(
+        max_length=20,
+        choices=Duration.choices,
+        default=Duration.FULL_DAY,
+    )
+
+    class Meta:
+        db_table = "leave_days"
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["leave", "leave_date"],
+                name="unique_leave_date_per_request",
+            )
+        ]
+
+        ordering = ["leave_date"]
+
+    def __str__(self):
+        return f"{self.leave_id} - {self.leave_date} - {self.duration}"

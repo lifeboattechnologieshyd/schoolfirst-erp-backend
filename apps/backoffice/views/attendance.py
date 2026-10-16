@@ -3,21 +3,20 @@ from datetime import date
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Prefetch
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.attendance.models import StudentAttendance, StaffAttendance, Leave
-from apps.school.models.school import Grade, Section, Student, Staff
+from apps.attendance.models import StudentAttendance, StaffAttendance, Leave, LeaveDay
+from apps.school.models.school import Grade, Section, Student, Staff, Branch
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
 
 
 class BulkMarkStudentAttendanceAPIView(APIView):
-
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "student_attendance.create"
 
@@ -26,7 +25,7 @@ class BulkMarkStudentAttendanceAPIView(APIView):
 
         grade_id = request.data.get("grade_id")
         section_id = request.data.get("section_id")
-        attendance_date = request.data.get("attendance_date")
+        attendance_date_input = request.data.get("attendance_date")
         students_data = request.data.get("students")
 
         application_logger.info(
@@ -35,16 +34,14 @@ class BulkMarkStudentAttendanceAPIView(APIView):
             school_id=str(school.id) if school else None,
             grade_id=grade_id,
             section_id=section_id,
-            attendance_date=attendance_date,
+            attendance_date=attendance_date_input,
         )
 
-        # Validate school
         if school is None:
             return CustomResponse.errorResponse(
                 description="School not found."
             )
 
-        # Get the staff record for the authenticated user
         staff = Staff.objects.filter(
             user=request.user,
             school=school,
@@ -56,16 +53,15 @@ class BulkMarkStudentAttendanceAPIView(APIView):
                 description="Active staff record not found for this user."
             )
 
-        # Validate required fields
         required_fields = {
             "grade_id": grade_id,
             "section_id": section_id,
-            "attendance_date": attendance_date,
+            "attendance_date": attendance_date_input,
             "students": students_data,
         }
 
         for field, value in required_fields.items():
-            if value in [None, ""]:
+            if value is None or value == "":
                 return CustomResponse.errorResponse(
                     description=f"{field} is required."
                 )
@@ -75,7 +71,6 @@ class BulkMarkStudentAttendanceAPIView(APIView):
                 description="Students must be a non-empty list."
             )
 
-        # Validate UUIDs
         try:
             grade_uuid = uuid.UUID(str(grade_id))
             section_uuid = uuid.UUID(str(section_id))
@@ -84,8 +79,7 @@ class BulkMarkStudentAttendanceAPIView(APIView):
                 description="Invalid grade or section ID."
             )
 
-        # Validate attendance date
-        attendance_date = parse_date(str(attendance_date))
+        attendance_date = parse_date(str(attendance_date_input))
 
         if attendance_date is None:
             return CustomResponse.errorResponse(
@@ -97,7 +91,6 @@ class BulkMarkStudentAttendanceAPIView(APIView):
                 description="Attendance date cannot be in the future."
             )
 
-        # Validate grade
         grade = Grade.objects.filter(
             id=grade_uuid,
             school=school,
@@ -108,7 +101,6 @@ class BulkMarkStudentAttendanceAPIView(APIView):
                 description="Grade not found."
             )
 
-        # Validate section
         section = Section.objects.filter(
             id=section_uuid,
         ).first()
@@ -118,12 +110,20 @@ class BulkMarkStudentAttendanceAPIView(APIView):
                 description="Section not found."
             )
 
-        # Validate individual student attendance entries
+        # Validate the selected section belongs to the selected grade.
+        # Adjust these fields if your Section model uses another relationship.
+        if (
+            hasattr(section, "grade_id")
+            and section.grade_id != grade.id
+        ):
+            return CustomResponse.errorResponse(
+                description="Section does not belong to the selected grade."
+            )
+
         validated_students = []
         seen_student_ids = set()
 
         for index, item in enumerate(students_data):
-
             if not isinstance(item, dict):
                 return CustomResponse.errorResponse(
                     description=f"Invalid student data at index {index}."
@@ -162,7 +162,6 @@ class BulkMarkStudentAttendanceAPIView(APIView):
                 "remarks": item.get("remarks"),
             })
 
-        # Fetch all students in one query
         student_ids = [
             item["student_id"]
             for item in validated_students
@@ -183,7 +182,6 @@ class BulkMarkStudentAttendanceAPIView(APIView):
                 description="One or more students were not found in this school."
             )
 
-        # Validate student-section and student-grade relationships
         for item in validated_students:
             student = students_by_id[item["student_id"]]
 
@@ -195,7 +193,6 @@ class BulkMarkStudentAttendanceAPIView(APIView):
                     )
                 )
 
-            # Adjust this check if grade is related through another model.
             if (
                 hasattr(student, "grade_id")
                 and student.grade_id != grade.id
@@ -207,45 +204,84 @@ class BulkMarkStudentAttendanceAPIView(APIView):
                     )
                 )
 
+        updated_attendance_count = 0
+        final_statuses = []
+
         try:
             with transaction.atomic():
 
+                # Find approved leave for the exact attendance date.
+                # Do not use start_date/end_date because leave dates
+                # may be nonconsecutive.
+                approved_leave_days = LeaveDay.objects.filter(
+                    leave__school=school,
+                    leave__applicant_type=Leave.ApplicantType.STUDENT,
+                    leave__student_id__in=student_ids,
+                    leave__status=Leave.LeaveStatus.APPROVED,
+                    leave_date=attendance_date,
+                ).select_related("leave")
+
+                leave_by_student = {
+                    leave_day.leave.student_id: leave_day
+                    for leave_day in approved_leave_days
+                }
+
                 for item in validated_students:
-                    StudentAttendance.objects.update_or_create(
-                        school=school,
-                        student_id=item["student_id"],
-                        attendance_date=attendance_date,
-                        defaults={
-                            "branch": staff.branch,
-                            "grade": grade,
-                            "section": section,
-                            "status": item["status"],
-                            "remarks": item["remarks"],
-                            "marked_by": staff,
-                        },
+                    student_id = item["student_id"]
+                    attendance_status = item["status"]
+                    remarks = item["remarks"]
+
+                    approved_leave_day = leave_by_student.get(student_id)
+
+                    # Approved full-day leave takes precedence over
+                    # the attendance status submitted by the frontend.
+                    if (
+                        approved_leave_day
+                        and approved_leave_day.duration
+                        == LeaveDay.Duration.FULL_DAY
+                    ):
+                        attendance_status = (
+                            StudentAttendance.AttendanceStatus.LEAVE
+                        )
+
+                    # For approved half-day leave, preserve the submitted
+                    # attendance status. LeaveDay records the partial leave.
+                    attendance, created = (
+                        StudentAttendance.objects.update_or_create(
+                            school=school,
+                            student_id=student_id,
+                            attendance_date=attendance_date,
+                            defaults={
+                                "branch": staff.branch,
+                                "grade": grade,
+                                "section": section,
+                                "status": attendance_status,
+                                "remarks": remarks,
+                                "marked_by": staff,
+                            },
+                        )
                     )
 
-        except Exception as e:
+                    final_statuses.append(attendance.status)
+
+                    if created:
+                        updated_attendance_count += 1
+
+        except Exception:
             application_logger.exception(
                 "bulk_student_attendance_failed",
                 school_id=str(school.id),
                 grade_id=str(grade.id),
                 section_id=str(section.id),
                 attendance_date=str(attendance_date),
-                error=str(e),
             )
 
             return CustomResponse.errorResponse(
                 description="Failed to save student attendance."
             )
 
-        # Calculate attendance summary
         attendance_summary = {
-            status: sum(
-                1
-                for item in validated_students
-                if item["status"] == status
-            )
+            status: final_statuses.count(status)
             for status in StudentAttendance.AttendanceStatus.values
         }
 
@@ -257,6 +293,7 @@ class BulkMarkStudentAttendanceAPIView(APIView):
             section_id=str(section.id),
             attendance_date=str(attendance_date),
             total_students=len(validated_students),
+            created_attendance_count=updated_attendance_count,
         )
 
         return CustomResponse.successResponse(
@@ -270,13 +307,13 @@ class BulkMarkStudentAttendanceAPIView(APIView):
                     "name": staff.name,
                 },
                 "total_students": len(validated_students),
+                "created_attendance_count": updated_attendance_count,
                 "attendance_summary": attendance_summary,
             },
         )
 
 
 class StudentAttendanceListAPIView(APIView):
-
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "student_attendance.view"
 
@@ -312,7 +349,7 @@ class StudentAttendanceListAPIView(APIView):
         status = request.query_params.get("status")
         search = request.query_params.get("search")
 
-        # Filter by exact attendance date
+        # Validate and filter exact attendance date
         if attendance_date:
             parsed_date = parse_date(attendance_date)
 
@@ -325,7 +362,10 @@ class StudentAttendanceListAPIView(APIView):
                 attendance_date=parsed_date
             )
 
-        # Filter by date range
+        # Validate and filter start date
+        parsed_start_date = None
+        parsed_end_date = None
+
         if start_date:
             parsed_start_date = parse_date(start_date)
 
@@ -338,6 +378,7 @@ class StudentAttendanceListAPIView(APIView):
                 attendance_date__gte=parsed_start_date
             )
 
+        # Validate and filter end date
         if end_date:
             parsed_end_date = parse_date(end_date)
 
@@ -350,11 +391,14 @@ class StudentAttendanceListAPIView(APIView):
                 attendance_date__lte=parsed_end_date
             )
 
-        if start_date and end_date:
-            if parsed_start_date > parsed_end_date:
-                return CustomResponse.errorResponse(
-                    description="start_date cannot be after end_date."
-                )
+        if (
+            parsed_start_date
+            and parsed_end_date
+            and parsed_start_date > parsed_end_date
+        ):
+            return CustomResponse.errorResponse(
+                description="start_date cannot be after end_date."
+            )
 
         # Filter by student
         if student_id:
@@ -419,13 +463,14 @@ class StudentAttendanceListAPIView(APIView):
                 status=status
             )
 
-        # Search by student name or admission number
+        # Search by student name
         if search:
-            from django.db.models import Q
-
             attendance = attendance.filter(
                 Q(student__name__icontains=search)
             )
+
+        # Get total before pagination
+        total = attendance.count()
 
         # Pagination
         paginator = CustomPageNumberPagination()
@@ -434,44 +479,107 @@ class StudentAttendanceListAPIView(APIView):
             request,
         )
 
-        data = [
-            {
+        # Get the attendance records for the current page
+        page_records = list(page)
+
+        # Fetch approved leave days for students and dates
+        # represented on this page.
+        approved_leave_days = []
+
+        if page_records:
+            page_student_ids = {
+                item.student_id for item in page_records
+            }
+
+            page_dates = {
+                item.attendance_date for item in page_records
+            }
+
+            approved_leave_days = LeaveDay.objects.filter(
+                leave__school=school,
+                leave__applicant_type=Leave.ApplicantType.STUDENT,
+                leave__status=Leave.LeaveStatus.APPROVED,
+                leave__student_id__in=page_student_ids,
+                leave_date__in=page_dates,
+            ).select_related(
+                "leave"
+            )
+
+        # Map approved leave by student and date
+        leave_days_by_student_date = {
+            (
+                leave_day.leave.student_id,
+                leave_day.leave_date,
+            ): leave_day
+            for leave_day in approved_leave_days
+        }
+
+        # Build response
+        data = []
+
+        for item in page_records:
+            leave_day = leave_days_by_student_date.get(
+                (
+                    item.student_id,
+                    item.attendance_date,
+                )
+            )
+
+            data.append({
                 "id": str(item.id),
+
                 "student": {
                     "id": str(item.student_id),
                     "name": item.student.name,
                 },
+
                 "grade": {
                     "id": str(item.grade_id),
                     "name": str(item.grade),
                 },
+
                 "section": {
                     "id": str(item.section_id),
                     "name": str(item.section),
                 },
+
                 "branch": {
                     "id": str(item.branch_id),
                     "name": str(item.branch),
                 } if item.branch_id else None,
+
                 "attendance_date": str(item.attendance_date),
                 "status": item.status,
                 "remarks": item.remarks,
+
+                "approved_leave": leave_day is not None,
+
+                "leave_duration": (
+                    leave_day.duration
+                    if leave_day
+                    else None
+                ),
+
                 "marked_by": {
                     "id": str(item.marked_by_id),
                     "name": item.marked_by.name,
                 } if item.marked_by_id else None,
-            }
-            for item in page
-        ]
+            })
+
+        application_logger.info(
+            "student_attendance_list_fetched",
+            school_id=str(school.id),
+            requested_by=str(request.user.id),
+            total=total,
+        )
 
         return CustomResponse.successResponse(
             data=data,
-            total=attendance.count(),
+            total=total,
             description="Student attendance fetched successfully.",
         )
 
 class UpdateStudentAttendanceAPIView(APIView):
-
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "student_attendance.update"
 
@@ -489,17 +597,6 @@ class UpdateStudentAttendanceAPIView(APIView):
         except (ValueError, TypeError, AttributeError):
             return CustomResponse.errorResponse(
                 description="Invalid attendance ID."
-            )
-
-        # Get attendance record
-        attendance = StudentAttendance.objects.filter(
-            id=attendance_uuid,
-            school=school,
-        ).first()
-
-        if attendance is None:
-            return CustomResponse.errorResponse(
-                description="Student attendance not found."
             )
 
         # Get authenticated staff
@@ -531,26 +628,60 @@ class UpdateStudentAttendanceAPIView(APIView):
                 description="At least one field is required to update."
             )
 
-        # Validate status
-        if "status" in request.data:
-            status = request.data.get("status")
-
-            if status not in StudentAttendance.AttendanceStatus.values:
-                return CustomResponse.errorResponse(
-                    description="Invalid attendance status."
-                )
-
-            attendance.status = status
-
-        # Update remarks
-        if "remarks" in request.data:
-            attendance.remarks = request.data.get("remarks")
-
-        # Update the staff member who made the correction
-        attendance.marked_by = staff
-
         try:
             with transaction.atomic():
+
+                # Lock the attendance record during the update.
+                attendance = StudentAttendance.objects.select_for_update().filter(
+                    id=attendance_uuid,
+                    school=school,
+                ).first()
+
+                if attendance is None:
+                    return CustomResponse.errorResponse(
+                        description="Student attendance not found."
+                    )
+
+                # Validate status
+                if "status" in request.data:
+                    status = request.data.get("status")
+
+                    if status not in StudentAttendance.AttendanceStatus.values:
+                        return CustomResponse.errorResponse(
+                            description="Invalid attendance status."
+                        )
+
+                    # Check approved leave for this exact date.
+                    approved_leave_day = LeaveDay.objects.filter(
+                        leave__school=school,
+                        leave__student_id=attendance.student_id,
+                        leave__applicant_type=Leave.ApplicantType.STUDENT,
+                        leave__status=Leave.LeaveStatus.APPROVED,
+                        leave_date=attendance.attendance_date,
+                        duration=LeaveDay.Duration.FULL_DAY,
+                    ).exists()
+
+                    # Prevent overriding approved full-day leave.
+                    if (
+                        approved_leave_day
+                        and status != StudentAttendance.AttendanceStatus.LEAVE
+                    ):
+                        return CustomResponse.errorResponse(
+                            description=(
+                                "Attendance cannot be changed because "
+                                "the student has approved full-day leave."
+                            )
+                        )
+
+                    attendance.status = status
+
+                # Update remarks
+                if "remarks" in request.data:
+                    attendance.remarks = request.data.get("remarks")
+
+                # Record the staff member making the correction
+                attendance.marked_by = staff
+
                 attendance.save(
                     update_fields=[
                         "status",
@@ -561,13 +692,12 @@ class UpdateStudentAttendanceAPIView(APIView):
                     ]
                 )
 
-        except Exception as e:
+        except Exception:
             application_logger.exception(
                 "student_attendance_update_failed",
                 school_id=str(school.id),
-                attendance_id=str(attendance.id),
+                attendance_id=str(attendance_uuid),
                 updated_by=str(request.user.id),
-                error=str(e),
             )
 
             return CustomResponse.errorResponse(
@@ -601,8 +731,9 @@ class UpdateStudentAttendanceAPIView(APIView):
             },
         )
 
-class BulkMarkStaffAttendanceAPIView(APIView):
 
+
+class BulkMarkStaffAttendanceAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "staff_attendance.create"
 
@@ -617,7 +748,6 @@ class BulkMarkStaffAttendanceAPIView(APIView):
                 description="School not found."
             )
 
-        # Get the authenticated user's staff record.
         marked_by = Staff.objects.filter(
             user=request.user,
             school=school,
@@ -654,9 +784,8 @@ class BulkMarkStaffAttendanceAPIView(APIView):
         validated_records = []
         seen_staff_ids = set()
 
-        # Validate request data.
+        # Validate request data
         for index, item in enumerate(staff_attendance):
-
             if not isinstance(item, dict):
                 return CustomResponse.errorResponse(
                     description=f"Invalid staff data at index {index}."
@@ -723,7 +852,7 @@ class BulkMarkStaffAttendanceAPIView(APIView):
                 "remarks": item.get("remarks"),
             })
 
-        # Fetch all staff members in one query.
+        # Fetch staff members in one query
         staff_ids = [
             item["staff_id"] for item in validated_records
         ]
@@ -739,14 +868,63 @@ class BulkMarkStaffAttendanceAPIView(APIView):
 
         if len(staff_by_id) != len(staff_ids):
             return CustomResponse.errorResponse(
-                description="One or more staff members were not found in this school."
+                description=(
+                    "One or more staff members were not found in this school."
+                )
             )
+
+        attendance_summary = {
+            status: 0
+            for status in StaffAttendance.AttendanceStatus.values
+        }
+
+        created_count = 0
+        updated_count = 0
 
         try:
             with transaction.atomic():
 
+                # Fetch approved leave for the selected staff and date.
+                approved_leave_days = LeaveDay.objects.filter(
+                    leave__school=school,
+                    leave__applicant_type=Leave.ApplicantType.STAFF,
+                    leave__staff_id__in=staff_ids,
+                    leave__status=Leave.LeaveStatus.APPROVED,
+                    leave_date=attendance_date,
+                ).select_related("leave")
+
+                leave_by_staff = {
+                    leave_day.leave.staff_id: leave_day
+                    for leave_day in approved_leave_days
+                }
+
                 for item in validated_records:
                     member = staff_by_id[item["staff_id"]]
+
+                    status = item["status"]
+                    check_in = item["check_in"]
+                    check_out = item["check_out"]
+                    remarks = item["remarks"]
+
+                    leave_day = leave_by_staff.get(member.id)
+
+                    if leave_day:
+                        if (
+                            leave_day.duration
+                            == LeaveDay.Duration.FULL_DAY
+                        ):
+                            # Approved full-day leave takes precedence.
+                            status = StaffAttendance.AttendanceStatus.LEAVE
+                            check_in = None
+                            check_out = None
+
+                        elif (
+                            leave_day.duration
+                            == LeaveDay.Duration.HALF_DAY
+                        ):
+                            # Approved half-day leave is represented by
+                            # the attendance HALF_DAY status.
+                            status = StaffAttendance.AttendanceStatus.HALF_DAY
 
                     attendance, created = (
                         StaffAttendance.objects.update_or_create(
@@ -755,34 +933,32 @@ class BulkMarkStaffAttendanceAPIView(APIView):
                             attendance_date=attendance_date,
                             defaults={
                                 "branch": member.branch,
-                                "status": item["status"],
-                                "check_in": item["check_in"],
-                                "check_out": item["check_out"],
-                                "remarks": item["remarks"],
+                                "status": status,
+                                "check_in": check_in,
+                                "check_out": check_out,
+                                "remarks": remarks,
                                 "marked_by": marked_by,
                             },
                         )
                     )
 
-        except Exception as e:
+                    if created:
+                        created_count += 1
+                    else:
+                        updated_count += 1
+
+                    attendance_summary[attendance.status] += 1
+
+        except Exception:
             application_logger.exception(
                 "bulk_staff_attendance_failed",
                 school_id=str(school.id),
                 attendance_date=str(attendance_date),
-                error=str(e),
             )
 
             return CustomResponse.errorResponse(
                 description="Failed to save staff attendance."
             )
-
-        summary = {
-            status: sum(
-                1 for item in validated_records
-                if item["status"] == status
-            )
-            for status in StaffAttendance.AttendanceStatus.values
-        }
 
         application_logger.info(
             "bulk_staff_attendance_marked",
@@ -790,6 +966,8 @@ class BulkMarkStaffAttendanceAPIView(APIView):
             marked_by=str(marked_by.id),
             attendance_date=str(attendance_date),
             total_staff=len(validated_records),
+            created_count=created_count,
+            updated_count=updated_count,
         )
 
         return CustomResponse.successResponse(
@@ -797,16 +975,18 @@ class BulkMarkStaffAttendanceAPIView(APIView):
             data={
                 "attendance_date": str(attendance_date),
                 "total_staff": len(validated_records),
+                "created_count": created_count,
+                "updated_count": updated_count,
                 "marked_by": {
                     "id": str(marked_by.id),
                     "name": marked_by.name,
                 },
-                "attendance_summary": summary,
+                "attendance_summary": attendance_summary,
             },
         )
 
-class StaffAttendanceListAPIView(APIView):
 
+class StaffAttendanceListAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "staff_attendance.view"
 
@@ -837,6 +1017,7 @@ class StaffAttendanceListAPIView(APIView):
         status = request.query_params.get("status")
         search = request.query_params.get("search")
 
+        # Exact attendance date
         if attendance_date:
             parsed_date = parse_date(attendance_date)
 
@@ -849,6 +1030,7 @@ class StaffAttendanceListAPIView(APIView):
                 attendance_date=parsed_date
             )
 
+        # Date range
         parsed_start_date = None
         parsed_end_date = None
 
@@ -885,6 +1067,7 @@ class StaffAttendanceListAPIView(APIView):
                 description="start_date cannot be after end_date."
             )
 
+        # Filter by staff
         if staff_id:
             try:
                 staff_uuid = uuid.UUID(str(staff_id))
@@ -897,6 +1080,7 @@ class StaffAttendanceListAPIView(APIView):
                 staff_id=staff_uuid
             )
 
+        # Filter by branch
         if branch_id:
             try:
                 branch_uuid = uuid.UUID(str(branch_id))
@@ -909,51 +1093,126 @@ class StaffAttendanceListAPIView(APIView):
                 branch_id=branch_uuid
             )
 
+        # Filter by attendance status
         if status:
             if status not in StaffAttendance.AttendanceStatus.values:
                 return CustomResponse.errorResponse(
                     description="Invalid attendance status."
                 )
 
-            attendance = attendance.filter(status=status)
+            attendance = attendance.filter(
+                status=status
+            )
 
+        # Search by staff name
         if search:
             attendance = attendance.filter(
                 staff__name__icontains=search.strip()
             )
 
+        # Total before pagination
         total = attendance.count()
 
+        # Pagination
         paginator = CustomPageNumberPagination()
-        page = paginator.paginate_queryset(attendance, request)
+        page = paginator.paginate_queryset(
+            attendance,
+            request,
+        )
 
-        data = [
-            {
+        page_records = list(page)
+
+        # Fetch approved leave days for the staff and dates
+        # represented on the current page.
+        leave_days_by_staff_date = {}
+
+        if page_records:
+            page_staff_ids = {
+                item.staff_id for item in page_records
+            }
+
+            page_dates = {
+                item.attendance_date for item in page_records
+            }
+
+            approved_leave_days = LeaveDay.objects.filter(
+                leave__school=school,
+                leave__applicant_type=Leave.ApplicantType.STAFF,
+                leave__status=Leave.LeaveStatus.APPROVED,
+                leave__staff_id__in=page_staff_ids,
+                leave_date__in=page_dates,
+            ).select_related(
+                "leave"
+            )
+
+            leave_days_by_staff_date = {
+                (
+                    leave_day.leave.staff_id,
+                    leave_day.leave_date,
+                ): leave_day
+                for leave_day in approved_leave_days
+            }
+
+        # Response data
+        data = []
+
+        for item in page_records:
+            leave_day = leave_days_by_staff_date.get(
+                (
+                    item.staff_id,
+                    item.attendance_date,
+                )
+            )
+
+            data.append({
                 "id": str(item.id),
+
                 "staff": {
                     "id": str(item.staff_id),
                     "name": item.staff.name,
                     "employee_id": item.staff.employee_id,
                     "staff_type": item.staff.staff_type,
                 },
+
                 "branch": {
                     "id": str(item.branch_id),
                     "name": str(item.branch),
                 } if item.branch_id else None,
+
                 "attendance_date": str(item.attendance_date),
                 "status": item.status,
-                "check_in": str(item.check_in)
-                if item.check_in else None,
-                "check_out": str(item.check_out)
-                if item.check_out else None,
+
+                "check_in": (
+                    item.check_in.isoformat()
+                    if item.check_in else None
+                ),
+
+                "check_out": (
+                    item.check_out.isoformat()
+                    if item.check_out else None
+                ),
+
                 "remarks": item.remarks,
+
+                "approved_leave": leave_day is not None,
+
+                "leave_duration": (
+                    leave_day.duration
+                    if leave_day else None
+                ),
+
                 "marked_by": {
                     "id": str(item.marked_by_id),
                     "name": item.marked_by.name,
                 } if item.marked_by_id else None,
-            }
-            for item in page
-        ]
+            })
+
+        application_logger.info(
+            "staff_attendance_list_fetched",
+            school_id=str(school.id),
+            requested_by=str(request.user.id),
+            total=total,
+        )
 
         return CustomResponse.successResponse(
             data=data,
@@ -961,8 +1220,9 @@ class StaffAttendanceListAPIView(APIView):
             description="Staff attendance fetched successfully.",
         )
 
-class UpdateStaffAttendanceAPIView(APIView):
 
+
+class UpdateStaffAttendanceAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "staff_attendance.update"
 
@@ -979,16 +1239,6 @@ class UpdateStaffAttendanceAPIView(APIView):
         except (ValueError, TypeError, AttributeError):
             return CustomResponse.errorResponse(
                 description="Invalid attendance ID."
-            )
-
-        attendance = StaffAttendance.objects.filter(
-            id=attendance_uuid,
-            school=school,
-        ).first()
-
-        if attendance is None:
-            return CustomResponse.errorResponse(
-                description="Staff attendance not found."
             )
 
         marked_by = Staff.objects.filter(
@@ -1023,56 +1273,134 @@ class UpdateStaffAttendanceAPIView(APIView):
                 description="Provide at least one field to update."
             )
 
-        if "status" in request.data:
-            status = request.data.get("status")
-
-            if status not in StaffAttendance.AttendanceStatus.values:
-                return CustomResponse.errorResponse(
-                    description="Invalid attendance status."
-                )
-
-            attendance.status = status
-
-        for field in ["check_in", "check_out"]:
-            if field in request.data:
-                value = request.data.get(field)
-
-                if value in [None, ""]:
-                    setattr(attendance, field, None)
-                else:
-                    parsed_time = parse_time(str(value))
-
-                    if parsed_time is None:
-                        return CustomResponse.errorResponse(
-                            description=f"Invalid {field} time. Use HH:MM."
-                        )
-
-                    setattr(attendance, field, parsed_time)
-
-        if (
-            attendance.check_in
-            and attendance.check_out
-            and attendance.check_out <= attendance.check_in
-        ):
-            return CustomResponse.errorResponse(
-                description="Check-out time must be after check-in time."
-            )
-
-        if "remarks" in request.data:
-            attendance.remarks = request.data.get("remarks")
-
-        attendance.marked_by = marked_by
-
         try:
             with transaction.atomic():
+
+                attendance = StaffAttendance.objects.select_for_update().filter(
+                    id=attendance_uuid,
+                    school=school,
+                ).first()
+
+                if attendance is None:
+                    return CustomResponse.errorResponse(
+                        description="Staff attendance not found."
+                    )
+
+                # Check approved leave for this staff member and date.
+                approved_leave_day = LeaveDay.objects.filter(
+                    leave__school=school,
+                    leave__staff_id=attendance.staff_id,
+                    leave__applicant_type=Leave.ApplicantType.STAFF,
+                    leave__status=Leave.LeaveStatus.APPROVED,
+                    leave_date=attendance.attendance_date,
+                ).first()
+
+                requested_status = request.data.get(
+                    "status",
+                    attendance.status,
+                )
+
+                if requested_status not in StaffAttendance.AttendanceStatus.values:
+                    return CustomResponse.errorResponse(
+                        description="Invalid attendance status."
+                    )
+
+                if approved_leave_day:
+                    if (
+                        approved_leave_day.duration
+                        == LeaveDay.Duration.FULL_DAY
+                    ):
+                        # Full-day approved leave must remain LEAVE.
+                        if (
+                            "status" in request.data
+                            and requested_status
+                            != StaffAttendance.AttendanceStatus.LEAVE
+                        ):
+                            return CustomResponse.errorResponse(
+                                description=(
+                                    "Attendance cannot be changed because "
+                                    "the staff member has approved full-day leave."
+                                )
+                            )
+
+                        attendance.status = (
+                            StaffAttendance.AttendanceStatus.LEAVE
+                        )
+                        attendance.check_in = None
+                        attendance.check_out = None
+
+                    elif (
+                        approved_leave_day.duration
+                        == LeaveDay.Duration.HALF_DAY
+                    ):
+                        # Preserve the half-day leave attendance status.
+                        if (
+                            "status" in request.data
+                            and requested_status
+                            != StaffAttendance.AttendanceStatus.HALF_DAY
+                        ):
+                            return CustomResponse.errorResponse(
+                                description=(
+                                    "Attendance cannot be changed because "
+                                    "the staff member has approved half-day leave."
+                                )
+                            )
+
+                        attendance.status = (
+                            StaffAttendance.AttendanceStatus.HALF_DAY
+                        )
+
+                elif "status" in request.data:
+                    attendance.status = requested_status
+
+                # Update check-in/check-out only when full-day leave
+                # does not require them to be cleared.
+                if not (
+                    approved_leave_day
+                    and approved_leave_day.duration
+                    == LeaveDay.Duration.FULL_DAY
+                ):
+                    for field in ["check_in", "check_out"]:
+                        if field in request.data:
+                            value = request.data.get(field)
+
+                            if value in [None, ""]:
+                                setattr(attendance, field, None)
+                            else:
+                                parsed_time = parse_time(str(value))
+
+                                if parsed_time is None:
+                                    return CustomResponse.errorResponse(
+                                        description=(
+                                            f"Invalid {field} time. Use HH:MM."
+                                        )
+                                    )
+
+                                setattr(attendance, field, parsed_time)
+
+                if (
+                    attendance.check_in
+                    and attendance.check_out
+                    and attendance.check_out <= attendance.check_in
+                ):
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Check-out time must be after check-in time."
+                        )
+                    )
+
+                if "remarks" in request.data:
+                    attendance.remarks = request.data.get("remarks")
+
+                attendance.marked_by = marked_by
                 attendance.save()
 
-        except Exception as e:
+        except Exception:
             application_logger.exception(
                 "staff_attendance_update_failed",
                 school_id=str(school.id),
-                attendance_id=str(attendance.id),
-                error=str(e),
+                attendance_id=str(attendance_uuid),
+                updated_by=str(marked_by.id),
             )
 
             return CustomResponse.errorResponse(
@@ -1084,6 +1412,7 @@ class UpdateStaffAttendanceAPIView(APIView):
             school_id=str(school.id),
             attendance_id=str(attendance.id),
             staff_id=str(attendance.staff_id),
+            status=attendance.status,
             updated_by=str(marked_by.id),
         )
 
@@ -1095,10 +1424,14 @@ class UpdateStaffAttendanceAPIView(APIView):
                 "staff_name": attendance.staff.name,
                 "attendance_date": str(attendance.attendance_date),
                 "status": attendance.status,
-                "check_in": str(attendance.check_in)
-                if attendance.check_in else None,
-                "check_out": str(attendance.check_out)
-                if attendance.check_out else None,
+                "check_in": (
+                    attendance.check_in.isoformat()
+                    if attendance.check_in else None
+                ),
+                "check_out": (
+                    attendance.check_out.isoformat()
+                    if attendance.check_out else None
+                ),
                 "remarks": attendance.remarks,
                 "marked_by": {
                     "id": str(marked_by.id),
@@ -1109,7 +1442,6 @@ class UpdateStaffAttendanceAPIView(APIView):
 
 
 class StaffAttendanceSummaryAPIView(APIView):
-
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "staff_attendance.view"
 
@@ -1131,6 +1463,10 @@ class StaffAttendanceSummaryAPIView(APIView):
         branch_id = request.query_params.get("branch_id")
         staff_id = request.query_params.get("staff_id")
 
+        parsed_start = None
+        parsed_end = None
+
+        # Exact date filter
         if attendance_date:
             parsed_date = parse_date(attendance_date)
 
@@ -1143,6 +1479,7 @@ class StaffAttendanceSummaryAPIView(APIView):
                 attendance_date=parsed_date
             )
 
+        # Start date filter
         if start_date:
             parsed_start = parse_date(start_date)
 
@@ -1155,6 +1492,7 @@ class StaffAttendanceSummaryAPIView(APIView):
                 attendance_date__gte=parsed_start
             )
 
+        # End date filter
         if end_date:
             parsed_end = parse_date(end_date)
 
@@ -1168,14 +1506,15 @@ class StaffAttendanceSummaryAPIView(APIView):
             )
 
         if (
-            start_date
-            and end_date
+            parsed_start
+            and parsed_end
             and parsed_start > parsed_end
         ):
             return CustomResponse.errorResponse(
                 description="start_date cannot be after end_date."
             )
 
+        # Validate branch
         if branch_id:
             try:
                 branch_uuid = uuid.UUID(str(branch_id))
@@ -1184,10 +1523,19 @@ class StaffAttendanceSummaryAPIView(APIView):
                     description="Invalid branch ID."
                 )
 
+            if not Branch.objects.filter(
+                id=branch_uuid,
+                school=school,
+            ).exists():
+                return CustomResponse.errorResponse(
+                    description="Branch not found."
+                )
+
             attendance = attendance.filter(
                 branch_id=branch_uuid
             )
 
+        # Validate staff
         if staff_id:
             try:
                 staff_uuid = uuid.UUID(str(staff_id))
@@ -1196,31 +1544,50 @@ class StaffAttendanceSummaryAPIView(APIView):
                     description="Invalid staff ID."
                 )
 
+            if not Staff.objects.filter(
+                id=staff_uuid,
+                school=school,
+            ).exists():
+                return CustomResponse.errorResponse(
+                    description="Staff not found."
+                )
+
             attendance = attendance.filter(
                 staff_id=staff_uuid
             )
 
+        # Attendance summary
         summary = attendance.aggregate(
             total=Count("id"),
             present=Count(
                 "id",
-                filter=Q(status=StaffAttendance.AttendanceStatus.PRESENT),
+                filter=Q(
+                    status=StaffAttendance.AttendanceStatus.PRESENT
+                ),
             ),
             absent=Count(
                 "id",
-                filter=Q(status=StaffAttendance.AttendanceStatus.ABSENT),
+                filter=Q(
+                    status=StaffAttendance.AttendanceStatus.ABSENT
+                ),
             ),
             late=Count(
                 "id",
-                filter=Q(status=StaffAttendance.AttendanceStatus.LATE),
+                filter=Q(
+                    status=StaffAttendance.AttendanceStatus.LATE
+                ),
             ),
             half_day=Count(
                 "id",
-                filter=Q(status=StaffAttendance.AttendanceStatus.HALF_DAY),
+                filter=Q(
+                    status=StaffAttendance.AttendanceStatus.HALF_DAY
+                ),
             ),
             leave=Count(
                 "id",
-                filter=Q(status=StaffAttendance.AttendanceStatus.LEAVE),
+                filter=Q(
+                    status=StaffAttendance.AttendanceStatus.LEAVE
+                ),
             ),
         )
 
@@ -1230,6 +1597,7 @@ class StaffAttendanceSummaryAPIView(APIView):
         )
 
 
+
 class StaffLeaveRequestAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -1237,15 +1605,18 @@ class StaffLeaveRequestAPIView(APIView):
         school = request.school
 
         leave_type = request.data.get("leave_type", "CASUAL")
-        start_date = request.data.get("start_date")
-        end_date = request.data.get("end_date")
-        duration = request.data.get("duration", "FULL_DAY")
+        leave_days_data = request.data.get("leave_days", [])
         reason = request.data.get("reason")
         pdf = request.data.get("pdf")
 
-        if not all([start_date, end_date, reason]):
+        if not leave_days_data or not reason:
             return CustomResponse.errorResponse(
-                description="Dates and reason are required."
+                description="Leave dates and reason are required."
+            )
+
+        if not isinstance(leave_days_data, list):
+            return CustomResponse.errorResponse(
+                description="leave_days must be a list."
             )
 
         if leave_type not in Leave.LeaveType.values:
@@ -1253,38 +1624,69 @@ class StaffLeaveRequestAPIView(APIView):
                 description="Invalid leave type."
             )
 
-        if duration not in Leave.LeaveDuration.values:
-            return CustomResponse.errorResponse(
-                description="Invalid leave duration."
-            )
-
-        try:
-            start_date = date.fromisoformat(start_date)
-            end_date = date.fromisoformat(end_date)
-        except (ValueError, TypeError):
-            return CustomResponse.errorResponse(
-                description="Invalid date format. Use YYYY-MM-DD."
-            )
-
-        if end_date < start_date:
-            return CustomResponse.errorResponse(
-                description="End date cannot be before start date."
-            )
-
-        if start_date < timezone.localdate():
-            return CustomResponse.errorResponse(
-                description="Leave cannot start in the past."
-            )
-
-        if duration == Leave.LeaveDuration.HALF_DAY and start_date != end_date:
-            return CustomResponse.errorResponse(
-                description="Half-day leave must be for a single date."
-            )
-
-        if not reason.strip():
+        if not isinstance(reason, str) or not reason.strip():
             return CustomResponse.errorResponse(
                 description="Leave reason cannot be empty."
             )
+
+        # Validate leave dates and calculate total days.
+        seen_dates = set()
+        validated_days = []
+        total_days = Decimal("0.0")
+        today = timezone.localdate()
+
+        for item in leave_days_data:
+            if not isinstance(item, dict):
+                return CustomResponse.errorResponse(
+                    description="Each leave day must be an object."
+                )
+
+            leave_date = parse_date(item.get("date", ""))
+            duration = item.get("duration")
+
+            if not leave_date:
+                return CustomResponse.errorResponse(
+                    description="Invalid leave date. Use YYYY-MM-DD."
+                )
+
+            if leave_date < today:
+                return CustomResponse.errorResponse(
+                    description="Leave cannot start in the past."
+                )
+
+            if leave_date in seen_dates:
+                return CustomResponse.errorResponse(
+                    description=f"Duplicate leave date: {leave_date}."
+                )
+
+            if duration not in LeaveDay.Duration.values:
+                return CustomResponse.errorResponse(
+                    description=(
+                        f"Invalid duration for {leave_date}. "
+                        "Use FULL_DAY or HALF_DAY."
+                    )
+                )
+
+            seen_dates.add(leave_date)
+
+            days = (
+                Decimal("1.0")
+                if duration == LeaveDay.Duration.FULL_DAY
+                else Decimal("0.5")
+            )
+
+            total_days += days
+
+            validated_days.append({
+                "leave_date": leave_date,
+                "duration": duration,
+            })
+
+        # Sort dates chronologically.
+        validated_days.sort(key=lambda item: item["leave_date"])
+
+        start_date = validated_days[0]["leave_date"]
+        end_date = validated_days[-1]["leave_date"]
 
         # Identify the authenticated staff member.
         staff = Staff.objects.filter(
@@ -1298,14 +1700,10 @@ class StaffLeaveRequestAPIView(APIView):
                 description="Active staff record not found."
             )
 
-        total_days = (
-            Decimal("0.5")
-            if duration == Leave.LeaveDuration.HALF_DAY
-            else Decimal((end_date - start_date).days + 1)
-        )
-
         try:
             with transaction.atomic():
+
+                # Create the main leave request.
                 leave = Leave.objects.create(
                     school=school,
                     branch=staff.branch,
@@ -1315,7 +1713,6 @@ class StaffLeaveRequestAPIView(APIView):
                     leave_type=leave_type,
                     start_date=start_date,
                     end_date=end_date,
-                    duration=duration,
                     total_days=total_days,
                     reason=reason.strip(),
                     pdf=pdf,
@@ -1323,11 +1720,23 @@ class StaffLeaveRequestAPIView(APIView):
                     created_by=request.user,
                 )
 
+                # Create individual leave dates.
+                LeaveDay.objects.bulk_create([
+                    LeaveDay(
+                        leave=leave,
+                        leave_date=item["leave_date"],
+                        duration=item["duration"],
+                        created_by=request.user,
+                    )
+                    for item in validated_days
+                ])
+
             application_logger.info(
                 "staff_leave_request_created",
                 leave_id=str(leave.id),
                 staff_id=str(staff.id),
                 school_id=str(school.id),
+                total_days=str(total_days),
             )
 
             return CustomResponse.successResponse(
@@ -1338,13 +1747,24 @@ class StaffLeaveRequestAPIView(APIView):
                     "leave_type": leave.leave_type,
                     "start_date": str(leave.start_date),
                     "end_date": str(leave.end_date),
-                    "duration": leave.duration,
                     "total_days": str(leave.total_days),
+                    "leave_days": [
+                        {
+                            "date": str(item["leave_date"]),
+                            "duration": item["duration"],
+                            "days": str(
+                                Decimal("1.0")
+                                if item["duration"] == LeaveDay.Duration.FULL_DAY
+                                else Decimal("0.5")
+                            ),
+                        }
+                        for item in validated_days
+                    ],
                     "reason": leave.reason,
                     "pdf": leave.pdf,
                     "status": leave.status,
                 },
-                description="Staff leave request submitted successfully."
+                description="Staff leave request submitted successfully.",
             )
 
         except Exception:
@@ -1356,6 +1776,7 @@ class StaffLeaveRequestAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Unable to submit leave request."
             )
+
 
 class StudentLeaveListAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
@@ -1371,6 +1792,11 @@ class StudentLeaveListAPIView(APIView):
             "student",
             "branch",
             "reviewed_by",
+        ).prefetch_related(
+            Prefetch(
+                "leave_days",
+                queryset=LeaveDay.objects.order_by("leave_date"),
+            )
         ).order_by("-created_at")
 
         status = request.query_params.get("status")
@@ -1411,7 +1837,9 @@ class StudentLeaveListAPIView(APIView):
                     description="Invalid start_date. Use YYYY-MM-DD."
                 )
 
-            leaves = leaves.filter(start_date__gte=parsed_start_date)
+            leaves = leaves.filter(
+                start_date__gte=parsed_start_date
+            )
 
         # Filter by end date.
         if end_date:
@@ -1422,7 +1850,16 @@ class StudentLeaveListAPIView(APIView):
                     description="Invalid end_date. Use YYYY-MM-DD."
                 )
 
-            leaves = leaves.filter(end_date__lte=parsed_end_date)
+            leaves = leaves.filter(
+                end_date__lte=parsed_end_date
+            )
+
+        # Validate date range.
+        if start_date and end_date:
+            if parse_date(start_date) > parse_date(end_date):
+                return CustomResponse.errorResponse(
+                    description="Start date cannot be after end date."
+                )
 
         # Search student name or leave reason.
         if search:
@@ -1432,6 +1869,7 @@ class StudentLeaveListAPIView(APIView):
             )
 
         paginator = CustomPageNumberPagination()
+
         paginated_leaves = paginator.paginate_queryset(
             leaves,
             request,
@@ -1440,17 +1878,31 @@ class StudentLeaveListAPIView(APIView):
         data = []
 
         for leave in paginated_leaves:
+            leave_days_data = [
+                {
+                    "date": str(leave_day.leave_date),
+                    "duration": leave_day.duration,
+                    "days": (
+                        "1.0"
+                        if leave_day.duration == LeaveDay.Duration.FULL_DAY
+                        else "0.5"
+                    ),
+                }
+                for leave_day in leave.leave_days.all()
+            ]
+
             data.append({
                 "leave_id": str(leave.id),
                 "student_id": str(leave.student_id),
                 "student_name": leave.student.name,
                 "branch_id": (
-                    str(leave.branch_id) if leave.branch_id else None
+                    str(leave.branch_id)
+                    if leave.branch_id else None
                 ),
                 "leave_type": leave.leave_type,
                 "start_date": str(leave.start_date),
                 "end_date": str(leave.end_date),
-                "duration": leave.duration,
+                "leave_days": leave_days_data,
                 "total_days": str(leave.total_days),
                 "reason": leave.reason,
                 "pdf": leave.pdf,
@@ -1473,6 +1925,8 @@ class StudentLeaveListAPIView(APIView):
             description="Student leave requests fetched successfully.",
         )
 
+
+
 class StaffLeaveListAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "staff_leave.view"
@@ -1487,6 +1941,11 @@ class StaffLeaveListAPIView(APIView):
             "staff",
             "branch",
             "reviewed_by",
+        ).prefetch_related(
+            Prefetch(
+                "leave_days",
+                queryset=LeaveDay.objects.order_by("leave_date"),
+            )
         ).order_by("-created_at")
 
         status = request.query_params.get("status")
@@ -1496,6 +1955,7 @@ class StaffLeaveListAPIView(APIView):
         end_date = request.query_params.get("end_date")
         search = request.query_params.get("search")
 
+        # Filter by status.
         if status:
             if status not in Leave.LeaveStatus.values:
                 return CustomResponse.errorResponse(
@@ -1504,9 +1964,11 @@ class StaffLeaveListAPIView(APIView):
 
             leaves = leaves.filter(status=status)
 
+        # Filter by staff.
         if staff_id:
             leaves = leaves.filter(staff_id=staff_id)
 
+        # Filter by leave type.
         if leave_type:
             if leave_type not in Leave.LeaveType.values:
                 return CustomResponse.errorResponse(
@@ -1515,6 +1977,7 @@ class StaffLeaveListAPIView(APIView):
 
             leaves = leaves.filter(leave_type=leave_type)
 
+        # Filter by start date.
         if start_date:
             parsed_start_date = parse_date(start_date)
 
@@ -1523,8 +1986,11 @@ class StaffLeaveListAPIView(APIView):
                     description="Invalid start_date. Use YYYY-MM-DD."
                 )
 
-            leaves = leaves.filter(start_date__gte=parsed_start_date)
+            leaves = leaves.filter(
+                start_date__gte=parsed_start_date
+            )
 
+        # Filter by end date.
         if end_date:
             parsed_end_date = parse_date(end_date)
 
@@ -1533,8 +1999,18 @@ class StaffLeaveListAPIView(APIView):
                     description="Invalid end_date. Use YYYY-MM-DD."
                 )
 
-            leaves = leaves.filter(end_date__lte=parsed_end_date)
+            leaves = leaves.filter(
+                end_date__lte=parsed_end_date
+            )
 
+        # Validate date range.
+        if start_date and end_date:
+            if parse_date(start_date) > parse_date(end_date):
+                return CustomResponse.errorResponse(
+                    description="Start date cannot be after end date."
+                )
+
+        # Search staff name or leave reason.
         if search:
             leaves = leaves.filter(
                 Q(staff__name__icontains=search)
@@ -1542,6 +2018,7 @@ class StaffLeaveListAPIView(APIView):
             )
 
         paginator = CustomPageNumberPagination()
+
         paginated_leaves = paginator.paginate_queryset(
             leaves,
             request,
@@ -1550,6 +2027,20 @@ class StaffLeaveListAPIView(APIView):
         data = []
 
         for leave in paginated_leaves:
+
+            leave_days_data = [
+                {
+                    "date": str(leave_day.leave_date),
+                    "duration": leave_day.duration,
+                    "days": (
+                        "1.0"
+                        if leave_day.duration == LeaveDay.Duration.FULL_DAY
+                        else "0.5"
+                    ),
+                }
+                for leave_day in leave.leave_days.all()
+            ]
+
             data.append({
                 "leave_id": str(leave.id),
                 "staff_id": str(leave.staff_id),
@@ -1557,12 +2048,13 @@ class StaffLeaveListAPIView(APIView):
                 "employee_id": leave.staff.employee_id,
                 "staff_type": leave.staff.staff_type,
                 "branch_id": (
-                    str(leave.branch_id) if leave.branch_id else None
+                    str(leave.branch_id)
+                    if leave.branch_id else None
                 ),
                 "leave_type": leave.leave_type,
                 "start_date": str(leave.start_date),
                 "end_date": str(leave.end_date),
-                "duration": leave.duration,
+                "leave_days": leave_days_data,
                 "total_days": str(leave.total_days),
                 "reason": leave.reason,
                 "pdf": leave.pdf,
@@ -1593,10 +2085,10 @@ class StudentLeaveReviewAPIView(APIView):
     def put(self, request, leave_id):
         school = request.school
 
-        status = request.data.get("status")
+        review_status = request.data.get("status")
         review_remarks = request.data.get("review_remarks", "")
 
-        if status not in [
+        if review_status not in [
             Leave.LeaveStatus.APPROVED,
             Leave.LeaveStatus.REJECTED,
         ]:
@@ -1622,7 +2114,16 @@ class StudentLeaveReviewAPIView(APIView):
                         description="This leave request has already been reviewed."
                     )
 
-                leave.status = status
+                leave_days = list(
+                    leave.leave_days.order_by("leave_date")
+                )
+
+                if not leave_days:
+                    return CustomResponse.errorResponse(
+                        description="No leave dates found for this request."
+                    )
+
+                leave.status = review_status
                 leave.reviewed_by = request.user
                 leave.reviewed_at = timezone.now()
                 leave.review_remarks = review_remarks
@@ -1630,23 +2131,30 @@ class StudentLeaveReviewAPIView(APIView):
 
                 updated_attendance_count = 0
 
-                if status == Leave.LeaveStatus.APPROVED:
-                    updated_attendance_count = (
-                        StudentAttendance.objects.filter(
-                            school=school,
-                            student=leave.student,
-                            attendance_date__gte=leave.start_date,
-                            attendance_date__lte=leave.end_date,
-                            status=StudentAttendance.AttendanceStatus.ABSENT,
-                        ).update(
-                            status=StudentAttendance.AttendanceStatus.LEAVE
-                        )
-                    )
+                if review_status == Leave.LeaveStatus.APPROVED:
+                    for leave_day in leave_days:
+
+                        # Update attendance only for approved full-day leave.
+                        if leave_day.duration == LeaveDay.Duration.FULL_DAY:
+                            updated_count = StudentAttendance.objects.filter(
+                                school=school,
+                                student=leave.student,
+                                attendance_date=leave_day.leave_date,
+                                status=StudentAttendance.AttendanceStatus.ABSENT,
+                            ).update(
+                                status=StudentAttendance.AttendanceStatus.LEAVE
+                            )
+
+                            updated_attendance_count += updated_count
+
+                        # Half-day leave is represented by the approved
+                        # LeaveDay record. Attendance remains unchanged
+                        # because StudentAttendance has one status per day.
 
             application_logger.info(
                 "student_leave_reviewed",
                 leave_id=str(leave.id),
-                status=status,
+                status=review_status,
                 reviewer_id=str(request.user.id),
                 updated_attendance_count=updated_attendance_count,
             )
@@ -1657,11 +2165,19 @@ class StudentLeaveReviewAPIView(APIView):
                     "student_id": str(leave.student_id),
                     "status": leave.status,
                     "review_remarks": leave.review_remarks,
+                    "total_days": str(leave.total_days),
+                    "leave_days": [
+                        {
+                            "date": str(leave_day.leave_date),
+                            "duration": leave_day.duration,
+                        }
+                        for leave_day in leave_days
+                    ],
                     "updated_attendance_count": updated_attendance_count,
                 },
                 description=(
                     "Student leave approved successfully."
-                    if status == Leave.LeaveStatus.APPROVED
+                    if review_status == Leave.LeaveStatus.APPROVED
                     else "Student leave rejected successfully."
                 ),
             )
@@ -1675,6 +2191,8 @@ class StudentLeaveReviewAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Unable to review student leave request."
             )
+
+
 
 class StaffLeaveReviewAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
@@ -1694,7 +2212,6 @@ class StaffLeaveReviewAPIView(APIView):
                 description="Status must be APPROVED or REJECTED."
             )
 
-        # Identify the authenticated reviewer.
         reviewer = Staff.objects.filter(
             user=request.user,
             school=school,
@@ -1717,6 +2234,7 @@ class StaffLeaveReviewAPIView(APIView):
 
         try:
             with transaction.atomic():
+
                 leave = Leave.objects.select_for_update().filter(
                     id=leave_id,
                     school=school,
@@ -1733,10 +2251,19 @@ class StaffLeaveReviewAPIView(APIView):
                         description="This leave request has already been reviewed."
                     )
 
-                # Prevent a Principal or Admin from approving their own leave.
+                # Prevent reviewing your own leave request.
                 if leave.staff.user_id == request.user.id:
                     return CustomResponse.errorResponse(
                         description="You cannot review your own leave request."
+                    )
+
+                leave_days = list(
+                    leave.leave_days.order_by("leave_date")
+                )
+
+                if not leave_days:
+                    return CustomResponse.errorResponse(
+                        description="No leave dates found for this request."
                     )
 
                 leave.status = status
@@ -1748,17 +2275,44 @@ class StaffLeaveReviewAPIView(APIView):
                 updated_attendance_count = 0
 
                 if status == Leave.LeaveStatus.APPROVED:
-                    updated_attendance_count = (
-                        StaffAttendance.objects.filter(
-                            school=school,
-                            staff=leave.staff,
-                            attendance_date__gte=leave.start_date,
-                            attendance_date__lte=leave.end_date,
-                            status=StaffAttendance.AttendanceStatus.ABSENT,
-                        ).update(
-                            status=StaffAttendance.AttendanceStatus.LEAVE
-                        )
-                    )
+
+                    for leave_day in leave_days:
+
+                        # Update only existing ABSENT attendance records.
+                        if (
+                            leave_day.duration
+                            == LeaveDay.Duration.FULL_DAY
+                        ):
+                            updated_attendance_count += (
+                                StaffAttendance.objects.filter(
+                                    school=school,
+                                    staff=leave.staff,
+                                    attendance_date=leave_day.leave_date,
+                                    status=(
+                                        StaffAttendance
+                                        .AttendanceStatus.ABSENT
+                                    ),
+                                ).update(
+                                    status=(
+                                        StaffAttendance
+                                        .AttendanceStatus.LEAVE
+                                    )
+                                )
+                            )
+
+                        else:
+                            # A single daily attendance status cannot
+                            # accurately represent half-day leave.
+                            # Keep the attendance status unchanged and
+                            # use the approved LeaveDay record when
+                            # calculating leave totals.
+
+                            application_logger.info(
+                                "staff_half_day_leave_approved",
+                                leave_id=str(leave.id),
+                                staff_id=str(leave.staff_id),
+                                leave_date=str(leave_day.leave_date),
+                            )
 
             application_logger.info(
                 "staff_leave_reviewed",
@@ -1772,6 +2326,9 @@ class StaffLeaveReviewAPIView(APIView):
                 data={
                     "leave_id": str(leave.id),
                     "staff_id": str(leave.staff_id),
+                    "start_date": str(leave.start_date),
+                    "end_date": str(leave.end_date),
+                    "total_days": str(leave.total_days),
                     "status": leave.status,
                     "review_remarks": leave.review_remarks,
                     "updated_attendance_count": updated_attendance_count,

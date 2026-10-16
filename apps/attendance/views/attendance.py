@@ -9,7 +9,7 @@ from django.utils.dateparse import parse_date
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.attendance.models import Leave, StudentAttendance
+from apps.attendance.models import Leave, StudentAttendance, LeaveDay
 from apps.school.models.school import Student
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.utils.logger import application_logger
@@ -23,64 +23,90 @@ class StudentLeaveRequestAPIView(APIView):
 
         student_id = request.data.get("student_id")
         leave_type = request.data.get("leave_type", "CASUAL")
-        start_date = request.data.get("start_date")
-        end_date = request.data.get("end_date")
-        duration = request.data.get("duration", "FULL_DAY")
+        leave_days_data = request.data.get("leave_days", [])
         reason = request.data.get("reason")
         pdf = request.data.get("pdf")
 
-        if not all([
-            student_id,
-            start_date,
-            end_date,
-            reason,
-        ]):
+        if not all([student_id, leave_days_data, reason]):
             return CustomResponse.errorResponse(
-                description="Student, dates, and reason are required."
+                description="Student, leave dates, and reason are required."
             )
 
-        # Validate leave type.
+        if not isinstance(leave_days_data, list):
+            return CustomResponse.errorResponse(
+                description="leave_days must be a list."
+            )
+
         if leave_type not in Leave.LeaveType.values:
             return CustomResponse.errorResponse(
                 description="Invalid leave type."
             )
 
-        # Validate duration.
-        if duration not in Leave.LeaveDuration.values:
-            return CustomResponse.errorResponse(
-                description="Invalid leave duration."
-            )
-
-        # Parse dates.
-        try:
-            start_date = date.fromisoformat(start_date)
-            end_date = date.fromisoformat(end_date)
-        except (ValueError, TypeError):
-            return CustomResponse.errorResponse(
-                description="Invalid date format. Use YYYY-MM-DD."
-            )
-
-        if end_date < start_date:
-            return CustomResponse.errorResponse(
-                description="End date cannot be before start date."
-            )
-
-        if start_date < timezone.localdate():
-            return CustomResponse.errorResponse(
-                description="Leave cannot start in the past."
-            )
-
-        if duration == Leave.LeaveDuration.HALF_DAY and start_date != end_date:
-            return CustomResponse.errorResponse(
-                description="Half-day leave must be for a single date."
-            )
-
-        if not reason.strip():
+        if not isinstance(reason, str) or not reason.strip():
             return CustomResponse.errorResponse(
                 description="Leave reason cannot be empty."
             )
 
+        today = timezone.localdate()
+        seen_dates = set()
+        validated_days = []
+        total_days = Decimal("0.0")
 
+        # Validate individual leave dates.
+        for item in leave_days_data:
+            if not isinstance(item, dict):
+                return CustomResponse.errorResponse(
+                    description="Each leave day must be an object."
+                )
+
+            leave_date = parse_date(item.get("date", ""))
+            duration = item.get("duration")
+
+            if not leave_date:
+                return CustomResponse.errorResponse(
+                    description="Invalid leave date. Use YYYY-MM-DD."
+                )
+
+            if leave_date < today:
+                return CustomResponse.errorResponse(
+                    description="Leave cannot start in the past."
+                )
+
+            if leave_date in seen_dates:
+                return CustomResponse.errorResponse(
+                    description=f"Duplicate leave date: {leave_date}."
+                )
+
+            if duration not in LeaveDay.Duration.values:
+                return CustomResponse.errorResponse(
+                    description=(
+                        f"Invalid duration for {leave_date}. "
+                        "Use FULL_DAY or HALF_DAY."
+                    )
+                )
+
+            seen_dates.add(leave_date)
+
+            days = (
+                Decimal("1.0")
+                if duration == LeaveDay.Duration.FULL_DAY
+                else Decimal("0.5")
+            )
+
+            total_days += days
+
+            validated_days.append({
+                "leave_date": leave_date,
+                "duration": duration,
+            })
+
+        # Sort dates chronologically.
+        validated_days.sort(key=lambda item: item["leave_date"])
+
+        start_date = validated_days[0]["leave_date"]
+        end_date = validated_days[-1]["leave_date"]
+
+        # Validate student.
         student = Student.objects.filter(
             id=student_id,
             school=school,
@@ -88,18 +114,13 @@ class StudentLeaveRequestAPIView(APIView):
 
         if not student:
             return CustomResponse.errorResponse(
-                description="Student not found "
+                description="Student not found."
             )
-
-        # Calculate requested leave days.
-        total_days = (
-            Decimal("0.5")
-            if duration == Leave.LeaveDuration.HALF_DAY
-            else Decimal((end_date - start_date).days + 1)
-        )
 
         try:
             with transaction.atomic():
+
+                # Create the main leave request.
                 leave = Leave.objects.create(
                     school=school,
                     branch=getattr(student, "branch", None),
@@ -109,7 +130,6 @@ class StudentLeaveRequestAPIView(APIView):
                     leave_type=leave_type,
                     start_date=start_date,
                     end_date=end_date,
-                    duration=duration,
                     total_days=total_days,
                     reason=reason.strip(),
                     pdf=pdf,
@@ -117,11 +137,23 @@ class StudentLeaveRequestAPIView(APIView):
                     created_by=request.user,
                 )
 
+                # Create individual leave-day records.
+                LeaveDay.objects.bulk_create([
+                    LeaveDay(
+                        leave=leave,
+                        leave_date=item["leave_date"],
+                        duration=item["duration"],
+                        created_by=request.user,
+                    )
+                    for item in validated_days
+                ])
+
             application_logger.info(
                 "student_leave_request_created",
                 leave_id=str(leave.id),
                 student_id=str(student.id),
                 school_id=str(school.id),
+                total_days=str(total_days),
             )
 
             return CustomResponse.successResponse(
@@ -132,13 +164,24 @@ class StudentLeaveRequestAPIView(APIView):
                     "leave_type": leave.leave_type,
                     "start_date": str(leave.start_date),
                     "end_date": str(leave.end_date),
-                    "duration": leave.duration,
+                    "leave_days": [
+                        {
+                            "date": str(item["leave_date"]),
+                            "duration": item["duration"],
+                            "days": str(
+                                Decimal("1.0")
+                                if item["duration"] == LeaveDay.Duration.FULL_DAY
+                                else Decimal("0.5")
+                            ),
+                        }
+                        for item in validated_days
+                    ],
                     "total_days": str(leave.total_days),
                     "reason": leave.reason,
                     "pdf": leave.pdf,
                     "status": leave.status,
                 },
-                description="Student leave request submitted successfully."
+                description="Student leave request submitted successfully.",
             )
 
         except Exception:
@@ -148,8 +191,12 @@ class StudentLeaveRequestAPIView(APIView):
             )
 
             return CustomResponse.errorResponse(
-                description="Unable to submit leave request."
+                description="Unable to submit student leave request."
             )
+
+
+
+
 
 class StudentAttendanceAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -177,19 +224,13 @@ class StudentAttendanceAPIView(APIView):
 
         if not student:
             return CustomResponse.errorResponse(
-                description="Student not found "
+                description="Student not found."
             )
 
-        attendance = StudentAttendance.objects.filter(
-            school=student.school,
-            student=student,
-        ).select_related(
-            "grade",
-            "section",
-            "branch",
-        )
+        # Validate month and year.
+        first_day = None
+        last_day = None
 
-        # Filter by month and year.
         if month or year:
             if not month or not year:
                 return CustomResponse.errorResponse(
@@ -218,12 +259,10 @@ class StudentAttendanceAPIView(APIView):
                     description="Invalid month or year."
                 )
 
-            attendance = attendance.filter(
-                attendance_date__gte=first_day,
-                attendance_date__lte=last_day,
-            )
+        # Validate custom date range.
+        parsed_start_date = None
+        parsed_end_date = None
 
-        # Custom date range.
         if start_date:
             parsed_start_date = parse_date(start_date)
 
@@ -231,10 +270,6 @@ class StudentAttendanceAPIView(APIView):
                 return CustomResponse.errorResponse(
                     description="Invalid start_date. Use YYYY-MM-DD."
                 )
-
-            attendance = attendance.filter(
-                attendance_date__gte=parsed_start_date
-            )
 
         if end_date:
             parsed_end_date = parse_date(end_date)
@@ -244,29 +279,47 @@ class StudentAttendanceAPIView(APIView):
                     description="Invalid end_date. Use YYYY-MM-DD."
                 )
 
-            attendance = attendance.filter(
-                attendance_date__lte=parsed_end_date
-            )
-
         if (
-            start_date
-            and end_date
-            and parse_date(start_date) > parse_date(end_date)
+            parsed_start_date
+            and parsed_end_date
+            and parsed_start_date > parsed_end_date
         ):
             return CustomResponse.errorResponse(
                 description="Start date cannot be after end date."
             )
 
-        # Filter by attendance status.
-        if status:
-            if status not in StudentAttendance.AttendanceStatus.values:
-                return CustomResponse.errorResponse(
-                    description="Invalid attendance status."
-                )
+        if status and status not in StudentAttendance.AttendanceStatus.values:
+            return CustomResponse.errorResponse(
+                description="Invalid attendance status."
+            )
 
-            attendance = attendance.filter(status=status)
+        # Base attendance queryset.
+        attendance = StudentAttendance.objects.filter(
+            school=school,
+            student=student,
+        ).select_related(
+            "grade",
+            "section",
+            "branch",
+        )
 
-        # Calculate summary for the selected filters.
+        # Apply date filters to both summary and attendance history.
+        if first_day and last_day:
+            attendance = attendance.filter(
+                attendance_date__range=(first_day, last_day)
+            )
+
+        if parsed_start_date:
+            attendance = attendance.filter(
+                attendance_date__gte=parsed_start_date
+            )
+
+        if parsed_end_date:
+            attendance = attendance.filter(
+                attendance_date__lte=parsed_end_date
+            )
+
+        # Calculate summary BEFORE applying the status filter.
         summary = attendance.aggregate(
             total_days=Count("id"),
             present_days=Count(
@@ -291,8 +344,7 @@ class StudentAttendanceAPIView(APIView):
             ),
         )
 
-        # Exclude approved leave and unmarked days from the
-        # attendance percentage denominator.
+        # Exclude full-day leave from the denominator.
         eligible_days = (
             summary["present_days"]
             + summary["absent_days"]
@@ -300,7 +352,6 @@ class StudentAttendanceAPIView(APIView):
             + summary["half_days"]
         )
 
-        # Count PRESENT and LATE as attended days.
         attended_days = (
             summary["present_days"]
             + summary["late_days"]
@@ -312,7 +363,10 @@ class StudentAttendanceAPIView(APIView):
             else 0
         )
 
-        # Paginate daily attendance records.
+        # Apply status filter only to the returned history.
+        if status:
+            attendance = attendance.filter(status=status)
+
         attendance = attendance.order_by("-attendance_date")
 
         paginator = CustomPageNumberPagination()
