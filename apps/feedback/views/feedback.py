@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from django.db import transaction, IntegrityError
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
@@ -333,4 +333,82 @@ class MyFeedbackAPIView(APIView):
 
             return CustomResponse.errorResponse(
                 description="Failed to fetch feedback."
+            )
+
+class FeedbackCategoryLISTAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = request.school
+
+        search = request.query_params.get("search", "").strip()
+
+        application_logger.info(
+            "feedback_category_list_started",
+            extra={
+                "school_id": str(school.id) if school else None,
+                "requested_by": str(request.user.id),
+                "search": search,
+            },
+        )
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School information is required."
+            )
+
+        try:
+            categories = FeedbackCategory.objects.filter(
+                school=school,
+                is_active=True,
+            )
+
+            if search:
+                categories = categories.filter(
+                    Q(name__icontains=search)
+                    | Q(description__icontains=search)
+                )
+
+
+
+            categories = categories.order_by("name")
+
+            total = categories.count()
+
+            data = [
+                {
+                    "id": str(category.id),
+                    "name": category.name,
+                    "description": category.description,
+                    "is_active": category.is_active,
+                }
+                for category in categories
+            ]
+
+            application_logger.info(
+                "feedback_category_list_completed",
+                extra={
+                    "school_id": str(school.id),
+                    "total": total,
+                },
+            )
+
+            return CustomResponse.successResponse(
+                data=data,
+                total=total,
+                description="Feedback categories fetched successfully.",
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "feedback_category_list_failed",
+                extra={
+                    "school_id": str(school.id),
+                    "requested_by": str(request.user.id),
+                    "error": str(e),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to fetch feedback categories."
             )
