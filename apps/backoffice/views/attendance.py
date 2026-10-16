@@ -1241,7 +1241,7 @@ class StaffLeaveRequestAPIView(APIView):
         end_date = request.data.get("end_date")
         duration = request.data.get("duration", "FULL_DAY")
         reason = request.data.get("reason")
-        medical_document = request.data.get("medical_document")
+        pdf = request.data.get("pdf")
 
         if not all([start_date, end_date, reason]):
             return CustomResponse.errorResponse(
@@ -1318,7 +1318,7 @@ class StaffLeaveRequestAPIView(APIView):
                     duration=duration,
                     total_days=total_days,
                     reason=reason.strip(),
-                    medical_document=medical_document,
+                    pdf=pdf,
                     status=Leave.LeaveStatus.PENDING,
                     created_by=request.user,
                 )
@@ -1341,7 +1341,7 @@ class StaffLeaveRequestAPIView(APIView):
                     "duration": leave.duration,
                     "total_days": str(leave.total_days),
                     "reason": leave.reason,
-                    "medical_document": leave.medical_document,
+                    "pdf": leave.pdf,
                     "status": leave.status,
                 },
                 description="Staff leave request submitted successfully."
@@ -1453,7 +1453,7 @@ class StudentLeaveListAPIView(APIView):
                 "duration": leave.duration,
                 "total_days": str(leave.total_days),
                 "reason": leave.reason,
-                "medical_document": leave.medical_document,
+                "pdf": leave.pdf,
                 "status": leave.status,
                 "review_remarks": leave.review_remarks,
                 "reviewed_by": (
