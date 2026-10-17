@@ -2145,6 +2145,25 @@ class StudentLeaveReviewAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Status must be APPROVED or REJECTED."
             )
+        reviewer = Staff.objects.filter(
+            user=request.user,
+            school=school,
+            status=Staff.Status.ACTIVE,
+        ).first()
+
+        if not reviewer:
+            return CustomResponse.errorResponse(
+                description="Active staff record not found."
+            )
+
+        # Only Principal or Admin can review staff leave.
+        if reviewer.staff_type not in [
+            Staff.StaffType.PRINCIPAL,
+            Staff.StaffType.ADMIN,
+        ]:
+            return CustomResponse.errorResponse(
+                description="Only Admin or Principal can review staff leave."
+            )
 
         try:
             with transaction.atomic():
@@ -2174,7 +2193,7 @@ class StudentLeaveReviewAPIView(APIView):
                     )
 
                 leave.status = review_status
-                leave.reviewed_by = request.user
+                leave.reviewed_by = reviewer
                 leave.reviewed_at = timezone.now()
                 leave.review_remarks = review_remarks
                 leave.save()
