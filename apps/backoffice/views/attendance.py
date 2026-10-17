@@ -1828,6 +1828,8 @@ class StudentLeaveListAPIView(APIView):
             applicant_type=Leave.ApplicantType.STUDENT,
         ).select_related(
             "student",
+            "student__grade",
+            "student__section",
             "branch",
             "reviewed_by",
         ).prefetch_related(
@@ -1933,6 +1935,16 @@ class StudentLeaveListAPIView(APIView):
                 "leave_id": str(leave.id),
                 "student_id": str(leave.student_id),
                 "student_name": leave.student.name,
+                "grade": ({
+                    "id": str(leave.student.grade_id),
+                    "name": leave.student.grade.name,}
+                    if leave.student.grade_id else None),
+                "section": ({
+                     "id": str(leave.student.section_id),
+                     "name": leave.student.section.name,
+                             }
+                    if leave.student.section_id else None
+                 ),
                 "branch_id": (
                     str(leave.branch_id)
                     if leave.branch_id else None
