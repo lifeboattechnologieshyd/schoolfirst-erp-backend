@@ -3797,12 +3797,10 @@ class GetStaffAPIView(APIView):
 
 
 class UpdateStaffAPIView(APIView):
-
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "staff.update"
 
     def put(self, request, staff_id):
-
         school = request.school
 
         application_logger.info(
@@ -3812,16 +3810,26 @@ class UpdateStaffAPIView(APIView):
             staff_id=str(staff_id),
         )
 
+        # ---------------------------------------------------------
+        # Validate school
+        # ---------------------------------------------------------
         if school is None:
-            application_logger.warning(
-                "staff_update_failed",
-                requested_by=str(request.user.id),
-                staff_id=str(staff_id),
-                reason="school_not_found",
+            return CustomResponse.errorResponse(
+                description="School not found."
             )
-            return CustomResponse.errorResponse(description="School not found.")
 
-        staff = Staff.objects.select_related("user", "branch").filter(id=staff_id, school=school).first()
+        # ---------------------------------------------------------
+        # Get staff belonging to current school
+        # ---------------------------------------------------------
+        staff = (
+            Staff.objects
+            .select_related("user", "branch")
+            .filter(
+                id=staff_id,
+                school=school,
+            )
+            .first()
+        )
 
         if staff is None:
             application_logger.warning(
@@ -3831,149 +3839,388 @@ class UpdateStaffAPIView(APIView):
                 staff_id=str(staff_id),
                 reason="staff_not_found",
             )
-            return CustomResponse.errorResponse(description="Staff not found.")
 
+            return CustomResponse.errorResponse(
+                description="Staff not found."
+            )
+
+        # ---------------------------------------------------------
+        # Branch
+        # ---------------------------------------------------------
         branch = staff.branch
 
         if "branch_id" in request.data:
-
             branch_id = request.data.get("branch_id")
 
             if branch_id in [None, ""]:
                 branch = None
             else:
-                branch = Branch.objects.filter(id=branch_id, school=school).first()
+                branch = Branch.objects.filter(
+                    id=branch_id,
+                    school=school,
+                ).first()
 
                 if branch is None:
-                    application_logger.warning(
-                        "staff_update_failed",
-                        requested_by=str(request.user.id),
-                        school_id=str(school.id),
-                        staff_id=str(staff.id),
-                        branch_id=branch_id,
-                        reason="invalid_branch",
+                    return CustomResponse.errorResponse(
+                        description="Invalid branch."
                     )
-                    return CustomResponse.errorResponse(description="Invalid branch.")
 
-        employee_id = request.data.get("employee_id", staff.employee_id)
-
-        if Staff.objects.filter(school=school, employee_id=employee_id).exclude(id=staff.id).exists():
-            application_logger.warning(
-                "staff_update_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                staff_id=str(staff.id),
-                employee_id=employee_id,
-                reason="employee_id_already_exists",
+        # ---------------------------------------------------------
+        # Employee ID
+        # ---------------------------------------------------------
+        employee_id = str(
+            request.data.get(
+                "employee_id",
+                staff.employee_id,
             )
-            return CustomResponse.errorResponse(description="Employee ID already exists.")
+        ).strip()
 
-        mobile = str(request.data.get("mobile", staff.mobile))
+        if not employee_id:
+            return CustomResponse.errorResponse(
+                description="Employee ID is required."
+            )
+
+        if Staff.objects.filter(
+            school=school,
+            employee_id=employee_id,
+        ).exclude(
+            id=staff.id
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="Employee ID already exists."
+            )
+
+        # ---------------------------------------------------------
+        # Mobile
+        # ---------------------------------------------------------
+        mobile = str(
+            request.data.get(
+                "mobile",
+                staff.mobile,
+            )
+        ).strip()
 
         if not mobile.isdigit() or len(mobile) != 10:
-            application_logger.warning(
-                "staff_update_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                staff_id=str(staff.id),
-                reason="invalid_mobile_number",
+            return CustomResponse.errorResponse(
+                description="Enter valid mobile number."
             )
-            return CustomResponse.errorResponse(description="Enter valid mobile number.")
 
-        if Staff.objects.filter(school=school, mobile=mobile).exclude(id=staff.id).exists():
-            application_logger.warning(
-                "staff_update_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                staff_id=str(staff.id),
-                reason="mobile_already_exists",
+        if Staff.objects.filter(
+            school=school,
+            mobile=mobile,
+        ).exclude(
+            id=staff.id
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="Mobile number already exists."
             )
-            return CustomResponse.errorResponse(description="Mobile number already exists.")
 
-        email = request.data.get("email", staff.email)
+        # ---------------------------------------------------------
+        # Email
+        # ---------------------------------------------------------
+        email = request.data.get(
+            "email",
+            staff.email,
+        )
 
-        if email and Staff.objects.filter(school=school, email=email).exclude(id=staff.id).exists():
-            application_logger.warning(
-                "staff_update_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                staff_id=str(staff.id),
-                reason="email_already_exists",
+        if email:
+            email = str(email).strip().lower()
+
+        if email and Staff.objects.filter(
+            school=school,
+            email__iexact=email,
+        ).exclude(
+            id=staff.id
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="Email already exists."
             )
-            return CustomResponse.errorResponse(description="Email already exists.")
 
-        staff_type = request.data.get("staff_type", staff.staff_type)
+        # ---------------------------------------------------------
+        # Staff type
+        # ---------------------------------------------------------
+        staff_type = request.data.get(
+            "staff_type",
+            staff.staff_type,
+        )
 
         if staff_type not in Staff.StaffType.values:
-            application_logger.warning(
-                "staff_update_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                staff_id=str(staff.id),
-                staff_type=staff_type,
-                reason="invalid_staff_type",
+            return CustomResponse.errorResponse(
+                description="Invalid staff type."
             )
-            return CustomResponse.errorResponse(description="Invalid staff type.")
 
-        gender = request.data.get("gender", staff.gender)
+        # ---------------------------------------------------------
+        # Gender
+        # ---------------------------------------------------------
+        gender = request.data.get(
+            "gender",
+            staff.gender,
+        )
 
         if gender not in Staff.Gender.values:
-            application_logger.warning(
-                "staff_update_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                staff_id=str(staff.id),
-                gender=gender,
-                reason="invalid_gender",
+            return CustomResponse.errorResponse(
+                description="Invalid gender."
             )
-            return CustomResponse.errorResponse(description="Invalid gender.")
 
-        role = Roles.objects.filter(role_name=staff_type).first()
+        # ---------------------------------------------------------
+        # Roles
+        #
+        # IMPORTANT:
+        # Roles are independent from staff_type.
+        # Only update roles if `roles` is explicitly provided.
+        # ---------------------------------------------------------
+        roles = None
 
-        if role is None:
-            application_logger.warning(
-                "staff_update_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                staff_id=str(staff.id),
-                staff_type=staff_type,
-                reason="role_not_configured",
+        if "roles" in request.data:
+            roles = request.data.get("roles")
+
+            if not isinstance(roles, list):
+                return CustomResponse.errorResponse(
+                    description="roles must be an array."
+                )
+
+            if not roles:
+                return CustomResponse.errorResponse(
+                    description="At least one role is required."
+                )
+
+            # Remove duplicates
+            roles = list(set(roles))
+
+            role_objects = list(
+                Roles.objects.filter(
+                    role_name__in=roles
+                )
             )
-            return CustomResponse.errorResponse(description=f"{staff_type.title()} role not configured.")
+
+            if len(role_objects) != len(roles):
+                found_roles = {
+                    role.role_name
+                    for role in role_objects
+                }
+
+                invalid_roles = [
+                    role_name
+                    for role_name in roles
+                    if role_name not in found_roles
+                ]
+
+                return CustomResponse.errorResponse(
+                    description=(
+                        f"Invalid role(s): "
+                        f"{', '.join(invalid_roles)}."
+                    )
+                )
 
         try:
-
             with transaction.atomic():
+
+                # -------------------------------------------------
+                # Lock staff
+                # -------------------------------------------------
+                staff = (
+                    Staff.objects
+                    .select_for_update()
+                    .select_related("user")
+                    .get(
+                        id=staff.id,
+                        school=school,
+                    )
+                )
 
                 user = staff.user
 
-                user.first_name = request.data.get("name", staff.name)
+                # -------------------------------------------------
+                # Update UserMaster
+                # -------------------------------------------------
+                #
+                # IMPORTANT:
+                # UserMaster is global.
+                # If mobile/email are school-specific in your
+                # architecture, don't update them here.
+                #
+                # For now keeping your existing behavior.
+                # -------------------------------------------------
+                user.first_name = request.data.get(
+                    "name",
+                    staff.name,
+                )
                 user.mobile = mobile
                 user.email = email
                 user.gender = gender
-                user.date_of_birth = request.data.get("date_of_birth", staff.date_of_birth)
-                user.profile_image = request.data.get("profile_image", staff.profile_image)
+                user.date_of_birth = request.data.get(
+                    "date_of_birth",
+                    staff.date_of_birth,
+                )
+                user.profile_image = request.data.get(
+                    "profile_image",
+                    staff.profile_image,
+                )
+
                 user.save()
 
+                # -------------------------------------------------
+                # Update Staff
+                # -------------------------------------------------
                 staff.branch = branch
                 staff.employee_id = employee_id
                 staff.staff_type = staff_type
-                staff.name = request.data.get("name", staff.name)
+                staff.name = request.data.get(
+                    "name",
+                    staff.name,
+                )
                 staff.gender = gender
-                staff.date_of_birth = request.data.get("date_of_birth", staff.date_of_birth)
+                staff.date_of_birth = request.data.get(
+                    "date_of_birth",
+                    staff.date_of_birth,
+                )
                 staff.mobile = mobile
                 staff.email = email
-                staff.qualification = request.data.get("qualification", staff.qualification)
-                staff.experience = request.data.get("experience", staff.experience)
-                staff.joining_date = request.data.get("joining_date", staff.joining_date)
-                staff.status = request.data.get("status", staff.status)
-                staff.profile_image = request.data.get("profile_image", staff.profile_image)
-                staff.address = request.data.get("address", staff.address)
-                staff.emergency_contact_name = request.data.get("emergency_contact_name", staff.emergency_contact_name)
-                staff.emergency_contact_mobile = request.data.get("emergency_contact_mobile", staff.emergency_contact_mobile)
+                staff.qualification = request.data.get(
+                    "qualification",
+                    staff.qualification,
+                )
+                staff.experience = request.data.get(
+                    "experience",
+                    staff.experience,
+                )
+                staff.joining_date = request.data.get(
+                    "joining_date",
+                    staff.joining_date,
+                )
+                staff.status = request.data.get(
+                    "status",
+                    staff.status,
+                )
+                staff.profile_image = request.data.get(
+                    "profile_image",
+                    staff.profile_image,
+                )
+                staff.address = request.data.get(
+                    "address",
+                    staff.address,
+                )
+                staff.emergency_contact_name = request.data.get(
+                    "emergency_contact_name",
+                    staff.emergency_contact_name,
+                )
+                staff.emergency_contact_mobile = request.data.get(
+                    "emergency_contact_mobile",
+                    staff.emergency_contact_mobile,
+                )
+
                 staff.save()
 
-                UserRoles.objects.filter(user=user, school=school).update(role=role)
+                # -------------------------------------------------
+                # Synchronize roles ONLY if roles were provided
+                # -------------------------------------------------
+                if roles is not None:
+
+                    requested_role_ids = {
+                        role.id
+                        for role in role_objects
+                    }
+
+                    existing_role_ids = set(
+                        UserRoles.objects.filter(
+                            user=user,
+                            school=school,
+                        ).values_list(
+                            "role_id",
+                            flat=True,
+                        )
+                    )
+
+                    # Add new roles
+                    roles_to_create = requested_role_ids - existing_role_ids
+
+                    UserRoles.objects.bulk_create(
+                        [
+                            UserRoles(
+                                user=user,
+                                school=school,
+                                role_id=role_id,
+                            )
+                            for role_id in roles_to_create
+                        ],
+                        ignore_conflicts=True,
+                    )
+
+                    # Remove roles that are no longer selected
+                    roles_to_remove = (
+                        existing_role_ids - requested_role_ids
+                    )
+
+                    if roles_to_remove:
+                        UserRoles.objects.filter(
+                            user=user,
+                            school=school,
+                            role_id__in=roles_to_remove,
+                        ).delete()
+
+            application_logger.info(
+                "staff_updated",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                staff_id=str(staff.id),
+                employee_id=staff.employee_id,
+                staff_type=staff.staff_type,
+                branch_id=(
+                    str(staff.branch_id)
+                    if staff.branch_id
+                    else None
+                ),
+                roles=roles,
+            )
+
+            # -----------------------------------------------------
+            # Get current roles
+            # -----------------------------------------------------
+            current_roles = list(
+                UserRoles.objects.filter(
+                    user=staff.user,
+                    school=school,
+                )
+                .select_related("role")
+                .values_list(
+                    "role__role_name",
+                    flat=True,
+                )
+            )
+
+            return CustomResponse.successResponse(
+                description="Staff updated successfully.",
+                data={
+                    "id": str(staff.id),
+                    "user_id": str(staff.user_id),
+                    "employee_id": staff.employee_id,
+                    "name": staff.name,
+                    "mobile": staff.mobile,
+                    "email": staff.email,
+                    "staff_type": staff.staff_type,
+                    "branch_id": (
+                        str(staff.branch_id)
+                        if staff.branch_id
+                        else None
+                    ),
+                    "roles": current_roles,
+                },
+            )
+
+        except IntegrityError:
+            application_logger.exception(
+                "staff_update_integrity_error",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                staff_id=str(staff.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Staff could not be updated because "
+                    "a duplicate record was detected."
+                )
+            )
 
         except Exception as e:
             application_logger.exception(
@@ -3984,28 +4231,10 @@ class UpdateStaffAPIView(APIView):
                 reason="staff_update_failed",
                 error=str(e),
             )
-            return CustomResponse.errorResponse(description=str(e))
 
-        application_logger.info(
-            "staff_updated",
-            requested_by=str(request.user.id),
-            school_id=str(school.id),
-            staff_id=str(staff.id),
-            employee_id=staff.employee_id,
-            staff_type=staff.staff_type,
-            branch_id=str(staff.branch_id) if staff.branch_id else None,
-            role=role.role_name,
-        )
-
-        return CustomResponse.successResponse(
-            description="Staff updated successfully.",
-            data={
-                "id": str(staff.id),
-                "employee_id": staff.employee_id,
-                "name": staff.name,
-                "role": role.role_name,
-            },
-        )
+            return CustomResponse.errorResponse(
+                description="Unable to update staff."
+            )
 
 
 class CreateStaffDocumentAPIView(APIView):
