@@ -159,6 +159,13 @@ class StudentRemarkLISTAPIView(APIView):
             data = []
 
             for remark in paginated_remarks:
+                subject_data = None
+
+                if remark.subject_id and remark.subject:
+                    subject_data = {
+                        "id": str(remark.subject_id),
+                        "name": remark.subject.name,
+                    }
                 data.append({
                     "id": str(remark.id),
                     "student": {
@@ -173,10 +180,7 @@ class StudentRemarkLISTAPIView(APIView):
                         "id": str(remark.section_id),
                         "name": remark.section.name,
                     },
-                    "subject": {
-                        "id": str(remark.subject_id),
-                        "name": remark.subject.name,
-                    },
+                    "subject": subject_data,
                     "category": {
                         "id": str(remark.category_id),
                         "name": remark.category.name,
