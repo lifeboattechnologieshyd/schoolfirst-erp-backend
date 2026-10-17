@@ -26,6 +26,9 @@ class StudentLeaveRequestAPIView(APIView):
         leave_days_data = request.data.get("leave_days", [])
         reason = request.data.get("reason")
         pdf = request.data.get("pdf")
+        note = request.data.get("note")
+        if isinstance(note, str):
+            note = note.strip() or None
 
         # -----------------------------
         # Basic validation
@@ -181,6 +184,7 @@ class StudentLeaveRequestAPIView(APIView):
                     end_date=end_date,
                     total_days=total_days,
                     reason=reason.strip(),
+                    note = note,
                     pdf=pdf,
                     status=Leave.LeaveStatus.PENDING,
                     created_by=request.user,

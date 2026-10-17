@@ -2308,7 +2308,9 @@ class StaffLeaveReviewAPIView(APIView):
                     )
 
                 leave_days = list(
-                    leave.leave_days.order_by("leave_date")
+                    LeaveDay.objects.filter(
+                        leave=leave
+                    ).order_by("leave_date")
                 )
 
                 if not leave_days:
@@ -2317,9 +2319,9 @@ class StaffLeaveReviewAPIView(APIView):
                     )
 
                 leave.status = status
-                leave.reviewed_by = request.user
+                leave.reviewed_by = reviewer
                 leave.reviewed_at = timezone.now()
-                leave.review_remarks = review_remarks
+                leave.review_remarks = review_remarks.strip() if review_remarks else None
                 leave.save()
 
                 updated_attendance_count = 0
