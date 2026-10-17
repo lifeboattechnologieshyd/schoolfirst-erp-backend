@@ -346,11 +346,11 @@ class RemarkCreateAPIView(APIView):
         try:
             student_uuid = uuid.UUID(str(student_id))
             section_uuid = uuid.UUID(str(section_id))
-            subject_uuid = uuid.UUID(str(subject_id))
+            # subject_uuid = uuid.UUID(str(subject_id))
             category_uuid = uuid.UUID(str(category_id))
         except (ValueError, TypeError, AttributeError):
             return CustomResponse.errorResponse(
-                description="Invalid student, section, subject, or category ID.",
+                description="Invalid student, section, or category ID.",
                 status_code=400,
             )
 
