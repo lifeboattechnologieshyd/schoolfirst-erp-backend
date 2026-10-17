@@ -1958,10 +1958,11 @@ class StudentLeaveListAPIView(APIView):
                 "pdf": leave.pdf,
                 "status": leave.status,
                 "review_remarks": leave.review_remarks,
-                "reviewed_by": (
-                    leave.reviewed_by.get_full_name()
-                    if leave.reviewed_by else None
-                ),
+                "reviewed_by": ({
+                    "id": str(leave.reviewed_by_id),
+                    "name": leave.reviewed_by.name,}
+                if leave.reviewed_by
+                else None),
                 "reviewed_at": (
                     leave.reviewed_at.isoformat()
                     if leave.reviewed_at else None
