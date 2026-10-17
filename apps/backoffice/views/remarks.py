@@ -311,6 +311,8 @@ class RemarkCreateAPIView(APIView):
         student_id = request.data.get("student_id")
         section_id = request.data.get("section_id")
         category_id = request.data.get("category_id")
+        subject_id = request.data.get("subject_id")
+
 
         remark_date = request.data.get("date")
         title = request.data.get("title")
@@ -352,6 +354,17 @@ class RemarkCreateAPIView(APIView):
                 description="Invalid student, section, or category ID.",
                 status_code=400,
             )
+
+        subject_uuid = None
+
+        if subject_id not in [None, ""]:
+            try:
+                subject_uuid = uuid.UUID(str(subject_id))
+            except (ValueError, TypeError, AttributeError):
+                return CustomResponse.errorResponse(
+                    description="Invalid subject ID.",
+                    status_code=400,
+                )
 
         # Validate title
         if not isinstance(title, str) or len(title.strip()) > 255:
@@ -455,14 +468,14 @@ class RemarkCreateAPIView(APIView):
                 )
 
             # Validate subject
-            subject_id = request.data.get("subject_id")
+            subject = None
 
-            if subject_id:
+            if subject_uuid:
                 subject = Subject.objects.filter(
-                    id=subject_id,
+                    id=subject_uuid,
                 ).first()
 
-                if not subject:
+                if subject is None:
                     return CustomResponse.errorResponse(
                         description="Subject not found.",
                         status_code=404,
@@ -518,7 +531,11 @@ class RemarkCreateAPIView(APIView):
                     "grade_id": str(grade.id),
                     "student_id": str(student.id),
                     "section_id": str(section.id),
-                    "subject_id": str(subject.id),
+                    "subject_id": (
+                        str(subject.id)
+                        if subject
+                        else None
+                    ),
                     "category_id": str(category.id),
                     "teacher_id": str(request.user.id),
                 },
