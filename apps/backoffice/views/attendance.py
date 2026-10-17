@@ -2401,3 +2401,268 @@ class StaffLeaveReviewAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Unable to review staff leave request."
             )
+
+
+class StudentAttendanceSummaryAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "student_attendance.view"
+
+    def get(self, request):
+        school = request.school
+
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        attendance_date = request.query_params.get("attendance_date")
+        start_date = request.query_params.get("start_date")
+        end_date = request.query_params.get("end_date")
+
+        student_id = request.query_params.get("student_id")
+        grade_id = request.query_params.get("grade_id")
+        section_id = request.query_params.get("section_id")
+        branch_id = request.query_params.get("branch_id")
+        status = request.query_params.get("status")
+
+        attendance = StudentAttendance.objects.filter(
+            school=school,
+        )
+
+        # -----------------------------------
+        # Date filters
+        # -----------------------------------
+        parsed_start_date = None
+        parsed_end_date = None
+
+        if attendance_date:
+            parsed_attendance_date = parse_date(attendance_date)
+
+            if parsed_attendance_date is None:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Invalid attendance_date. "
+                        "Use YYYY-MM-DD."
+                    )
+                )
+
+            attendance = attendance.filter(
+                attendance_date=parsed_attendance_date
+            )
+
+        if start_date:
+            parsed_start_date = parse_date(start_date)
+
+            if parsed_start_date is None:
+                return CustomResponse.errorResponse(
+                    description="Invalid start_date. Use YYYY-MM-DD."
+                )
+
+            attendance = attendance.filter(
+                attendance_date__gte=parsed_start_date
+            )
+
+        if end_date:
+            parsed_end_date = parse_date(end_date)
+
+            if parsed_end_date is None:
+                return CustomResponse.errorResponse(
+                    description="Invalid end_date. Use YYYY-MM-DD."
+                )
+
+            attendance = attendance.filter(
+                attendance_date__lte=parsed_end_date
+            )
+
+        if (
+            parsed_start_date
+            and parsed_end_date
+            and parsed_start_date > parsed_end_date
+        ):
+            return CustomResponse.errorResponse(
+                description="start_date cannot be after end_date."
+            )
+
+        # -----------------------------------
+        # Student filter
+        # -----------------------------------
+        if student_id:
+            try:
+                student_uuid = uuid.UUID(str(student_id))
+            except (ValueError, TypeError, AttributeError):
+                return CustomResponse.errorResponse(
+                    description="Invalid student ID."
+                )
+
+            attendance = attendance.filter(
+                student_id=student_uuid
+            )
+
+        # -----------------------------------
+        # Grade filter
+        # -----------------------------------
+        if grade_id:
+            try:
+                grade_uuid = uuid.UUID(str(grade_id))
+            except (ValueError, TypeError, AttributeError):
+                return CustomResponse.errorResponse(
+                    description="Invalid grade ID."
+                )
+
+            attendance = attendance.filter(
+                grade_id=grade_uuid
+            )
+
+        # -----------------------------------
+        # Section filter
+        # -----------------------------------
+        if section_id:
+            try:
+                section_uuid = uuid.UUID(str(section_id))
+            except (ValueError, TypeError, AttributeError):
+                return CustomResponse.errorResponse(
+                    description="Invalid section ID."
+                )
+
+            attendance = attendance.filter(
+                section_id=section_uuid
+            )
+
+        # -----------------------------------
+        # Branch filter
+        # -----------------------------------
+        if branch_id:
+            try:
+                branch_uuid = uuid.UUID(str(branch_id))
+            except (ValueError, TypeError, AttributeError):
+                return CustomResponse.errorResponse(
+                    description="Invalid branch ID."
+                )
+
+            attendance = attendance.filter(
+                branch_id=branch_uuid
+            )
+
+        # -----------------------------------
+        # Status filter
+        # -----------------------------------
+        if status:
+            if status not in StudentAttendance.AttendanceStatus.values:
+                return CustomResponse.errorResponse(
+                    description="Invalid attendance status."
+                )
+
+            attendance = attendance.filter(
+                status=status
+            )
+
+        # -----------------------------------
+        # Attendance summary
+        # -----------------------------------
+        summary = attendance.aggregate(
+            total=Count("id"),
+
+            present=Count(
+                "id",
+                filter=Q(
+                    status=StudentAttendance.AttendanceStatus.PRESENT
+                ),
+            ),
+
+            absent=Count(
+                "id",
+                filter=Q(
+                    status=StudentAttendance.AttendanceStatus.ABSENT
+                ),
+            ),
+
+            late=Count(
+                "id",
+                filter=Q(
+                    status=StudentAttendance.AttendanceStatus.LATE
+                ),
+            ),
+
+            half_day=Count(
+                "id",
+                filter=Q(
+                    status=StudentAttendance.AttendanceStatus.HALF_DAY
+                ),
+            ),
+
+            leave=Count(
+                "id",
+                filter=Q(
+                    status=StudentAttendance.AttendanceStatus.LEAVE
+                ),
+            ),
+        )
+
+        # -----------------------------------
+        # Approved leave summary
+        # -----------------------------------
+        leave_filter = {
+            "leave__school": school,
+            "leave__applicant_type": Leave.ApplicantType.STUDENT,
+            "leave__status": Leave.LeaveStatus.APPROVED,
+        }
+
+        if student_id:
+            leave_filter["leave__student_id"] = student_uuid
+
+        if grade_id:
+            leave_filter["leave__student__grade_id"] = grade_uuid
+
+        if section_id:
+            leave_filter["leave__student__section_id"] = section_uuid
+
+        if branch_id:
+            leave_filter["leave__student__branch_id"] = branch_uuid
+
+        # Match leave dates with requested attendance period.
+        if attendance_date:
+            leave_filter["leave_date"] = parsed_attendance_date
+        else:
+            if parsed_start_date:
+                leave_filter["leave_date__gte"] = parsed_start_date
+
+            if parsed_end_date:
+                leave_filter["leave_date__lte"] = parsed_end_date
+
+        approved_leave_days = LeaveDay.objects.filter(
+            **leave_filter
+        )
+
+        approved_full_day_leaves = approved_leave_days.filter(
+            duration=LeaveDay.Duration.FULL_DAY
+        ).count()
+
+        approved_half_day_leaves = approved_leave_days.filter(
+            duration=LeaveDay.Duration.HALF_DAY
+        ).count()
+
+        # -----------------------------------
+        # Response
+        # -----------------------------------
+        data = {
+            "total": summary["total"],
+            "present": summary["present"],
+            "absent": summary["absent"],
+            "late": summary["late"],
+            "half_day": summary["half_day"],
+            "leave": summary["leave"],
+            "approved_full_day_leaves": approved_full_day_leaves,
+            "approved_half_day_leaves": approved_half_day_leaves,
+        }
+
+        application_logger.info(
+            "student_attendance_summary_fetched",
+            school_id=str(school.id),
+            requested_by=str(request.user.id),
+            total=summary["total"],
+        )
+
+        return CustomResponse.successResponse(
+            data=data,
+            description="Student attendance summary fetched successfully.",
+        )
