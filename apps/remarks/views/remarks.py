@@ -89,6 +89,8 @@ class StudentRemarkLISTAPIView(APIView):
             category_id = request.query_params.get("category_id")
             start_date = request.query_params.get("start_date")
             end_date = request.query_params.get("end_date")
+            sort = request.query_params.get("sort", "newest")
+
 
             # Validate student ID
             if student_id:
@@ -143,6 +145,25 @@ class StudentRemarkLISTAPIView(APIView):
             ):
                 return CustomResponse.errorResponse(
                     description="start_date cannot be later than end_date."
+                )
+            if sort == "newest":
+                remarks = remarks.order_by(
+                    "-date",
+                    "-created_at",
+                )
+
+            elif sort == "oldest":
+                remarks = remarks.order_by(
+                    "date",
+                    "created_at",
+                )
+
+            else:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Invalid sort value. "
+                        "Use newest or oldest."
+                    )
                 )
 
             # Total before pagination
