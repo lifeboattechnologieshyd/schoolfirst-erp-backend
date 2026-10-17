@@ -2422,7 +2422,6 @@ class StaffLeaveReviewAPIView(APIView):
                 description="Unable to review staff leave request."
             )
 
-
 class StudentAttendanceSummaryAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "student_attendance.view"
@@ -2443,7 +2442,6 @@ class StudentAttendanceSummaryAPIView(APIView):
         grade_id = request.query_params.get("grade_id")
         section_id = request.query_params.get("section_id")
         branch_id = request.query_params.get("branch_id")
-        status = request.query_params.get("status")
 
         attendance = StudentAttendance.objects.filter(
             school=school,
@@ -2452,6 +2450,7 @@ class StudentAttendanceSummaryAPIView(APIView):
         # -----------------------------------
         # Date filters
         # -----------------------------------
+        parsed_attendance_date = None
         parsed_start_date = None
         parsed_end_date = None
 
@@ -2564,122 +2563,95 @@ class StudentAttendanceSummaryAPIView(APIView):
             )
 
         # -----------------------------------
-        # Status filter
+        # Grade-wise summary
         # -----------------------------------
-        if status:
-            if status not in StudentAttendance.AttendanceStatus.values:
-                return CustomResponse.errorResponse(
-                    description="Invalid attendance status."
-                )
+        grade_summary = (
+            attendance
+            .values(
+                "grade_id",
+                "grade__name",
+            )
+            .annotate(
+                total=Count("id"),
 
-            attendance = attendance.filter(
-                status=status
+                present=Count(
+                    "id",
+                    filter=Q(
+                        status=StudentAttendance.AttendanceStatus.PRESENT
+                    ),
+                ),
+
+                absent=Count(
+                    "id",
+                    filter=Q(
+                        status=StudentAttendance.AttendanceStatus.ABSENT
+                    ),
+                ),
+
+                late=Count(
+                    "id",
+                    filter=Q(
+                        status=StudentAttendance.AttendanceStatus.LATE
+                    ),
+                ),
+
+                leave=Count(
+                    "id",
+                    filter=Q(
+                        status=StudentAttendance.AttendanceStatus.LEAVE
+                    ),
+                ),
+
+                half_day=Count(
+                    "id",
+                    filter=Q(
+                        status=StudentAttendance.AttendanceStatus.HALF_DAY
+                    ),
+                ),
+            )
+            .order_by(
+                "grade__name"
+            )
+        )
+
+        data = []
+
+        for item in grade_summary:
+
+            total = item["total"]
+            present = item["present"]
+            late = item["late"]
+
+            # Present + Late are considered attended.
+            attendance_percentage = (
+                round(
+                    ((present + late) / total) * 100
+                )
+                if total > 0
+                else 0
             )
 
-        # -----------------------------------
-        # Attendance summary
-        # -----------------------------------
-        summary = attendance.aggregate(
-            total=Count("id"),
-
-            present=Count(
-                "id",
-                filter=Q(
-                    status=StudentAttendance.AttendanceStatus.PRESENT
+            data.append({
+                "grade": {
+                    "id": str(item["grade_id"]),
+                    "name": item["grade__name"],
+                },
+                "total": total,
+                "present": present,
+                "absent": item["absent"],
+                "late": late,
+                "leave": item["leave"],
+                "half_day": item["half_day"],
+                "attendance_percentage": (
+                    attendance_percentage
                 ),
-            ),
-
-            absent=Count(
-                "id",
-                filter=Q(
-                    status=StudentAttendance.AttendanceStatus.ABSENT
-                ),
-            ),
-
-            late=Count(
-                "id",
-                filter=Q(
-                    status=StudentAttendance.AttendanceStatus.LATE
-                ),
-            ),
-
-            half_day=Count(
-                "id",
-                filter=Q(
-                    status=StudentAttendance.AttendanceStatus.HALF_DAY
-                ),
-            ),
-
-            leave=Count(
-                "id",
-                filter=Q(
-                    status=StudentAttendance.AttendanceStatus.LEAVE
-                ),
-            ),
-        )
-
-        # -----------------------------------
-        # Approved leave summary
-        # -----------------------------------
-        leave_filter = {
-            "leave__school": school,
-            "leave__applicant_type": Leave.ApplicantType.STUDENT,
-            "leave__status": Leave.LeaveStatus.APPROVED,
-        }
-
-        if student_id:
-            leave_filter["leave__student_id"] = student_uuid
-
-        if grade_id:
-            leave_filter["leave__student__grade_id"] = grade_uuid
-
-        if section_id:
-            leave_filter["leave__student__section_id"] = section_uuid
-
-        if branch_id:
-            leave_filter["leave__student__branch_id"] = branch_uuid
-
-        # Match leave dates with requested attendance period.
-        if attendance_date:
-            leave_filter["leave_date"] = parsed_attendance_date
-        else:
-            if parsed_start_date:
-                leave_filter["leave_date__gte"] = parsed_start_date
-
-            if parsed_end_date:
-                leave_filter["leave_date__lte"] = parsed_end_date
-
-        approved_leave_days = LeaveDay.objects.filter(
-            **leave_filter
-        )
-
-        approved_full_day_leaves = approved_leave_days.filter(
-            duration=LeaveDay.Duration.FULL_DAY
-        ).count()
-
-        approved_half_day_leaves = approved_leave_days.filter(
-            duration=LeaveDay.Duration.HALF_DAY
-        ).count()
-
-        # -----------------------------------
-        # Response
-        # -----------------------------------
-        data = {
-            "total": summary["total"],
-            "present": summary["present"],
-            "absent": summary["absent"],
-            "late": summary["late"],
-            "half_day": summary["half_day"],
-            "leave": summary["leave"],
-            "approved_full_day_leaves": approved_full_day_leaves,
-            "approved_half_day_leaves": approved_half_day_leaves,
-        }
+            })
 
         application_logger.info(
-            "student_attendance_summary_fetched",
+            "student_attendance_grade_summary_fetched",
             school_id=str(school.id),
             requested_by=str(request.user.id),
-            total=summary["total"],
+            grade_count=len(data),
         )
 
         return CustomResponse.successResponse(
