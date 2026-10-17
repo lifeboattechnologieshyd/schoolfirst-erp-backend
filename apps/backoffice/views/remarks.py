@@ -572,18 +572,24 @@ class RemarkListAPIView(APIView):
         school = request.school
 
         try:
-            remarks = Remark.objects.filter(
-                school=school
-            ).select_related(
-                "student",
-                "grade",
-                "section",
-                "subject",
-                "category",
-                "teacher",
-            ).order_by("-date", "-created_at")
+            remarks = (
+                Remark.objects.filter(
+                    school=school
+                )
+                .select_related(
+                    "student",
+                    "grade",
+                    "section",
+                    "subject",
+                    "category",
+                    "teacher",
+                )
+                .order_by("-date", "-created_at")
+            )
 
+            # -----------------------------------------------------
             # Filters
+            # -----------------------------------------------------
             student_id = request.query_params.get("student_id")
             grade_id = request.query_params.get("grade_id")
             section_id = request.query_params.get("section_id")
@@ -593,7 +599,9 @@ class RemarkListAPIView(APIView):
             end_date = request.query_params.get("end_date")
             search = request.query_params.get("search")
 
+            # -----------------------------------------------------
             # Validate UUID filters
+            # -----------------------------------------------------
             uuid_filters = {
                 "student_id": student_id,
                 "grade_id": grade_id,
@@ -606,26 +614,47 @@ class RemarkListAPIView(APIView):
                 if value:
                     try:
                         uuid.UUID(str(value))
-                    except (ValueError, TypeError, AttributeError):
+                    except (
+                        ValueError,
+                        TypeError,
+                        AttributeError,
+                    ):
                         return CustomResponse.errorResponse(
-                            description=f"Invalid {field}."
+                            description=f"Invalid {field}.",
+                            status_code=400,
                         )
 
+            # -----------------------------------------------------
+            # Apply filters
+            # -----------------------------------------------------
             if student_id:
-                remarks = remarks.filter(student_id=student_id)
+                remarks = remarks.filter(
+                    student_id=student_id
+                )
+
             if grade_id:
-                remarks = remarks.filter(grade_id=grade_id)
+                remarks = remarks.filter(
+                    grade_id=grade_id
+                )
 
             if section_id:
-                remarks = remarks.filter(section_id=section_id)
+                remarks = remarks.filter(
+                    section_id=section_id
+                )
 
             if subject_id:
-                remarks = remarks.filter(subject_id=subject_id)
+                remarks = remarks.filter(
+                    subject_id=subject_id
+                )
 
             if category_id:
-                remarks = remarks.filter(category_id=category_id)
+                remarks = remarks.filter(
+                    category_id=category_id
+                )
 
+            # -----------------------------------------------------
             # Date filters
+            # -----------------------------------------------------
             parsed_start_date = None
             parsed_end_date = None
 
@@ -634,20 +663,32 @@ class RemarkListAPIView(APIView):
 
                 if not parsed_start_date:
                     return CustomResponse.errorResponse(
-                        description="Invalid start_date. Use YYYY-MM-DD format."
+                        description=(
+                            "Invalid start_date. "
+                            "Use YYYY-MM-DD format."
+                        ),
+                        status_code=400,
                     )
 
-                remarks = remarks.filter(date__gte=parsed_start_date)
+                remarks = remarks.filter(
+                    date__gte=parsed_start_date
+                )
 
             if end_date:
                 parsed_end_date = parse_date(end_date)
 
                 if not parsed_end_date:
                     return CustomResponse.errorResponse(
-                        description="Invalid end_date. Use YYYY-MM-DD format."
+                        description=(
+                            "Invalid end_date. "
+                            "Use YYYY-MM-DD format."
+                        ),
+                        status_code=400,
                     )
 
-                remarks = remarks.filter(date__lte=parsed_end_date)
+                remarks = remarks.filter(
+                    date__lte=parsed_end_date
+                )
 
             if (
                 parsed_start_date
@@ -655,22 +696,35 @@ class RemarkListAPIView(APIView):
                 and parsed_start_date > parsed_end_date
             ):
                 return CustomResponse.errorResponse(
-                    description="start_date cannot be later than end_date."
+                    description=(
+                        "start_date cannot be later than end_date."
+                    ),
+                    status_code=400,
                 )
 
+            # -----------------------------------------------------
             # Search
+            # -----------------------------------------------------
             if search:
-                remarks = remarks.filter(
-                    Q(title__icontains=search)
-                    | Q(description__icontains=search)
-                    | Q(context__icontains=search)
-                )
+                search = search.strip()
 
-            # Total records before pagination
+                if search:
+                    remarks = remarks.filter(
+                        Q(title__icontains=search)
+                        | Q(description__icontains=search)
+                        | Q(context__icontains=search)
+                    )
+
+            # -----------------------------------------------------
+            # Total before pagination
+            # -----------------------------------------------------
             total = remarks.count()
 
+            # -----------------------------------------------------
             # Pagination
+            # -----------------------------------------------------
             paginator = CustomPageNumberPagination()
+
             paginated_remarks = paginator.paginate_queryset(
                 remarks,
                 request,
@@ -680,44 +734,71 @@ class RemarkListAPIView(APIView):
             data = []
 
             for remark in paginated_remarks:
-                data.append({
-                    "id": str(remark.id),
-                    "student": {
-                        "id": str(remark.student_id),
-                        "name": remark.student.name,
-                        "admission_number": remark.student.admission_number,
 
-                    },
-                    "grade": {
-                        "id": str(remark.grade_id),
-                        "name": remark.grade.name,
-                    },
-                    "section": {
-                        "id": str(remark.section_id),
-                        "name": remark.section.name,
-                    },
-                    "subject": {
+                # Subject is optional
+                subject_data = None
+
+                if remark.subject_id and remark.subject:
+                    subject_data = {
                         "id": str(remark.subject_id),
                         "name": remark.subject.name,
-                    },
-                    "category": {
-                        "id": str(remark.category_id),
-                        "name": remark.category.name,
-                    },
-                    "teacher": {
-                        "id": str(remark.teacher_id),
-                        "name": remark.teacher.name,
-                    },
-                    "date": remark.date,
-                    "title": remark.title,
-                    "description": remark.description,
-                    "context": remark.context,
-                    "is_visible_to_staff": remark.is_visible_to_staff,
-                    "is_visible_to_parent": remark.is_visible_to_parent,
-                    "created_at": remark.created_at,
-                    "updated_at": remark.updated_at,
-                })
+                    }
 
+                data.append(
+                    {
+                        "id": str(remark.id),
+
+                        "student": {
+                            "id": str(remark.student_id),
+                            "name": remark.student.name,
+                            "admission_number": (
+                                remark.student.admission_number
+                            ),
+                        },
+
+                        "grade": {
+                            "id": str(remark.grade_id),
+                            "name": remark.grade.name,
+                        },
+
+                        "section": {
+                            "id": str(remark.section_id),
+                            "name": remark.section.name,
+                        },
+
+                        "subject": subject_data,
+
+                        "category": {
+                            "id": str(remark.category_id),
+                            "name": remark.category.name,
+                        },
+
+                        "teacher": {
+                            "id": str(remark.teacher_id),
+                            "name": remark.teacher.name,
+                        },
+
+                        "date": remark.date,
+                        "title": remark.title,
+                        "description": remark.description,
+                        "context": remark.context,
+
+                        "is_visible_to_staff": (
+                            remark.is_visible_to_staff
+                        ),
+
+                        "is_visible_to_parent": (
+                            remark.is_visible_to_parent
+                        ),
+
+                        "created_at": remark.created_at,
+                        "updated_at": remark.updated_at,
+                    }
+                )
+
+            # -----------------------------------------------------
+            # Log
+            # -----------------------------------------------------
             application_logger.info(
                 "student_remark_list_fetched",
                 extra={
@@ -737,13 +818,18 @@ class RemarkListAPIView(APIView):
             application_logger.exception(
                 "student_remark_list_failed",
                 extra={
-                    "school_id": str(school.id),
+                    "school_id": (
+                        str(school.id)
+                        if school
+                        else None
+                    ),
                     "user_id": str(request.user.id),
                 },
             )
 
             return CustomResponse.errorResponse(
-                description="Unable to fetch student remarks."
+                description="Unable to fetch student remarks.",
+                status_code=500,
             )
 
 
@@ -894,23 +980,29 @@ class RemarkUpdateAPIView(APIView):
                 subject = remark.subject
 
                 if "subject_id" in request.data:
-                    try:
-                        subject_uuid = uuid.UUID(
-                            str(request.data["subject_id"])
-                        )
-                    except (ValueError, TypeError, AttributeError):
-                        return CustomResponse.errorResponse(
-                            description="Invalid subject ID."
-                        )
+                    subject_id = request.data.get("subject_id")
 
-                    subject = Subject.objects.filter(
-                        id=subject_uuid,
-                    ).first()
+                    # Subject is optional.
+                    # null or empty string means remove subject.
+                    if subject_id in [None, ""]:
+                        subject = None
 
-                    if subject is None:
-                        return CustomResponse.errorResponse(
-                            description="Subject not found."
-                        )
+                    else:
+                        try:
+                            subject_uuid = uuid.UUID(str(subject_id))
+                        except (ValueError, TypeError, AttributeError):
+                            return CustomResponse.errorResponse(
+                                description="Invalid subject ID."
+                            )
+
+                        subject = Subject.objects.filter(
+                            id=subject_uuid,
+                        ).first()
+
+                        if subject is None:
+                            return CustomResponse.errorResponse(
+                                description="Subject not found."
+                            )
 
                 # Validate category
                 category = remark.category
