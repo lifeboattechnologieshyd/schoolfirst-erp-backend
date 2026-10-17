@@ -310,7 +310,6 @@ class RemarkCreateAPIView(APIView):
 
         student_id = request.data.get("student_id")
         section_id = request.data.get("section_id")
-        subject_id = request.data.get("subject_id")
         category_id = request.data.get("category_id")
 
         remark_date = request.data.get("date")
@@ -456,15 +455,19 @@ class RemarkCreateAPIView(APIView):
                 )
 
             # Validate subject
-            subject = Subject.objects.filter(
-                id=subject_uuid,
-            ).first()
+            subject_id = request.data.get("subject_id")
 
-            if not subject:
-                return CustomResponse.errorResponse(
-                    description="Subject not found.",
-                    status_code=404,
-                )
+            if subject_id:
+                subject = Subject.objects.filter(
+                    id=subject_id,
+                ).first()
+
+                if not subject:
+                    return CustomResponse.errorResponse(
+                        description="Subject not found.",
+                        status_code=404,
+                    )
+
 
             # Validate category belongs to the current school and is active
             category = RemarkCategory.objects.filter(
