@@ -92,6 +92,8 @@ class Remark(AuditModel):
         Subject,
         on_delete=models.PROTECT,
         related_name="student_remarks",
+        null=True,
+        blank=True,
     )
     section = models.ForeignKey(
         Section,

@@ -329,7 +329,7 @@ class RemarkCreateAPIView(APIView):
         required_fields = {
             "student_id": student_id,
             "section_id": section_id,
-            "subject_id": subject_id,
+            # "subject_id": subject_id,
             "category_id": category_id,
             "title": title,
             "description": description,

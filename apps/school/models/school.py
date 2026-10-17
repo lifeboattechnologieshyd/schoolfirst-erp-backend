@@ -1077,8 +1077,11 @@ class Staff(AuditModel):
 
     branch = models.ForeignKey(Branch,on_delete=models.SET_NULL,null=True,blank=True,related_name="staffs",)
 
-    user = models.OneToOneField(UserMaster,on_delete=models.CASCADE,related_name="staff",)
-
+    user = models.ForeignKey(
+        UserMaster,
+        on_delete=models.CASCADE,
+        related_name="staff_records",
+    )
     employee_id = models.CharField(max_length=50,)
 
     staff_type = models.CharField(max_length=30,choices=StaffType.choices,)
@@ -1115,13 +1118,17 @@ class Staff(AuditModel):
 
         constraints = [
             models.UniqueConstraint(
-                fields=[
-                    "school",
-                    "employee_id",
-                ],
-                name="unique_staff_employee_id",
+                fields=["school", "user"],
+                name="unique_staff_user_per_school",
+            ),
+            models.UniqueConstraint(
+                fields=["school", "employee_id"],
+                name="unique_staff_employee_id_per_school",
             ),
         ]
+
+
+
 
         indexes = [
             models.Index(fields=["school"]),
