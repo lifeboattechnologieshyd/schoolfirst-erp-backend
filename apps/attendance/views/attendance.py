@@ -27,6 +27,9 @@ class StudentLeaveRequestAPIView(APIView):
         reason = request.data.get("reason")
         pdf = request.data.get("pdf")
 
+        # -----------------------------
+        # Basic validation
+        # -----------------------------
         if not all([student_id, leave_days_data, reason]):
             return CustomResponse.errorResponse(
                 description="Student, leave dates, and reason are required."
@@ -47,13 +50,16 @@ class StudentLeaveRequestAPIView(APIView):
                 description="Leave reason cannot be empty."
             )
 
+        # -----------------------------
+        # Validate leave days
+        # -----------------------------
         today = timezone.localdate()
         seen_dates = set()
         validated_days = []
         total_days = Decimal("0.0")
 
-        # Validate individual leave dates.
         for item in leave_days_data:
+
             if not isinstance(item, dict):
                 return CustomResponse.errorResponse(
                     description="Each leave day must be an object."
@@ -69,9 +75,10 @@ class StudentLeaveRequestAPIView(APIView):
 
             if leave_date < today:
                 return CustomResponse.errorResponse(
-                    description="Leave cannot start in the past."
+                    description=f"Leave date {leave_date} cannot be in the past."
                 )
 
+            # Duplicate dates inside the same request
             if leave_date in seen_dates:
                 return CustomResponse.errorResponse(
                     description=f"Duplicate leave date: {leave_date}."
@@ -100,13 +107,17 @@ class StudentLeaveRequestAPIView(APIView):
                 "duration": duration,
             })
 
-        # Sort dates chronologically.
-        validated_days.sort(key=lambda item: item["leave_date"])
+        # Sort chronologically
+        validated_days.sort(
+            key=lambda item: item["leave_date"]
+        )
 
         start_date = validated_days[0]["leave_date"]
         end_date = validated_days[-1]["leave_date"]
 
-        # Validate student.
+        # -----------------------------
+        # Validate student
+        # -----------------------------
         student = Student.objects.filter(
             id=student_id,
             school=school,
@@ -117,10 +128,48 @@ class StudentLeaveRequestAPIView(APIView):
                 description="Student not found."
             )
 
+        requested_dates = [
+            item["leave_date"]
+            for item in validated_days
+        ]
+
         try:
             with transaction.atomic():
 
-                # Create the main leave request.
+                # -----------------------------
+                # Check existing leave
+                # -----------------------------
+                existing_leave_days = LeaveDay.objects.filter(
+                    leave__school=school,
+                    leave__student=student,
+                    leave__applicant_type=Leave.ApplicantType.STUDENT,
+                    leave__status__in=[
+                        Leave.LeaveStatus.PENDING,
+                        Leave.LeaveStatus.APPROVED,
+                    ],
+                    leave_date__in=requested_dates,
+                ).values_list(
+                    "leave_date",
+                    flat=True,
+                ).distinct()
+
+                if existing_leave_days.exists():
+
+                    duplicate_dates = sorted(
+                        str(date)
+                        for date in existing_leave_days
+                    )
+
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Leave already exists for the following dates: "
+                            f"{', '.join(duplicate_dates)}."
+                        )
+                    )
+
+                # -----------------------------
+                # Create main leave
+                # -----------------------------
                 leave = Leave.objects.create(
                     school=school,
                     branch=getattr(student, "branch", None),
@@ -137,7 +186,9 @@ class StudentLeaveRequestAPIView(APIView):
                     created_by=request.user,
                 )
 
-                # Create individual leave-day records.
+                # -----------------------------
+                # Create leave days
+                # -----------------------------
                 LeaveDay.objects.bulk_create([
                     LeaveDay(
                         leave=leave,
@@ -170,7 +221,8 @@ class StudentLeaveRequestAPIView(APIView):
                             "duration": item["duration"],
                             "days": str(
                                 Decimal("1.0")
-                                if item["duration"] == LeaveDay.Duration.FULL_DAY
+                                if item["duration"]
+                                == LeaveDay.Duration.FULL_DAY
                                 else Decimal("0.5")
                             ),
                         }

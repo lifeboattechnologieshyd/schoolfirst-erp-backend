@@ -343,13 +343,14 @@ class StudentAttendanceListAPIView(APIView):
         start_date = request.query_params.get("start_date")
         end_date = request.query_params.get("end_date")
         student_id = request.query_params.get("student_id")
+        admission_number = request.query_params.get("admission_number")
         grade_id = request.query_params.get("grade_id")
         section_id = request.query_params.get("section_id")
         branch_id = request.query_params.get("branch_id")
         status = request.query_params.get("status")
         search = request.query_params.get("search")
 
-        # Validate and filter exact attendance date
+        # Filter exact attendance date
         if attendance_date:
             parsed_date = parse_date(attendance_date)
 
@@ -362,7 +363,7 @@ class StudentAttendanceListAPIView(APIView):
                 attendance_date=parsed_date
             )
 
-        # Validate and filter start date
+        # Filter start date
         parsed_start_date = None
         parsed_end_date = None
 
@@ -378,7 +379,7 @@ class StudentAttendanceListAPIView(APIView):
                 attendance_date__gte=parsed_start_date
             )
 
-        # Validate and filter end date
+        # Filter end date
         if end_date:
             parsed_end_date = parse_date(end_date)
 
@@ -400,7 +401,7 @@ class StudentAttendanceListAPIView(APIView):
                 description="start_date cannot be after end_date."
             )
 
-        # Filter by student
+        # Filter by student ID
         if student_id:
             try:
                 student_uuid = uuid.UUID(str(student_id))
@@ -411,6 +412,12 @@ class StudentAttendanceListAPIView(APIView):
 
             attendance = attendance.filter(
                 student_id=student_uuid
+            )
+
+        # Filter by admission number
+        if admission_number:
+            attendance = attendance.filter(
+                student__admission_number__iexact=admission_number.strip()
             )
 
         # Filter by grade
@@ -463,10 +470,11 @@ class StudentAttendanceListAPIView(APIView):
                 status=status
             )
 
-        # Search by student name
+        # Search by student name or admission number
         if search:
             attendance = attendance.filter(
                 Q(student__name__icontains=search)
+                | Q(student__admission_number__icontains=search)
             )
 
         # Get total before pagination
@@ -479,11 +487,9 @@ class StudentAttendanceListAPIView(APIView):
             request,
         )
 
-        # Get the attendance records for the current page
         page_records = list(page)
 
         # Fetch approved leave days for students and dates
-        # represented on this page.
         approved_leave_days = []
 
         if page_records:
@@ -530,6 +536,7 @@ class StudentAttendanceListAPIView(APIView):
 
                 "student": {
                     "id": str(item.student_id),
+                    "admission_number": item.student.admission_number,
                     "name": item.student.name,
                 },
 
@@ -1698,6 +1705,37 @@ class StaffLeaveRequestAPIView(APIView):
         if not staff:
             return CustomResponse.errorResponse(
                 description="Active staff record not found."
+            )
+        requested_dates = [
+            item["leave_date"]
+            for item in validated_days
+        ]
+
+        existing_leave_days = LeaveDay.objects.filter(
+            leave__school=school,
+            leave__staff=staff,
+            leave__applicant_type=Leave.ApplicantType.STAFF,
+            leave__status__in=[
+                Leave.LeaveStatus.PENDING,
+                Leave.LeaveStatus.APPROVED,
+            ],
+            leave_date__in=requested_dates,
+        ).values_list(
+            "leave_date",
+            flat=True,
+        ).distinct()
+
+        if existing_leave_days.exists():
+            duplicate_dates = sorted(
+                str(leave_date)
+                for leave_date in existing_leave_days
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Leave already exists for the following dates: "
+                    f"{', '.join(duplicate_dates)}."
+                )
             )
 
         try:
