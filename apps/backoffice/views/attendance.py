@@ -1461,72 +1461,100 @@ class StaffAttendanceSummaryAPIView(APIView):
                 description="School not found."
             )
 
-        attendance = StaffAttendance.objects.filter(
-            school=school,
+        # ==========================================================
+        # QUERY PARAMETERS
+        # ==========================================================
+
+        attendance_date = request.query_params.get(
+            "attendance_date"
+        )
+        start_date = request.query_params.get(
+            "start_date"
+        )
+        end_date = request.query_params.get(
+            "end_date"
+        )
+        branch_id = request.query_params.get(
+            "branch_id"
+        )
+        staff_id = request.query_params.get(
+            "staff_id"
         )
 
-        attendance_date = request.query_params.get("attendance_date")
-        start_date = request.query_params.get("start_date")
-        end_date = request.query_params.get("end_date")
-        branch_id = request.query_params.get("branch_id")
-        staff_id = request.query_params.get("staff_id")
+        # ==========================================================
+        # PARSE DATE FILTERS
+        # ==========================================================
 
-        parsed_start = None
-        parsed_end = None
+        parsed_attendance_date = None
+        parsed_start_date = None
+        parsed_end_date = None
 
-        # Exact date filter
         if attendance_date:
-            parsed_date = parse_date(attendance_date)
-
-            if parsed_date is None:
-                return CustomResponse.errorResponse(
-                    description="Invalid attendance_date. Use YYYY-MM-DD."
-                )
-
-            attendance = attendance.filter(
-                attendance_date=parsed_date
+            parsed_attendance_date = parse_date(
+                attendance_date
             )
 
-        # Start date filter
+            if parsed_attendance_date is None:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Invalid attendance_date. "
+                        "Use YYYY-MM-DD."
+                    )
+                )
+
         if start_date:
-            parsed_start = parse_date(start_date)
-
-            if parsed_start is None:
-                return CustomResponse.errorResponse(
-                    description="Invalid start_date. Use YYYY-MM-DD."
-                )
-
-            attendance = attendance.filter(
-                attendance_date__gte=parsed_start
+            parsed_start_date = parse_date(
+                start_date
             )
 
-        # End date filter
+            if parsed_start_date is None:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Invalid start_date. "
+                        "Use YYYY-MM-DD."
+                    )
+                )
+
         if end_date:
-            parsed_end = parse_date(end_date)
-
-            if parsed_end is None:
-                return CustomResponse.errorResponse(
-                    description="Invalid end_date. Use YYYY-MM-DD."
-                )
-
-            attendance = attendance.filter(
-                attendance_date__lte=parsed_end
+            parsed_end_date = parse_date(
+                end_date
             )
+
+            if parsed_end_date is None:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Invalid end_date. "
+                        "Use YYYY-MM-DD."
+                    )
+                )
 
         if (
-            parsed_start
-            and parsed_end
-            and parsed_start > parsed_end
+            parsed_start_date
+            and parsed_end_date
+            and parsed_start_date > parsed_end_date
         ):
             return CustomResponse.errorResponse(
-                description="start_date cannot be after end_date."
+                description=(
+                    "start_date cannot be after end_date."
+                )
             )
 
-        # Validate branch
+        # ==========================================================
+        # VALIDATE BRANCH
+        # ==========================================================
+
+        branch_uuid = None
+
         if branch_id:
             try:
-                branch_uuid = uuid.UUID(str(branch_id))
-            except (ValueError, TypeError, AttributeError):
+                branch_uuid = uuid.UUID(
+                    str(branch_id)
+                )
+            except (
+                ValueError,
+                TypeError,
+                AttributeError,
+            ):
                 return CustomResponse.errorResponse(
                     description="Invalid branch ID."
                 )
@@ -1539,15 +1567,22 @@ class StaffAttendanceSummaryAPIView(APIView):
                     description="Branch not found."
                 )
 
-            attendance = attendance.filter(
-                branch_id=branch_uuid
-            )
+        # ==========================================================
+        # VALIDATE STAFF
+        # ==========================================================
 
-        # Validate staff
+        staff_uuid = None
+
         if staff_id:
             try:
-                staff_uuid = uuid.UUID(str(staff_id))
-            except (ValueError, TypeError, AttributeError):
+                staff_uuid = uuid.UUID(
+                    str(staff_id)
+                )
+            except (
+                ValueError,
+                TypeError,
+                AttributeError,
+            ):
                 return CustomResponse.errorResponse(
                     description="Invalid staff ID."
                 )
@@ -1560,51 +1595,772 @@ class StaffAttendanceSummaryAPIView(APIView):
                     description="Staff not found."
                 )
 
+        # ==========================================================
+        # ACTIVE STAFF / SCHEDULED STAFF
+        # ==========================================================
+
+        active_staff = Staff.objects.filter(
+            school=school,
+            status=Staff.Status.ACTIVE,
+        )
+
+        if branch_uuid:
+            active_staff = active_staff.filter(
+                branch_id=branch_uuid
+            )
+
+        if staff_uuid:
+            active_staff = active_staff.filter(
+                id=staff_uuid
+            )
+
+        scheduled_staff = active_staff.count()
+
+        # ==========================================================
+        # ATTENDANCE QUERY
+        # ==========================================================
+
+        attendance = StaffAttendance.objects.filter(
+            school=school,
+        )
+
+        if parsed_attendance_date:
+            attendance = attendance.filter(
+                attendance_date=parsed_attendance_date
+            )
+        else:
+            if parsed_start_date:
+                attendance = attendance.filter(
+                    attendance_date__gte=parsed_start_date
+                )
+
+            if parsed_end_date:
+                attendance = attendance.filter(
+                    attendance_date__lte=parsed_end_date
+                )
+
+        if branch_uuid:
+            attendance = attendance.filter(
+                branch_id=branch_uuid
+            )
+
+        if staff_uuid:
             attendance = attendance.filter(
                 staff_id=staff_uuid
             )
 
-        # Attendance summary
+        # ==========================================================
+        # OVERALL ATTENDANCE SUMMARY
+        # ==========================================================
+
         summary = attendance.aggregate(
-            total=Count("id"),
-            present=Count(
+            present_status=Count(
                 "id",
                 filter=Q(
-                    status=StaffAttendance.AttendanceStatus.PRESENT
+                    status=(
+                        StaffAttendance
+                        .AttendanceStatus
+                        .PRESENT
+                    )
                 ),
             ),
-            absent=Count(
-                "id",
-                filter=Q(
-                    status=StaffAttendance.AttendanceStatus.ABSENT
-                ),
-            ),
+
             late=Count(
                 "id",
                 filter=Q(
-                    status=StaffAttendance.AttendanceStatus.LATE
+                    status=(
+                        StaffAttendance
+                        .AttendanceStatus
+                        .LATE
+                    )
                 ),
             ),
-            half_day=Count(
+
+            absent=Count(
                 "id",
                 filter=Q(
-                    status=StaffAttendance.AttendanceStatus.HALF_DAY
+                    status=(
+                        StaffAttendance
+                        .AttendanceStatus
+                        .ABSENT
+                    )
                 ),
             ),
+
             leave=Count(
                 "id",
                 filter=Q(
-                    status=StaffAttendance.AttendanceStatus.LEAVE
+                    status=(
+                        StaffAttendance
+                        .AttendanceStatus
+                        .LEAVE
+                    )
+                ),
+            ),
+
+            half_day=Count(
+                "id",
+                filter=Q(
+                    status=(
+                        StaffAttendance
+                        .AttendanceStatus
+                        .HALF_DAY
+                    )
                 ),
             ),
         )
 
-        return CustomResponse.successResponse(
-            data=summary,
-            description="Staff attendance summary fetched successfully.",
+        present_status = (
+            summary["present_status"] or 0
         )
 
+        late_count = (
+            summary["late"] or 0
+        )
 
+        absent_count = (
+            summary["absent"] or 0
+        )
+
+        leave_count = (
+            summary["leave"] or 0
+        )
+
+        half_day_count = (
+            summary["half_day"] or 0
+        )
+
+        # IMPORTANT:
+        # LATE is considered PRESENT.
+        present_count = (
+            present_status + late_count
+        )
+
+        # ==========================================================
+        # ATTENDANCE PERCENTAGE
+        # ==========================================================
+
+        # For a single attendance date:
+        # scheduled_staff = active staff count.
+        #
+        # For a date range:
+        # percentage is calculated from attendance records.
+        #
+        # Half day contributes 0.5.
+
+        if parsed_attendance_date:
+
+            attendance_units = (
+                present_count
+                + (half_day_count * 0.5)
+            )
+
+            attendance_percentage = (
+                round(
+                    (
+                        attendance_units
+                        / scheduled_staff
+                    ) * 100,
+                    2,
+                )
+                if scheduled_staff
+                else 0
+            )
+
+        else:
+
+            total_attendance_records = (
+                attendance.count()
+            )
+
+            attendance_units = (
+                present_count
+                + (half_day_count * 0.5)
+            )
+
+            attendance_percentage = (
+                round(
+                    (
+                        attendance_units
+                        / total_attendance_records
+                    ) * 100,
+                    2,
+                )
+                if total_attendance_records
+                else 0
+            )
+
+        overall = {
+            "scheduled_staff": scheduled_staff,
+            "present": present_count,
+            "absent": absent_count,
+            "late": late_count,
+            "leave": leave_count,
+            "half_day": half_day_count,
+            "attendance_percentage": (
+                attendance_percentage
+            ),
+        }
+
+        # ==========================================================
+        # STAFF TYPE SUMMARY
+        # ==========================================================
+        #
+        # Since there is no department, group by staff_type.
+        #
+        # Example:
+        # PRINCIPAL
+        # ADMIN
+        # TEACHER
+        # SUPPORT
+        # etc.
+        # ==========================================================
+
+        staff_type_summary = []
+
+        staff_types = (
+            active_staff
+            .values("staff_type")
+            .annotate(
+                scheduled=Count("id")
+            )
+            .order_by("staff_type")
+        )
+
+        for staff_type_item in staff_types:
+
+            current_staff_type = (
+                staff_type_item["staff_type"]
+            )
+
+            type_staff_ids = active_staff.filter(
+                staff_type=current_staff_type
+            ).values_list(
+                "id",
+                flat=True,
+            )
+
+            type_attendance = attendance.filter(
+                staff_id__in=type_staff_ids
+            )
+
+            type_summary = type_attendance.aggregate(
+                present_status=Count(
+                    "id",
+                    filter=Q(
+                        status=(
+                            StaffAttendance
+                            .AttendanceStatus
+                            .PRESENT
+                        )
+                    ),
+                ),
+
+                late=Count(
+                    "id",
+                    filter=Q(
+                        status=(
+                            StaffAttendance
+                            .AttendanceStatus
+                            .LATE
+                        )
+                    ),
+                ),
+
+                absent=Count(
+                    "id",
+                    filter=Q(
+                        status=(
+                            StaffAttendance
+                            .AttendanceStatus
+                            .ABSENT
+                        )
+                    ),
+                ),
+
+                leave=Count(
+                    "id",
+                    filter=Q(
+                        status=(
+                            StaffAttendance
+                            .AttendanceStatus
+                            .LEAVE
+                        )
+                    ),
+                ),
+
+                half_day=Count(
+                    "id",
+                    filter=Q(
+                        status=(
+                            StaffAttendance
+                            .AttendanceStatus
+                            .HALF_DAY
+                        )
+                    ),
+                ),
+            )
+
+            type_scheduled = (
+                staff_type_item["scheduled"]
+            )
+
+            type_present = (
+                (type_summary["present_status"] or 0)
+                + (type_summary["late"] or 0)
+            )
+
+            type_late = (
+                type_summary["late"] or 0
+            )
+
+            type_absent = (
+                type_summary["absent"] or 0
+            )
+
+            type_leave = (
+                type_summary["leave"] or 0
+            )
+
+            type_half_day = (
+                type_summary["half_day"] or 0
+            )
+
+            type_attendance_units = (
+                type_present
+                + (type_half_day * 0.5)
+            )
+
+            type_percentage = (
+                round(
+                    (
+                        type_attendance_units
+                        / type_scheduled
+                    ) * 100,
+                    2,
+                )
+                if type_scheduled
+                and parsed_attendance_date
+                else 0
+            )
+
+            staff_type_summary.append({
+                "staff_type": current_staff_type,
+                "scheduled": type_scheduled,
+                "present": type_present,
+                "absent": type_absent,
+                "late": type_late,
+                "leave": type_leave,
+                "half_day": type_half_day,
+                "attendance_percentage": (
+                    type_percentage
+                ),
+            })
+
+        # ==========================================================
+        # MONTHLY ATTENDANCE TREND
+        # ==========================================================
+
+        today = timezone.localdate()
+
+        # Academic year: April -> March.
+        if today.month >= 4:
+            academic_start = date(
+                today.year,
+                4,
+                1,
+            )
+        else:
+            academic_start = date(
+                today.year - 1,
+                4,
+                1,
+            )
+
+        monthly_attendance = (
+            StaffAttendance.objects.filter(
+                school=school,
+                attendance_date__gte=academic_start,
+                attendance_date__lte=today,
+            )
+        )
+
+        if branch_uuid:
+            monthly_attendance = (
+                monthly_attendance.filter(
+                    branch_id=branch_uuid
+                )
+            )
+
+        if staff_uuid:
+            monthly_attendance = (
+                monthly_attendance.filter(
+                    staff_id=staff_uuid
+                )
+            )
+
+        monthly_summary = (
+            monthly_attendance
+            .annotate(
+                month=TruncMonth(
+                    "attendance_date"
+                )
+            )
+            .values("month")
+            .annotate(
+                total=Count("id"),
+
+                present_status=Count(
+                    "id",
+                    filter=Q(
+                        status=(
+                            StaffAttendance
+                            .AttendanceStatus
+                            .PRESENT
+                        )
+                    ),
+                ),
+
+                late=Count(
+                    "id",
+                    filter=Q(
+                        status=(
+                            StaffAttendance
+                            .AttendanceStatus
+                            .LATE
+                        )
+                    ),
+                ),
+
+                absent=Count(
+                    "id",
+                    filter=Q(
+                        status=(
+                            StaffAttendance
+                            .AttendanceStatus
+                            .ABSENT
+                        )
+                    ),
+                ),
+
+                leave=Count(
+                    "id",
+                    filter=Q(
+                        status=(
+                            StaffAttendance
+                            .AttendanceStatus
+                            .LEAVE
+                        )
+                    ),
+                ),
+
+                half_day=Count(
+                    "id",
+                    filter=Q(
+                        status=(
+                            StaffAttendance
+                            .AttendanceStatus
+                            .HALF_DAY
+                        )
+                    ),
+                ),
+            )
+            .order_by("month")
+        )
+
+        monthly_trend = []
+
+        for item in monthly_summary:
+
+            total = item["total"] or 0
+
+            present = (
+                (item["present_status"] or 0)
+                + (item["late"] or 0)
+            )
+
+            late = (
+                item["late"] or 0
+            )
+
+            absent = (
+                item["absent"] or 0
+            )
+
+            leave = (
+                item["leave"] or 0
+            )
+
+            half_day = (
+                item["half_day"] or 0
+            )
+
+            attendance_units = (
+                present
+                + (half_day * 0.5)
+            )
+
+            percentage = (
+                round(
+                    (
+                        attendance_units
+                        / total
+                    ) * 100,
+                    2,
+                )
+                if total
+                else 0
+            )
+
+            monthly_trend.append({
+                "month": item["month"].strftime(
+                    "%b"
+                ),
+                "year": item["month"].year,
+                "total": total,
+                "present": present,
+                "absent": absent,
+                "late": late,
+                "leave": leave,
+                "half_day": half_day,
+                "attendance_percentage": (
+                    percentage
+                ),
+            })
+
+        # ==========================================================
+        # RECENT ABSENT / LATE STAFF
+        # ==========================================================
+
+        exception_date = (
+            parsed_attendance_date
+            or today
+        )
+
+        exceptions_query = (
+            StaffAttendance.objects
+            .filter(
+                school=school,
+                attendance_date=exception_date,
+                status__in=[
+                    StaffAttendance
+                    .AttendanceStatus
+                    .ABSENT,
+
+                    StaffAttendance
+                    .AttendanceStatus
+                    .LATE,
+                ],
+            )
+            .select_related(
+                "staff",
+                "branch",
+            )
+            .order_by(
+                "status",
+                "staff__name",
+            )
+        )
+
+        if branch_uuid:
+            exceptions_query = (
+                exceptions_query.filter(
+                    branch_id=branch_uuid
+                )
+            )
+
+        if staff_uuid:
+            exceptions_query = (
+                exceptions_query.filter(
+                    staff_id=staff_uuid
+                )
+            )
+
+        exceptions = []
+
+        for item in exceptions_query:
+
+            exceptions.append({
+                "attendance_id": str(
+                    item.id
+                ),
+
+                "staff": {
+                    "id": str(
+                        item.staff_id
+                    ),
+                    "name": item.staff.name,
+                    "employee_id": (
+                        item.staff.employee_id
+                    ),
+                    "staff_type": (
+                        item.staff.staff_type
+                    ),
+                },
+
+                "status": item.status,
+
+                "check_in": (
+                    str(item.check_in)
+                    if item.check_in
+                    else None
+                ),
+
+                "check_out": (
+                    str(item.check_out)
+                    if item.check_out
+                    else None
+                ),
+
+                "remarks": item.remarks,
+
+                "attendance_date": str(
+                    item.attendance_date
+                ),
+            })
+
+        # ==========================================================
+        # APPROVED LEAVE TODAY
+        # ==========================================================
+
+        approved_leave_days = (
+            LeaveDay.objects.filter(
+                leave__school=school,
+                leave__applicant_type=(
+                    Leave.ApplicantType.STAFF
+                ),
+                leave__status=(
+                    Leave.LeaveStatus.APPROVED
+                ),
+                leave_date=exception_date,
+            )
+            .select_related(
+                "leave",
+                "leave__staff",
+            )
+            .order_by(
+                "leave__staff__name"
+            )
+        )
+
+        approved_leaves = []
+
+        for leave_day in approved_leave_days:
+
+            staff = leave_day.leave.staff
+
+            if branch_uuid:
+                if staff.branch_id != branch_uuid:
+                    continue
+
+            if staff_uuid:
+                if staff.id != staff_uuid:
+                    continue
+
+            approved_leaves.append({
+                "leave_id": str(
+                    leave_day.leave_id
+                ),
+
+                "staff": {
+                    "id": str(staff.id),
+                    "name": staff.name,
+                    "employee_id": (
+                        staff.employee_id
+                    ),
+                    "staff_type": (
+                        staff.staff_type
+                    ),
+                },
+
+                "leave_type": (
+                    leave_day.leave.leave_type
+                ),
+
+                "duration": (
+                    leave_day.duration
+                ),
+
+                "date": str(
+                    leave_day.leave_date
+                ),
+
+                "reason": (
+                    leave_day.leave.reason
+                ),
+            })
+
+        # ==========================================================
+        # PENDING LEAVE REQUESTS
+        # ==========================================================
+
+        pending_leaves = Leave.objects.filter(
+            school=school,
+            applicant_type=(
+                Leave.ApplicantType.STAFF
+            ),
+            status=(
+                Leave.LeaveStatus.PENDING
+            ),
+        )
+
+        if branch_uuid:
+            pending_leaves = pending_leaves.filter(
+                branch_id=branch_uuid
+            )
+
+        if staff_uuid:
+            pending_leaves = pending_leaves.filter(
+                staff_id=staff_uuid
+            )
+
+        pending_leave_count = (
+            pending_leaves.count()
+        )
+
+        # ==========================================================
+        # FINAL RESPONSE
+        # ==========================================================
+
+        data = {
+            "overall": overall,
+
+            "staff_types": staff_type_summary,
+
+            "monthly_trend": monthly_trend,
+
+            "exceptions": exceptions,
+
+            "approved_leaves": {
+                "count": len(
+                    approved_leaves
+                ),
+                "records": approved_leaves,
+            },
+
+            "pending_leave_requests": {
+                "count": pending_leave_count,
+            },
+        }
+
+        application_logger.info(
+            "staff_attendance_summary_fetched",
+            school_id=str(school.id),
+            requested_by=str(request.user.id),
+            scheduled_staff=scheduled_staff,
+            present=present_count,
+            absent=absent_count,
+            late=late_count,
+            leave=leave_count,
+        )
+
+        return CustomResponse.successResponse(
+            data=data,
+            description=(
+                "Staff attendance summary "
+                "fetched successfully."
+            ),
+        )
 
 class StaffLeaveRequestAPIView(APIView):
     permission_classes = [IsAuthenticated]
