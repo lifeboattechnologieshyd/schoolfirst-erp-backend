@@ -2692,6 +2692,7 @@ class StudentLeaveListAPIView(APIView):
                 "leave_id": str(leave.id),
                 "student_id": str(leave.student_id),
                 "student_name": leave.student.name,
+                "admission_number": leave.student.admission_number,
                 "grade": ({
                     "id": str(leave.student.grade_id),
                     "name": leave.student.grade.name,}
