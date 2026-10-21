@@ -67,7 +67,7 @@ class SchoolMiddleware:
             "/backoffice/roles",
             "/backoffice/user-roles/assign",
             "/backoffice/create/super-admin",
-            "/backoffice/client-info"
+            "/backoffice/client-info",
             "/backoffice/support/tickets",
             "/backoffice/support/ticket-details",
             "/backoffice/support/reply",
