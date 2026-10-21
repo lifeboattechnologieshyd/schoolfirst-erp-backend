@@ -252,6 +252,188 @@ class StudentLeaveRequestAPIView(APIView):
 
 
 
+class StudentLeaveLISTAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = request.school
+
+        student_id = request.GET.get("student_id")
+        status = request.GET.get("status")
+        leave_type = request.GET.get("leave_type")
+        start_date = request.GET.get("start_date")
+        end_date = request.GET.get("end_date")
+
+        try:
+            # -----------------------------
+            # Base queryset
+            # -----------------------------
+            leaves = Leave.objects.filter(
+                school=school,
+                applicant_type=Leave.ApplicantType.STUDENT,
+            ).select_related(
+                "student",
+                "branch",
+                "reviewed_by",
+            ).prefetch_related(
+                "leave_days"
+            ).order_by("-created_at")
+
+            # -----------------------------
+            # Filters
+            # -----------------------------
+            if student_id:
+                leaves = leaves.filter(student_id=student_id)
+
+            if status:
+                if status not in Leave.LeaveStatus.values:
+                    return CustomResponse.errorResponse(
+                        description="Invalid leave status."
+                    )
+
+                leaves = leaves.filter(status=status)
+
+            if leave_type:
+                if leave_type not in Leave.LeaveType.values:
+                    return CustomResponse.errorResponse(
+                        description="Invalid leave type."
+                    )
+
+                leaves = leaves.filter(leave_type=leave_type)
+
+            # -----------------------------
+            # Date filters
+            # -----------------------------
+            if start_date:
+                parsed_start_date = parse_date(start_date)
+
+                if not parsed_start_date:
+                    return CustomResponse.errorResponse(
+                        description="Invalid start_date. Use YYYY-MM-DD."
+                    )
+
+                leaves = leaves.filter(
+                    end_date__gte=parsed_start_date
+                )
+
+            if end_date:
+                parsed_end_date = parse_date(end_date)
+
+                if not parsed_end_date:
+                    return CustomResponse.errorResponse(
+                        description="Invalid end_date. Use YYYY-MM-DD."
+                    )
+
+                leaves = leaves.filter(
+                    start_date__lte=parsed_end_date
+                )
+
+            # -----------------------------
+            # Prepare response
+            # -----------------------------
+            data = []
+
+            for leave in leaves:
+
+                leave_days = []
+
+                for leave_day in leave.leave_days.all():
+
+                    days = (
+                        Decimal("1.0")
+                        if leave_day.duration
+                        == LeaveDay.Duration.FULL_DAY
+                        else Decimal("0.5")
+                    )
+
+                    leave_days.append({
+                        "id": str(leave_day.id),
+                        "date": str(leave_day.leave_date),
+                        "duration": leave_day.duration,
+                        "days": str(days),
+                    })
+
+                reviewed_by = None
+
+                if leave.reviewed_by:
+                    reviewed_by = {
+                        "id": str(leave.reviewed_by.id),
+                        "name": leave.reviewed_by.name,
+                    }
+
+                data.append({
+                    "leave_id": str(leave.id),
+
+                    "student": {
+                        "id": str(leave.student.id),
+                        "name": leave.student.name,
+                        "admission_number": getattr(
+                            leave.student,
+                            "admission_number",
+                            None
+                        ),
+                    },
+
+                    "branch": (
+                        {
+                            "id": str(leave.branch.id),
+                            "name": leave.branch.name,
+                        }
+                        if leave.branch
+                        else None
+                    ),
+
+                    "leave_type": leave.leave_type,
+
+                    "start_date": str(leave.start_date),
+                    "end_date": str(leave.end_date),
+
+                    "leave_days": leave_days,
+
+                    "total_days": str(leave.total_days),
+
+                    "reason": leave.reason,
+                    "note": leave.note,
+                    "pdf": leave.pdf,
+
+                    "status": leave.status,
+
+                    "review_remarks": leave.review_remarks,
+
+                    "reviewed_by": reviewed_by,
+
+                    "reviewed_at": (
+                        leave.reviewed_at.isoformat()
+                        if leave.reviewed_at
+                        else None
+                    ),
+
+                    "created_at": (
+                        leave.created_at.isoformat()
+                        if leave.created_at
+                        else None
+                    ),
+                })
+
+            return CustomResponse.successResponse(
+                total=len(data),
+                data={
+                    "data": data,
+                },
+                description="Student leave requests fetched successfully.",
+            )
+
+        except Exception:
+            application_logger.exception(
+                "student_leave_list_failed",
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Unable to fetch student leave requests."
+            )
+
+
 
 
 class StudentAttendanceAPIView(APIView):
