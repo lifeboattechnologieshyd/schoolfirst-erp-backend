@@ -101,7 +101,7 @@ if "apps.remarks" in settings.INSTALLED_APPS:
 if "apps.attendance" in settings.INSTALLED_APPS:
     urlpatterns.append(path("attendance/", include("apps.attendance.urls")))
 if "apps.contactus" in settings.INSTALLED_APPS:
-    urlpatterns.append(path("contactus", include("apps.contactus.urls")))
+    urlpatterns.append(path("contactus/", include("apps.contactus.urls")))
 
 
 ####################################
