@@ -100,7 +100,8 @@ if "apps.remarks" in settings.INSTALLED_APPS:
     urlpatterns.append(path("remarks/", include("apps.remarks.urls")))
 if "apps.attendance" in settings.INSTALLED_APPS:
     urlpatterns.append(path("attendance/", include("apps.attendance.urls")))
-
+if "apps.contactus" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("contactus", include("apps.contactus.urls")))
 
 
 ####################################

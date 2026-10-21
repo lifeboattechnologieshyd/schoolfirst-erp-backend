@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "apps.feedback",
     "apps.remarks",
     "apps.attendance",
+    "apps.contactus",
     # Third Party
     "rest_framework",
     "rest_framework.authtoken",
