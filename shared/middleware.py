@@ -50,6 +50,11 @@ class SchoolMiddleware:
 
             "/fee/phonepe/webhook",
 
+            "/contactus/support/tickets",
+            "/contactus/support/tickets/<uuid:ticket_id>/",
+            "/contactus/support/tickets/message",
+            "/contactus/support/tickets/rate",
+
             "/backoffice/organizations",
             "/backoffice/schools",
             "/backoffice/branches",
@@ -63,6 +68,11 @@ class SchoolMiddleware:
             "/backoffice/user-roles/assign",
             "/backoffice/create/super-admin",
             "/backoffice/client-info"
+            "/backoffice/support/tickets",
+            "/backoffice/support/ticket-details",
+            "/backoffice/support/reply",
+            "/backoffice/support/ticket/update",
+
         )
 
     def __call__(self, request):

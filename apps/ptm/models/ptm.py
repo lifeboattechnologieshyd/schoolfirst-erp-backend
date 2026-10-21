@@ -167,12 +167,12 @@ class ParentTeacherMeetingStaff(AuditModel):
 
         db_table = "parent_teacher_meeting_staffs"
 
-        constraints = [
-            models.UniqueConstraint(
-                fields=["meeting", "staff"],
-                name="unique_staff_per_ptm",
-            )
-        ]
+        # constraints = [
+        #     models.UniqueConstraint(
+        #         fields=["meeting", "staff"],
+        #         name="unique_staff_per_ptm",
+        #     )
+        # ]
 
 
 class ParentTeacherMeetingSection(AuditModel):
@@ -201,12 +201,12 @@ class ParentTeacherMeetingSection(AuditModel):
     class Meta:
         db_table = "parent_teacher_meeting_sections"
 
-        constraints = [
-            models.UniqueConstraint(
-                fields=["meeting", "section"],
-                name="unique_section_per_ptm",
-            ),
-        ]
+        # constraints = [
+        #     models.UniqueConstraint(
+        #         fields=["meeting", "section"],
+        #         name="unique_section_per_ptm",
+        #     ),
+        # ]
 
 
 class ParentTeacherMeetingResponse(AuditModel):
