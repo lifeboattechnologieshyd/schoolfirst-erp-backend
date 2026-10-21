@@ -4230,3 +4230,302 @@ class StudentAttendanceSummaryAPIView(APIView):
                     "Unable to fetch student attendance summary."
                 )
             )
+
+class StudentAttendanceProfileAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "student_attendance.view"
+
+    def get(self, request):
+        school = request.school
+
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        student_id = request.query_params.get("student_id")
+
+        if not student_id:
+            return CustomResponse.errorResponse(
+                description="Student ID is required."
+            )
+
+        # --------------------------------------------------
+        # Validate student
+        # --------------------------------------------------
+        try:
+            student_uuid = uuid.UUID(str(student_id))
+        except (ValueError, TypeError, AttributeError):
+            return CustomResponse.errorResponse(
+                description="Invalid student ID."
+            )
+
+        student = Student.objects.filter(
+            id=student_uuid,
+            school=school,
+        ).select_related(
+            "grade",
+            "section",
+            "branch",
+        ).first()
+
+        if not student:
+            return CustomResponse.errorResponse(
+                description="Student not found."
+            )
+
+        # --------------------------------------------------
+        # Attendance
+        # --------------------------------------------------
+        attendance = StudentAttendance.objects.filter(
+            school=school,
+            student=student,
+        ).select_related(
+            "grade",
+            "section",
+            "branch",
+        ).order_by(
+            "attendance_date"
+        )
+
+        # --------------------------------------------------
+        # Approved leave days
+        # --------------------------------------------------
+        approved_leave_days = LeaveDay.objects.filter(
+            leave__school=school,
+            leave__applicant_type=Leave.ApplicantType.STUDENT,
+            leave__student=student,
+            leave__status=Leave.LeaveStatus.APPROVED,
+        ).select_related(
+            "leave",
+        ).order_by(
+            "leave_date"
+        )
+
+        leave_by_date = {
+            leave_day.leave_date: leave_day
+            for leave_day in approved_leave_days
+        }
+
+        # --------------------------------------------------
+        # Summary
+        # --------------------------------------------------
+        total_present = 0
+        total_absent = 0
+        total_late = 0
+        total_half_day = 0
+        total_leave = 0
+
+        # Avoid duplicate attendance records for same date
+        attendance_by_date = {}
+
+        for record in attendance:
+            attendance_by_date[record.attendance_date] = record
+
+        for attendance_date, record in attendance_by_date.items():
+
+            leave_day = leave_by_date.get(attendance_date)
+
+            # Approved leave takes priority
+            if leave_day:
+                if leave_day.duration == LeaveDay.Duration.FULL_DAY:
+                    total_leave += 1
+                    continue
+
+            if record.status == StudentAttendance.AttendanceStatus.PRESENT:
+                total_present += 1
+
+            elif record.status == StudentAttendance.AttendanceStatus.ABSENT:
+                total_absent += 1
+
+            elif record.status == StudentAttendance.AttendanceStatus.LATE:
+                total_late += 1
+
+            elif record.status == StudentAttendance.AttendanceStatus.HALF_DAY:
+                total_half_day += 1
+
+            elif record.status == StudentAttendance.AttendanceStatus.LEAVE:
+                total_leave += 1
+
+        # --------------------------------------------------
+        # Attendance rate
+        # --------------------------------------------------
+        attended_units = (
+            total_present
+            + total_late
+            + (total_half_day * 0.5)
+        )
+
+        eligible_days = (
+            total_present
+            + total_absent
+            + total_late
+            + total_half_day
+        )
+
+        attendance_rate = (
+            (attended_units / eligible_days) * 100
+            if eligible_days > 0
+            else 0
+        )
+
+        # --------------------------------------------------
+        # Monthly breakdown
+        # --------------------------------------------------
+        monthly_data = {}
+
+        for attendance_date, record in attendance_by_date.items():
+
+            month_key = attendance_date.strftime("%Y-%m")
+
+            if month_key not in monthly_data:
+                monthly_data[month_key] = {
+                    "month": attendance_date.strftime("%B %Y"),
+                    "working_days": 0,
+                    "present": 0,
+                    "absent": 0,
+                    "late": 0,
+                    "half_day": 0,
+                    "leave": 0,
+                }
+
+            month = monthly_data[month_key]
+
+            leave_day = leave_by_date.get(attendance_date)
+
+            # ----------------------------------------------
+            # Approved full-day leave
+            # ----------------------------------------------
+            if (
+                leave_day
+                and leave_day.duration == LeaveDay.Duration.FULL_DAY
+            ):
+                month["leave"] += 1
+                continue
+
+            # Every non-full-leave attendance date is eligible
+            month["working_days"] += 1
+
+            if record.status == StudentAttendance.AttendanceStatus.PRESENT:
+                month["present"] += 1
+
+            elif record.status == StudentAttendance.AttendanceStatus.ABSENT:
+                month["absent"] += 1
+
+            elif record.status == StudentAttendance.AttendanceStatus.LATE:
+                month["late"] += 1
+
+            elif record.status == StudentAttendance.AttendanceStatus.HALF_DAY:
+                month["half_day"] += 1
+
+            elif record.status == StudentAttendance.AttendanceStatus.LEAVE:
+                month["leave"] += 1
+
+        monthly_breakdown = []
+
+        for month_key, month in monthly_data.items():
+
+            attended = (
+                month["present"]
+                + month["late"]
+                + (month["half_day"] * 0.5)
+            )
+
+            percentage = (
+                (attended / month["working_days"]) * 100
+                if month["working_days"] > 0
+                else 0
+            )
+
+            monthly_breakdown.append({
+                "month": month["month"],
+                "working_days": month["working_days"],
+                "present": month["present"],
+                "absent": month["absent"],
+                "late": month["late"],
+                "leave": month["leave"],
+                "percentage": round(percentage, 2),
+            })
+
+        # Latest month first
+        monthly_breakdown.reverse()
+
+        # --------------------------------------------------
+        # Recent absences
+        # --------------------------------------------------
+        recent_absences = []
+
+        for attendance_date, record in sorted(
+            attendance_by_date.items(),
+            key=lambda x: x[0],
+            reverse=True,
+        ):
+
+            if len(recent_absences) >= 5:
+                break
+
+            leave_day = leave_by_date.get(attendance_date)
+
+            # Don't show approved leave as absence
+            if leave_day:
+                continue
+
+            if record.status != StudentAttendance.AttendanceStatus.ABSENT:
+                continue
+
+            recent_absences.append({
+                "date": str(record.attendance_date),
+                "status": record.status,
+                "remarks": record.remarks,
+            })
+
+        # --------------------------------------------------
+        # Response
+        # --------------------------------------------------
+        data = {
+            "student": {
+                "id": str(student.id),
+                "name": student.name,
+                "admission_number": student.admission_number,
+                "grade": {
+                    "id": str(student.grade_id),
+                    "name": str(student.grade),
+                } if student.grade_id else None,
+                "section": {
+                    "id": str(student.section_id),
+                    "name": str(student.section),
+                } if student.section_id else None,
+                "branch": {
+                    "id": str(student.branch_id),
+                    "name": str(student.branch),
+                } if student.branch_id else None,
+            },
+
+            "summary": {
+                "total_present": total_present,
+                "total_absent": total_absent,
+                "total_late": total_late,
+                "total_leave": total_leave,
+                "half_day": total_half_day,
+                "attendance_rate": round(
+                    attendance_rate,
+                    2,
+                ),
+            },
+
+            "monthly_breakdown": monthly_breakdown,
+
+            "recent_absences": recent_absences,
+        }
+
+        application_logger.info(
+            "student_attendance_profile_fetched",
+            school_id=str(school.id),
+            student_id=str(student.id),
+            requested_by=str(request.user.id),
+        )
+
+        return CustomResponse.successResponse(
+            data=data,
+            description="Student attendance profile fetched successfully.",
+        )
