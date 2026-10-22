@@ -1153,17 +1153,17 @@ class StudentAttendanceNoteAPIView(APIView):
                 == StudentAttendance.AttendanceStatus.LATE
             ):
 
-                # if late_note is None:
-                #     return CustomResponse.errorResponse(
-                #         description="late_note is required."
-                #     )
-                #
-                # late_note = str(late_note).strip()
-                #
-                # if not late_note:
-                #     return CustomResponse.errorResponse(
-                #         description="late_note cannot be empty."
-                #     )
+                if late_note is None:
+                    return CustomResponse.errorResponse(
+                        description="late_note is required."
+                    )
+
+                late_note = str(late_note).strip()
+
+                if not late_note:
+                    return CustomResponse.errorResponse(
+                        description="late_note cannot be empty."
+                    )
 
                 attendance.late_note = late_note
 
