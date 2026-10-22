@@ -3766,8 +3766,7 @@ class StaffLeaveReviewAPIView(APIView):
 
 
 
-
-
+STUDENT_ATTENDANCE_WORKING_DAYS=26
 
 
 
@@ -3830,16 +3829,57 @@ class StudentAttendanceSummaryAPIView(APIView):
             )
 
             # =========================================================
+            # WORKING DAYS
+            # =========================================================
+            #
+            # Working days come from Django settings.
+            #
+            # Example:
+            #
+            # STUDENT_ATTENDANCE_WORKING_DAYS = 26
+            #
+            # We DO NOT calculate working days from attendance records.
+            # =========================================================
+
+
+
+
+
+
+            try:
+                working_days = int(STUDENT_ATTENDANCE_WORKING_DAYS)
+
+            except (TypeError, ValueError):
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Invalid STUDENT_ATTENDANCE_WORKING_DAYS "
+                        "configuration."
+                    )
+                )
+
+            if working_days <= 0:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "STUDENT_ATTENDANCE_WORKING_DAYS "
+                        "must be greater than zero."
+                    )
+                )
+
+            # =========================================================
             # VALIDATE RECENT LIMIT
             # =========================================================
 
             try:
                 recent_limit = int(recent_limit)
 
-                if recent_limit < 1 or recent_limit > 50:
-                    raise ValueError
+            except (TypeError, ValueError):
+                return CustomResponse.errorResponse(
+                    description=(
+                        "recent_limit must be a valid number."
+                    )
+                )
 
-            except (ValueError, TypeError):
+            if recent_limit < 1 or recent_limit > 50:
                 return CustomResponse.errorResponse(
                     description=(
                         "recent_limit must be between 1 and 50."
@@ -3855,6 +3895,7 @@ class StudentAttendanceSummaryAPIView(APIView):
             parsed_end_date = None
 
             if attendance_date:
+
                 parsed_attendance_date = parse_date(
                     attendance_date
                 )
@@ -3868,6 +3909,7 @@ class StudentAttendanceSummaryAPIView(APIView):
                     )
 
             if start_date:
+
                 parsed_start_date = parse_date(
                     start_date
                 )
@@ -3881,6 +3923,7 @@ class StudentAttendanceSummaryAPIView(APIView):
                     )
 
             if end_date:
+
                 parsed_end_date = parse_date(
                     end_date
                 )
@@ -3966,7 +4009,7 @@ class StudentAttendanceSummaryAPIView(APIView):
                 return error
 
             # =========================================================
-            # RESOLVE REPORT DATE RANGE
+            # RESOLVE REPORT RANGE
             # =========================================================
 
             today = timezone.localdate()
@@ -4002,7 +4045,6 @@ class StudentAttendanceSummaryAPIView(APIView):
 
             else:
 
-                # Default = today
                 report_start_date = today
                 report_end_date = today
 
@@ -4014,12 +4056,11 @@ class StudentAttendanceSummaryAPIView(APIView):
 
             if student_uuid:
 
-                student_exists = Student.objects.filter(
+                if not Student.objects.filter(
                     id=student_uuid,
                     school=school,
-                ).exists()
+                ).exists():
 
-                if not student_exists:
                     return CustomResponse.errorResponse(
                         description="Student not found."
                     )
@@ -4030,12 +4071,11 @@ class StudentAttendanceSummaryAPIView(APIView):
 
             if grade_uuid:
 
-                grade_exists = Grade.objects.filter(
+                if not Grade.objects.filter(
                     id=grade_uuid,
                     school=school,
-                ).exists()
+                ).exists():
 
-                if not grade_exists:
                     return CustomResponse.errorResponse(
                         description="Grade not found."
                     )
@@ -4046,11 +4086,10 @@ class StudentAttendanceSummaryAPIView(APIView):
 
             if section_uuid:
 
-                section_exists = Section.objects.filter(
+                if not Section.objects.filter(
                     id=section_uuid,
-                ).exists()
+                ).exists():
 
-                if not section_exists:
                     return CustomResponse.errorResponse(
                         description="Section not found."
                     )
@@ -4061,12 +4100,11 @@ class StudentAttendanceSummaryAPIView(APIView):
 
             if branch_uuid:
 
-                branch_exists = Branch.objects.filter(
+                if not Branch.objects.filter(
                     id=branch_uuid,
                     school=school,
-                ).exists()
+                ).exists():
 
-                if not branch_exists:
                     return CustomResponse.errorResponse(
                         description="Branch not found."
                     )
@@ -4113,9 +4151,7 @@ class StudentAttendanceSummaryAPIView(APIView):
                     report_start_date,
                     report_end_date,
                 ],
-            )
-
-            attendance = attendance.select_related(
+            ).select_related(
                 "student",
                 "grade",
                 "section",
@@ -4125,20 +4161,14 @@ class StudentAttendanceSummaryAPIView(APIView):
 
             # =========================================================
             # OVERALL SUMMARY
-            #
-            # SINGLE DATE:
-            #   One student should contribute only one status.
-            #
-            # DATE RANGE:
-            #   Every attendance record is counted.
-            #
-            # Leave is excluded from attendance percentage.
             # =========================================================
 
             if is_single_date:
 
                 # -----------------------------------------------------
-                # Single day
+                # SINGLE DAY
+                #
+                # One student = one attendance status.
                 # -----------------------------------------------------
 
                 attendance_records = list(
@@ -4220,17 +4250,9 @@ class StudentAttendanceSummaryAPIView(APIView):
             else:
 
                 # -----------------------------------------------------
-                # Date range
+                # DATE RANGE
                 #
-                # IMPORTANT:
-                # Do NOT use distinct student count as denominator.
-                #
-                # Example:
-                #
-                # 6 students
-                # 24 attendance records
-                #
-                # A student can have multiple records.
+                # Count all attendance records.
                 # -----------------------------------------------------
 
                 marked_students = (
@@ -4285,7 +4307,7 @@ class StudentAttendanceSummaryAPIView(APIView):
                 ).count()
 
             # =========================================================
-            # ATTENDANCE PERCENTAGE
+            # OVERALL ATTENDANCE CALCULATION
             #
             # PRESENT = 1
             # LATE = 1
@@ -4300,17 +4322,50 @@ class StudentAttendanceSummaryAPIView(APIView):
                 + (half_day * 0.5)
             )
 
-            eligible_attendance_records = (
-                attendance_records_count
-                - leave
+            # ---------------------------------------------------------
+            # Expected student attendance
+            #
+            # For a single student:
+            #
+            #   working_days × 1
+            #
+            # For multiple students:
+            #
+            #   working_days × total_students
+            #
+            # ---------------------------------------------------------
+
+            expected_student_days = (
+                working_days
+                * total_students
             )
 
-            if eligible_attendance_records > 0:
+            # ---------------------------------------------------------
+            # Leave units
+            #
+            # Currently leave records are counted as one unit.
+            # ---------------------------------------------------------
+
+            leave_units = leave
+
+            eligible_student_days = (
+                expected_student_days
+                - leave_units
+            )
+
+            if eligible_student_days < 0:
+                eligible_student_days = 0
+
+            # ---------------------------------------------------------
+            # Percentage
+            # ---------------------------------------------------------
+
+            if eligible_student_days > 0:
 
                 attendance_percentage = round(
                     (
                         attended_units
-                        / eligible_attendance_records
+                        / eligible_student_days
                     ) * 100,
                     2,
                 )
@@ -4320,11 +4375,17 @@ class StudentAttendanceSummaryAPIView(APIView):
                 attendance_percentage = 0
 
             # =========================================================
-            # OVERALL
+            # OVERALL RESPONSE
             # =========================================================
 
             overall = {
                 "total_students": total_students,
+
+                "working_days": working_days,
+
+                "expected_student_days": (
+                    expected_student_days
+                ),
 
                 "marked_students": marked_students,
 
@@ -4341,6 +4402,14 @@ class StudentAttendanceSummaryAPIView(APIView):
                 "leave": leave,
 
                 "half_day": half_day,
+
+                "attended_units": (
+                    attended_units
+                ),
+
+                "eligible_student_days": (
+                    eligible_student_days
+                ),
 
                 "attendance_percentage": (
                     attendance_percentage
@@ -4383,10 +4452,6 @@ class StudentAttendanceSummaryAPIView(APIView):
                     class_data["section_id"]
                 )
 
-                # -----------------------------------------------------
-                # Students in this grade/section
-                # -----------------------------------------------------
-
                 class_students = students.filter(
                     grade_id=class_grade_id,
                     section_id=class_section_id,
@@ -4403,18 +4468,14 @@ class StudentAttendanceSummaryAPIView(APIView):
                     class_student_ids
                 )
 
-                # -----------------------------------------------------
-                # Attendance
-                # -----------------------------------------------------
-
-                class_attendance = attendance.filter(
-                    student_id__in=class_student_ids,
+                class_attendance = (
+                    attendance.filter(
+                        student_id__in=class_student_ids
+                    )
                 )
 
                 # -----------------------------------------------------
                 # Single day
-                #
-                # One status per student.
                 # -----------------------------------------------------
 
                 if is_single_date:
@@ -4489,23 +4550,11 @@ class StudentAttendanceSummaryAPIView(APIView):
                         ):
                             class_half_day += 1
 
-                    class_total_records = (
-                        len(
-                            class_student_attendance
-                        )
-                    )
-
                 # -----------------------------------------------------
                 # Date range
-                #
-                # Count every attendance record.
                 # -----------------------------------------------------
 
                 else:
-
-                    class_total_records = (
-                        class_attendance.count()
-                    )
 
                     class_present = (
                         class_attendance.filter(
@@ -4558,7 +4607,7 @@ class StudentAttendanceSummaryAPIView(APIView):
                     )
 
                 # -----------------------------------------------------
-                # Class percentage
+                # Class attendance units
                 # -----------------------------------------------------
 
                 class_attended_units = (
@@ -4570,17 +4619,33 @@ class StudentAttendanceSummaryAPIView(APIView):
                     )
                 )
 
-                class_eligible_records = (
-                    class_total_records
+                # -----------------------------------------------------
+                # Expected class student days
+                # -----------------------------------------------------
+
+                class_expected_days = (
+                    working_days
+                    * class_total_students
+                )
+
+                class_eligible_days = (
+                    class_expected_days
                     - class_leave
                 )
 
-                if class_eligible_records > 0:
+                if class_eligible_days < 0:
+                    class_eligible_days = 0
+
+                # -----------------------------------------------------
+                # Percentage
+                # -----------------------------------------------------
+
+                if class_eligible_days > 0:
 
                     class_percentage = round(
                         (
                             class_attended_units
-                            / class_eligible_records
+                            / class_eligible_days
                         ) * 100,
                         2,
                     )
@@ -4590,7 +4655,7 @@ class StudentAttendanceSummaryAPIView(APIView):
                     class_percentage = 0
 
                 # -----------------------------------------------------
-                # Grade response
+                # Response
                 # -----------------------------------------------------
 
                 grades.append(
@@ -4631,6 +4696,10 @@ class StudentAttendanceSummaryAPIView(APIView):
                             class_total_students
                         ),
 
+                        "working_days": (
+                            working_days
+                        ),
+
                         "present": (
                             class_present
                         ),
@@ -4647,6 +4716,10 @@ class StudentAttendanceSummaryAPIView(APIView):
                             class_leave
                         ),
 
+                        "half_day": (
+                            class_half_day
+                        ),
+
                         "attendance_percentage": (
                             class_percentage
                         ),
@@ -4654,15 +4727,10 @@ class StudentAttendanceSummaryAPIView(APIView):
                 )
 
             # =========================================================
-            # MONTHLY TREND DATE RANGE
+            # MONTHLY TREND
             # =========================================================
             #
-            # Priority:
-            #
-            # 1. trend_start_date/trend_end_date
-            # 2. start_date/end_date
-            # 3. attendance_date
-            # 4. current academic year
+            # Working days are ALWAYS the configured value.
             # =========================================================
 
             if trend_start_date:
@@ -4679,62 +4747,11 @@ class StudentAttendanceSummaryAPIView(APIView):
                         )
                     )
 
-            elif (
-                parsed_attendance_date
-                or parsed_start_date
-                or parsed_end_date
-            ):
+            else:
 
                 parsed_trend_start = (
                     report_start_date
                 )
-
-            else:
-
-                # -----------------------------------------------------
-                # Use active academic year
-                # -----------------------------------------------------
-
-                academic_year = (
-                    AcademicYear.objects.filter(
-                        school=school,
-                        status=(
-                            AcademicYear
-                            .Status
-                            .ACTIVE
-                        ),
-                        start_date__lte=today,
-                        end_date__gte=today,
-                    )
-                    .order_by("-start_date")
-                    .first()
-                )
-
-                if academic_year:
-
-                    parsed_trend_start = (
-                        academic_year.start_date
-                    )
-
-                else:
-
-                    # Fallback only if academic year
-                    # is not configured.
-                    if today.month >= 4:
-
-                        parsed_trend_start = date(
-                            today.year,
-                            4,
-                            1,
-                        )
-
-                    else:
-
-                        parsed_trend_start = date(
-                            today.year - 1,
-                            4,
-                            1,
-                        )
 
             if trend_end_date:
 
@@ -4750,19 +4767,11 @@ class StudentAttendanceSummaryAPIView(APIView):
                         )
                     )
 
-            elif (
-                parsed_attendance_date
-                or parsed_start_date
-                or parsed_end_date
-            ):
+            else:
 
                 parsed_trend_end = (
                     report_end_date
                 )
-
-            else:
-
-                parsed_trend_end = today
 
             if parsed_trend_start > parsed_trend_end:
                 return CustomResponse.errorResponse(
@@ -4773,7 +4782,7 @@ class StudentAttendanceSummaryAPIView(APIView):
                 )
 
             # =========================================================
-            # MONTHLY TREND ATTENDANCE
+            # TREND ATTENDANCE
             # =========================================================
 
             trend_attendance = (
@@ -4891,7 +4900,7 @@ class StudentAttendanceSummaryAPIView(APIView):
                 )
 
                 # -----------------------------------------------------
-                # Attended units
+                # Attendance units
                 # -----------------------------------------------------
 
                 month_attended_units = (
@@ -4904,20 +4913,36 @@ class StudentAttendanceSummaryAPIView(APIView):
                 )
 
                 # -----------------------------------------------------
-                # Exclude leave from denominator
+                # Number of students
                 # -----------------------------------------------------
 
-                month_eligible_records = (
-                    total_records
+                month_expected_days = (
+                    working_days
+                    * total_students
+                )
+
+                # -----------------------------------------------------
+                # Eligible days
+                # -----------------------------------------------------
+
+                month_eligible_days = (
+                    month_expected_days
                     - month_leave
                 )
 
-                if month_eligible_records > 0:
+                if month_eligible_days < 0:
+                    month_eligible_days = 0
+
+                # -----------------------------------------------------
+                # Percentage
+                # -----------------------------------------------------
+
+                if month_eligible_days > 0:
 
                     month_percentage = round(
                         (
                             month_attended_units
-                            / month_eligible_records
+                            / month_eligible_days
                         ) * 100,
                         2,
                     )
@@ -4928,13 +4953,25 @@ class StudentAttendanceSummaryAPIView(APIView):
 
                 monthly_trend.append(
                     {
-                        "month": item[
-                            "month"
-                        ].strftime("%b"),
+                        "month": (
+                            item[
+                                "month"
+                            ].strftime("%b")
+                        ),
 
-                        "year": item[
-                            "month"
-                        ].year,
+                        "year": (
+                            item[
+                                "month"
+                            ].year
+                        ),
+
+                        "working_days": (
+                            working_days
+                        ),
+
+                        "expected_student_days": (
+                            month_expected_days
+                        ),
 
                         "total_attendance_records": (
                             total_records
@@ -4969,8 +5006,7 @@ class StudentAttendanceSummaryAPIView(APIView):
             # =========================================================
             # RECENT ABSENTEES
             #
-            # IMPORTANT:
-            # Apply the selected report date range.
+            # Respect selected date range.
             # =========================================================
 
             recent_absent_attendance = (
@@ -5157,6 +5193,7 @@ class StudentAttendanceSummaryAPIView(APIView):
                 "requested_by=%s "
                 "start_date=%s "
                 "end_date=%s "
+                "working_days=%s "
                 "total_students=%s "
                 "marked_students=%s "
                 "attendance_records=%s "
@@ -5167,6 +5204,7 @@ class StudentAttendanceSummaryAPIView(APIView):
                 request.user.id,
                 report_start_date,
                 report_end_date,
+                working_days,
                 total_students,
                 marked_students,
                 attendance_records_count,
@@ -5176,7 +5214,7 @@ class StudentAttendanceSummaryAPIView(APIView):
             )
 
             # =========================================================
-            # RESPONSE
+            # SUCCESS
             # =========================================================
 
             return CustomResponse.successResponse(
