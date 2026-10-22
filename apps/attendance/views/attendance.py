@@ -12,7 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.attendance.models import Leave, StudentAttendance, LeaveDay
-from apps.school.models.school import Student
+from apps.school.models.school import Student, AcademicYear
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.utils.logger import application_logger
 
@@ -452,8 +452,12 @@ class StudentAttendanceAPIView(APIView):
             end_date = request.query_params.get("end_date")
             status = request.query_params.get("status")
 
-            trend_start_date = request.query_params.get("trend_start_date")
-            trend_end_date = request.query_params.get("trend_end_date")
+            trend_start_date = request.query_params.get(
+                "trend_start_date"
+            )
+            trend_end_date = request.query_params.get(
+                "trend_end_date"
+            )
 
             # ---------------------------------------------------------
             # Validate student_id
@@ -470,6 +474,9 @@ class StudentAttendanceAPIView(APIView):
                     description="Invalid student_id."
                 )
 
+            # ---------------------------------------------------------
+            # Get student
+            # ---------------------------------------------------------
             student = (
                 Student.objects.filter(
                     id=student_uuid,
@@ -492,47 +499,57 @@ class StudentAttendanceAPIView(APIView):
             # ---------------------------------------------------------
             # Base attendance queryset
             # ---------------------------------------------------------
-            attendance = StudentAttendance.objects.filter(
-                school=school,
-                student=student,
-            ).select_related(
-                "student",
-                "grade",
-                "section",
-                "branch",
-                "created_by",
+            attendance = (
+                StudentAttendance.objects.filter(
+                    school=school,
+                    student=student,
+                )
+                .select_related(
+                    "student",
+                    "grade",
+                    "section",
+                    "branch",
+                    "created_by",
+                )
             )
 
             # ---------------------------------------------------------
-            # Month / Year filter
+            # Month filter
             # ---------------------------------------------------------
+            parsed_month = None
+
             if month:
                 try:
-                    month = int(month)
+                    parsed_month = int(month)
                 except ValueError:
                     return CustomResponse.errorResponse(
                         description="Invalid month."
                     )
 
-                if month < 1 or month > 12:
+                if parsed_month < 1 or parsed_month > 12:
                     return CustomResponse.errorResponse(
                         description="Month must be between 1 and 12."
                     )
 
                 attendance = attendance.filter(
-                    attendance_date__month=month
+                    attendance_date__month=parsed_month
                 )
+
+            # ---------------------------------------------------------
+            # Year filter
+            # ---------------------------------------------------------
+            parsed_year = None
 
             if year:
                 try:
-                    year = int(year)
+                    parsed_year = int(year)
                 except ValueError:
                     return CustomResponse.errorResponse(
                         description="Invalid year."
                     )
 
                 attendance = attendance.filter(
-                    attendance_date__year=year
+                    attendance_date__year=parsed_year
                 )
 
             # ---------------------------------------------------------
@@ -546,7 +563,10 @@ class StudentAttendanceAPIView(APIView):
 
                 if not parsed_start_date:
                     return CustomResponse.errorResponse(
-                        description="Invalid start_date. Use YYYY-MM-DD."
+                        description=(
+                            "Invalid start_date. "
+                            "Use YYYY-MM-DD."
+                        )
                     )
 
                 attendance = attendance.filter(
@@ -558,18 +578,27 @@ class StudentAttendanceAPIView(APIView):
 
                 if not parsed_end_date:
                     return CustomResponse.errorResponse(
-                        description="Invalid end_date. Use YYYY-MM-DD."
+                        description=(
+                            "Invalid end_date. "
+                            "Use YYYY-MM-DD."
+                        )
                     )
 
                 attendance = attendance.filter(
                     attendance_date__lte=parsed_end_date
                 )
 
-            if parsed_start_date and parsed_end_date:
-                if parsed_start_date > parsed_end_date:
-                    return CustomResponse.errorResponse(
-                        description="start_date cannot be greater than end_date."
+            if (
+                parsed_start_date
+                and parsed_end_date
+                and parsed_start_date > parsed_end_date
+            ):
+                return CustomResponse.errorResponse(
+                    description=(
+                        "start_date cannot be greater than "
+                        "end_date."
                     )
+                )
 
             # ---------------------------------------------------------
             # Status filter
@@ -583,8 +612,9 @@ class StudentAttendanceAPIView(APIView):
                 if status not in valid_statuses:
                     return CustomResponse.errorResponse(
                         description=(
-                            f"Invalid status. "
-                            f"Allowed values: {', '.join(valid_statuses)}."
+                            "Invalid status. "
+                            f"Allowed values: "
+                            f"{', '.join(valid_statuses)}."
                         )
                     )
 
@@ -593,16 +623,17 @@ class StudentAttendanceAPIView(APIView):
                 )
 
             # ---------------------------------------------------------
-            # Fetch attendance records
+            # Attendance records
             # ---------------------------------------------------------
             attendance_records = attendance.order_by(
                 "-attendance_date",
                 "-created_at",
             )
 
-            # ---------------------------------------------------------
-            # Overall Summary
-            # ---------------------------------------------------------
+            # =========================================================
+            # SUMMARY
+            # =========================================================
+
             summary_queryset = StudentAttendance.objects.filter(
                 school=school,
                 student=student,
@@ -618,14 +649,14 @@ class StudentAttendanceAPIView(APIView):
                     attendance_date__lte=parsed_end_date
                 )
 
-            if month:
+            if parsed_month:
                 summary_queryset = summary_queryset.filter(
-                    attendance_date__month=month
+                    attendance_date__month=parsed_month
                 )
 
-            if year:
+            if parsed_year:
                 summary_queryset = summary_queryset.filter(
-                    attendance_date__year=year
+                    attendance_date__year=parsed_year
                 )
 
             total_days = summary_queryset.count()
@@ -650,7 +681,7 @@ class StudentAttendanceAPIView(APIView):
                 status=StudentAttendance.Status.HALF_DAY
             ).count()
 
-            # Leave days are excluded from attendance percentage.
+            # Leave is excluded from eligible days.
             eligible_days = (
                 present_count
                 + absent_count
@@ -685,18 +716,44 @@ class StudentAttendanceAPIView(APIView):
                 "attendance_percentage": attendance_percentage,
             }
 
-            # ---------------------------------------------------------
-            # Monthly Trend
-            #
-            # Same approach as StudentAttendanceSummaryAPIView.
-            #
-            # Default:
-            # Academic year April -> today
-            # ---------------------------------------------------------
+            # =========================================================
+            # CURRENT ACADEMIC YEAR
+            # =========================================================
+
             today = timezone.localdate()
 
+            academic_year = (
+                AcademicYear.objects.filter(
+                    school=school,
+                    status=AcademicYear.Status.ACTIVE,
+                    start_date__lte=today,
+                    end_date__gte=today,
+                )
+                .order_by("-start_date")
+                .first()
+            )
+
+            if not academic_year:
+                return CustomResponse.errorResponse(
+                    description="Active academic year not found."
+                )
+
+            # =========================================================
+            # MONTHLY TREND
+            # =========================================================
+
+            # By default, use the school's academic year.
+            parsed_trend_start = academic_year.start_date
+            parsed_trend_end = min(
+                academic_year.end_date,
+                today,
+            )
+
+            # Allow frontend to override the trend range.
             if trend_start_date:
-                parsed_trend_start = parse_date(trend_start_date)
+                parsed_trend_start = parse_date(
+                    trend_start_date
+                )
 
                 if not parsed_trend_start:
                     return CustomResponse.errorResponse(
@@ -705,22 +762,11 @@ class StudentAttendanceAPIView(APIView):
                             "Use YYYY-MM-DD."
                         )
                     )
-            else:
-                if today.month >= 4:
-                    parsed_trend_start = date(
-                        today.year,
-                        4,
-                        1,
-                    )
-                else:
-                    parsed_trend_start = date(
-                        today.year - 1,
-                        4,
-                        1,
-                    )
 
             if trend_end_date:
-                parsed_trend_end = parse_date(trend_end_date)
+                parsed_trend_end = parse_date(
+                    trend_end_date
+                )
 
                 if not parsed_trend_end:
                     return CustomResponse.errorResponse(
@@ -729,17 +775,18 @@ class StudentAttendanceAPIView(APIView):
                             "Use YYYY-MM-DD."
                         )
                     )
-            else:
-                parsed_trend_end = today
 
             if parsed_trend_start > parsed_trend_end:
                 return CustomResponse.errorResponse(
                     description=(
-                        "trend_start_date cannot be greater than "
-                        "trend_end_date."
+                        "trend_start_date cannot be greater "
+                        "than trend_end_date."
                     )
                 )
 
+            # ---------------------------------------------------------
+            # Trend attendance query
+            # ---------------------------------------------------------
             trend_attendance = StudentAttendance.objects.filter(
                 school=school,
                 student=student,
@@ -755,30 +802,35 @@ class StudentAttendanceAPIView(APIView):
                 .values("month")
                 .annotate(
                     total_records=Count("id"),
+
                     present=Count(
                         "id",
                         filter=Q(
                             status=StudentAttendance.Status.PRESENT
                         ),
                     ),
+
                     absent=Count(
                         "id",
                         filter=Q(
                             status=StudentAttendance.Status.ABSENT
                         ),
                     ),
+
                     late=Count(
                         "id",
                         filter=Q(
                             status=StudentAttendance.Status.LATE
                         ),
                     ),
+
                     leave=Count(
                         "id",
                         filter=Q(
                             status=StudentAttendance.Status.LEAVE
                         ),
                     ),
+
                     half_day=Count(
                         "id",
                         filter=Q(
@@ -827,9 +879,9 @@ class StudentAttendanceAPIView(APIView):
                     {
                         "month": item["month"].strftime("%b"),
                         "year": item["month"].year,
-                        "total_attendance_records": item[
-                            "total_records"
-                        ],
+                        "total_attendance_records": (
+                            item["total_records"]
+                        ),
                         "present": month_present,
                         "absent": month_absent,
                         "late": month_late,
@@ -839,24 +891,37 @@ class StudentAttendanceAPIView(APIView):
                     }
                 )
 
-            # ---------------------------------------------------------
-            # Attendance History
-            # ---------------------------------------------------------
+            # =========================================================
+            # ATTENDANCE HISTORY
+            # =========================================================
+
             attendance_data = []
 
             for record in attendance_records:
-
                 created_by = None
 
-                if record.created_by_id and record.created_by:
-                    if hasattr(record.created_by, "get_full_name"):
+                if (
+                    record.created_by_id
+                    and record.created_by
+                ):
+                    if hasattr(
+                        record.created_by,
+                        "get_full_name",
+                    ):
                         created_by_name = (
                             record.created_by.get_full_name()
                         )
-                    elif hasattr(record.created_by, "name"):
-                        created_by_name = record.created_by.name
+                    elif hasattr(
+                        record.created_by,
+                        "name",
+                    ):
+                        created_by_name = (
+                            record.created_by.name
+                        )
                     else:
-                        created_by_name = str(record.created_by)
+                        created_by_name = str(
+                            record.created_by
+                        )
 
                     created_by = {
                         "id": str(record.created_by_id),
@@ -866,11 +931,13 @@ class StudentAttendanceAPIView(APIView):
                 attendance_data.append(
                     {
                         "id": str(record.id),
+
                         "attendance_date": (
                             record.attendance_date.isoformat()
                             if record.attendance_date
                             else None
                         ),
+
                         "status": record.status,
 
                         "student": {
@@ -920,14 +987,18 @@ class StudentAttendanceAPIView(APIView):
                     }
                 )
 
-            # ---------------------------------------------------------
-            # Final Response
-            # ---------------------------------------------------------
+            # =========================================================
+            # FINAL RESPONSE
+            # =========================================================
+
             data = {
                 "student": {
                     "id": str(student.id),
                     "name": student.name,
-                    "admission_number": student.admission_number,
+                    "admission_number": (
+                        student.admission_number
+                    ),
+
                     "grade": (
                         {
                             "id": str(student.grade_id),
@@ -936,6 +1007,7 @@ class StudentAttendanceAPIView(APIView):
                         if student.grade
                         else None
                     ),
+
                     "section": (
                         {
                             "id": str(student.section_id),
@@ -944,6 +1016,7 @@ class StudentAttendanceAPIView(APIView):
                         if student.section
                         else None
                     ),
+
                     "branch": (
                         {
                             "id": str(student.branch_id),
@@ -953,8 +1026,22 @@ class StudentAttendanceAPIView(APIView):
                         else None
                     ),
                 },
+
+                "academic_year": {
+                    "id": str(academic_year.id),
+                    "name": academic_year.name,
+                    "start_date": (
+                        academic_year.start_date.isoformat()
+                    ),
+                    "end_date": (
+                        academic_year.end_date.isoformat()
+                    ),
+                },
+
                 "summary": summary,
+
                 "monthly_trend": monthly_trend,
+
                 "attendance": attendance_data,
             }
 
@@ -967,7 +1054,9 @@ class StudentAttendanceAPIView(APIView):
 
             return CustomResponse.successResponse(
                 data=data,
-                description="Student attendance fetched successfully.",
+                description=(
+                    "Student attendance fetched successfully."
+                ),
             )
 
         except Exception as e:
@@ -979,5 +1068,7 @@ class StudentAttendanceAPIView(APIView):
             )
 
             return CustomResponse.errorResponse(
-                description="Failed to fetch student attendance."
+                description=(
+                    "Failed to fetch student attendance."
+                )
             )
