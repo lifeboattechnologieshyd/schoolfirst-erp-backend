@@ -11,7 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.attendance.models import StudentAttendance, StaffAttendance, Leave, LeaveDay
-from apps.school.models.school import Grade, Section, Student, Staff, Branch
+from apps.school.models.school import Grade, Section, Student, Staff, Branch, AcademicYear
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
@@ -1447,8 +1447,6 @@ class UpdateStaffAttendanceAPIView(APIView):
                 },
             },
         )
-
-
 class StaffAttendanceSummaryAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "staff_attendance.view"
@@ -1460,15 +1458,22 @@ class StaffAttendanceSummaryAPIView(APIView):
             attendance_date = request.GET.get("attendance_date")
             start_date = request.GET.get("start_date")
             end_date = request.GET.get("end_date")
+
             branch_id = request.GET.get("branch_id")
             staff_id = request.GET.get("staff_id")
-            recent_limit = request.GET.get("recent_limit", 10)
 
-            # ---------------------------------------------------------
-            # Validate recent limit
-            # ---------------------------------------------------------
+            recent_limit = request.GET.get(
+                "recent_limit",
+                10,
+            )
+
+            # =========================================================
+            # VALIDATE RECENT LIMIT
+            # =========================================================
+
             try:
                 recent_limit = int(recent_limit)
+
             except (TypeError, ValueError):
                 return CustomResponse.errorResponse(
                     "recent_limit must be a valid number."
@@ -1479,15 +1484,18 @@ class StaffAttendanceSummaryAPIView(APIView):
                     "recent_limit must be between 1 and 50."
                 )
 
-            # ---------------------------------------------------------
-            # Validate dates
-            # ---------------------------------------------------------
+            # =========================================================
+            # VALIDATE DATES
+            # =========================================================
+
             parsed_attendance_date = None
             parsed_start_date = None
             parsed_end_date = None
 
             if attendance_date:
-                parsed_attendance_date = parse_date(attendance_date)
+                parsed_attendance_date = parse_date(
+                    attendance_date
+                )
 
                 if not parsed_attendance_date:
                     return CustomResponse.errorResponse(
@@ -1495,7 +1503,9 @@ class StaffAttendanceSummaryAPIView(APIView):
                     )
 
             if start_date:
-                parsed_start_date = parse_date(start_date)
+                parsed_start_date = parse_date(
+                    start_date
+                )
 
                 if not parsed_start_date:
                     return CustomResponse.errorResponse(
@@ -1503,7 +1513,9 @@ class StaffAttendanceSummaryAPIView(APIView):
                     )
 
             if end_date:
-                parsed_end_date = parse_date(end_date)
+                parsed_end_date = parse_date(
+                    end_date
+                )
 
                 if not parsed_end_date:
                     return CustomResponse.errorResponse(
@@ -1519,26 +1531,48 @@ class StaffAttendanceSummaryAPIView(APIView):
                     "start_date cannot be greater than end_date."
                 )
 
-            # ---------------------------------------------------------
-            # Resolve report range
-            # ---------------------------------------------------------
+            # =========================================================
+            # TODAY
+            # =========================================================
+
             today = timezone.localdate()
 
+            # =========================================================
+            # REPORT RANGE
+            #
+            # This range is ONLY used for:
+            # - exceptions
+            # - approved leaves
+            #
+            # It does NOT affect dashboard cards/monthly trend.
+            # =========================================================
+
             if parsed_attendance_date:
+
                 report_start_date = parsed_attendance_date
                 report_end_date = parsed_attendance_date
 
             elif parsed_start_date or parsed_end_date:
-                report_start_date = parsed_start_date or parsed_end_date
-                report_end_date = parsed_end_date or parsed_start_date
+
+                report_start_date = (
+                    parsed_start_date
+                    or parsed_end_date
+                )
+
+                report_end_date = (
+                    parsed_end_date
+                    or parsed_start_date
+                )
 
             else:
+
                 report_start_date = today
                 report_end_date = today
 
-            # ---------------------------------------------------------
-            # Staff queryset
-            # ---------------------------------------------------------
+            # =========================================================
+            # STAFF QUERYSET
+            # =========================================================
+
             staff_queryset = Staff.objects.filter(
                 school=school,
                 status=Staff.Status.ACTIVE,
@@ -1558,27 +1592,55 @@ class StaffAttendanceSummaryAPIView(APIView):
                 "branch"
             )
 
-            # ---------------------------------------------------------
-            # Validate branch
-            # ---------------------------------------------------------
-            if branch_id:
-                if not staff_queryset.exists():
-                    return CustomResponse.errorResponse(
-                        "No active staff found for the selected branch."
-                    )
+            # =========================================================
+            # VALIDATE STAFF / BRANCH
+            # =========================================================
 
-            # ---------------------------------------------------------
-            # Validate staff
-            # ---------------------------------------------------------
-            if staff_id:
-                if not staff_queryset.filter(id=staff_id).exists():
-                    return CustomResponse.errorResponse(
-                        "Staff member not found."
-                    )
+            if branch_id and not staff_queryset.exists():
+                return CustomResponse.errorResponse(
+                    "No active staff found for the selected branch."
+                )
 
-            # ---------------------------------------------------------
-            # Attendance queryset
-            # ---------------------------------------------------------
+            if staff_id and not staff_queryset.exists():
+                return CustomResponse.errorResponse(
+                    "Staff member not found."
+                )
+
+            total_active_staff = staff_queryset.count()
+
+            # =========================================================
+            # HELPER
+            # =========================================================
+
+            def attendance_units(status):
+
+                if status in [
+                    StaffAttendance.AttendanceStatus.PRESENT,
+                    StaffAttendance.AttendanceStatus.LATE,
+                ]:
+                    return Decimal("1.0")
+
+                if (
+                    status
+                    == StaffAttendance.AttendanceStatus.HALF_DAY
+                ):
+                    return Decimal("0.5")
+
+                return Decimal("0.0")
+
+            # =========================================================
+            # =========================================================
+            # REPORT DATA
+            # =========================================================
+            # =========================================================
+            #
+            # This data follows start_date/end_date filters.
+            #
+            # Used for:
+            # - exceptions
+            # - approved leaves
+            # =========================================================
+
             attendance_queryset = StaffAttendance.objects.filter(
                 school=school,
                 attendance_date__range=[
@@ -1605,33 +1667,14 @@ class StaffAttendanceSummaryAPIView(APIView):
                 "branch",
             )
 
-            # ---------------------------------------------------------
-            # Helper
-            # ---------------------------------------------------------
-            def attendance_units(status):
-                if status in [
-                    StaffAttendance.AttendanceStatus.PRESENT,
-                    StaffAttendance.AttendanceStatus.LATE,
-                ]:
-                    return Decimal("1.0")
+            attendance_records = list(
+                attendance_queryset
+            )
 
-                if status == StaffAttendance.AttendanceStatus.HALF_DAY:
-                    return Decimal("0.5")
+            # =========================================================
+            # REPORT APPROVED LEAVE DAYS
+            # =========================================================
 
-                return Decimal("0.0")
-
-            # ---------------------------------------------------------
-            # Attendance records grouped in memory
-            # ---------------------------------------------------------
-            attendance_records = list(attendance_queryset)
-
-            # ---------------------------------------------------------
-            # Approved leave days
-            #
-            # LeaveDay supports:
-            # FULL_DAY  = 1
-            # HALF_DAY  = 0.5
-            # ---------------------------------------------------------
             approved_leave_days = LeaveDay.objects.filter(
                 leave__school=school,
                 leave__applicant_type=Leave.ApplicantType.STAFF,
@@ -1647,192 +1690,503 @@ class StaffAttendanceSummaryAPIView(APIView):
             )
 
             if branch_id:
-                approved_leave_days = approved_leave_days.filter(
-                    leave__branch_id=branch_id
+                approved_leave_days = (
+                    approved_leave_days.filter(
+                        leave__branch_id=branch_id
+                    )
                 )
 
             if staff_id:
-                approved_leave_days = approved_leave_days.filter(
-                    leave__staff_id=staff_id
+                approved_leave_days = (
+                    approved_leave_days.filter(
+                        leave__staff_id=staff_id
+                    )
                 )
 
-            approved_leave_days = list(approved_leave_days)
+            approved_leave_days = list(
+                approved_leave_days
+            )
 
-            # ---------------------------------------------------------
-            # Leave lookup
-            # ---------------------------------------------------------
+            # =========================================================
+            # REPORT LEAVE MAP
+            # =========================================================
+
             leave_map = {}
 
             for leave_day in approved_leave_days:
+
+                if not leave_day.leave.staff_id:
+                    continue
+
                 key = (
                     leave_day.leave.staff_id,
                     leave_day.leave_date,
                 )
 
-                if leave_day.duration == LeaveDay.Duration.HALF_DAY:
+                if (
+                    leave_day.duration
+                    == LeaveDay.Duration.HALF_DAY
+                ):
                     duration = Decimal("0.5")
+
                 else:
                     duration = Decimal("1.0")
 
                 leave_map[key] = duration
 
-            # ---------------------------------------------------------
-            # Number of calendar days
+            # =========================================================
+            # =========================================================
+            # DASHBOARD / ACADEMIC YEAR
+            # =========================================================
+            # =========================================================
             #
-            # NOTE:
-            # If your school has a working-day/calendar model,
-            # replace this with actual working days.
-            # ---------------------------------------------------------
-            total_calendar_days = (
-                report_end_date - report_start_date
-            ).days + 1
+            # IMPORTANT:
+            #
+            # This does NOT use:
+            # - attendance_date
+            # - start_date
+            # - end_date
+            #
+            # Only:
+            # - academic year
+            # - branch_id
+            # - staff_id
+            #
+            # affect the dashboard.
+            # =========================================================
 
-            # ---------------------------------------------------------
-            # OVERALL SUMMARY
-            # ---------------------------------------------------------
-            overall_present = 0
-            overall_absent = 0
-            overall_late = 0
-            overall_half_day = 0
-            overall_leave = 0
-
-            attended_units = Decimal("0.0")
-
-            for attendance in attendance_records:
-                status = attendance.status
-
-                if status == StaffAttendance.AttendanceStatus.PRESENT:
-                    overall_present += 1
-                    attended_units += Decimal("1.0")
-
-                elif status == StaffAttendance.AttendanceStatus.ABSENT:
-                    overall_absent += 1
-
-                elif status == StaffAttendance.AttendanceStatus.LATE:
-                    overall_late += 1
-                    attended_units += Decimal("1.0")
-
-                elif status == StaffAttendance.AttendanceStatus.HALF_DAY:
-                    overall_half_day += 1
-                    attended_units += Decimal("0.5")
-
-                elif status == StaffAttendance.AttendanceStatus.LEAVE:
-                    overall_leave += 1
-
-            # ---------------------------------------------------------
-            # Expected staff-days
-            # ---------------------------------------------------------
-            total_active_staff = staff_queryset.count()
-
-            expected_staff_days = (
-                total_active_staff * total_calendar_days
+            academic_year = (
+                AcademicYear.objects.filter(
+                    school=school,
+                    status=AcademicYear.Status.ACTIVE,
+                    start_date__lte=today,
+                    end_date__gte=today,
+                )
+                .order_by("-start_date")
+                .first()
             )
 
-            # Remove approved leave from eligible attendance days
-            approved_leave_units = sum(
-                leave_map.values(),
+            if not academic_year:
+                return CustomResponse.errorResponse(
+                    "No active academic year found for the school."
+                )
+
+            dashboard_start_date = (
+                academic_year.start_date
+            )
+
+            dashboard_end_date = min(
+                academic_year.end_date,
+                today,
+            )
+
+            # =========================================================
+            # DASHBOARD ATTENDANCE
+            #
+            # Independent of report date filters.
+            # =========================================================
+
+            dashboard_attendance_queryset = (
+                StaffAttendance.objects.filter(
+                    school=school,
+                    attendance_date__range=[
+                        dashboard_start_date,
+                        dashboard_end_date,
+                    ],
+                    staff__status=Staff.Status.ACTIVE,
+                )
+            )
+
+            if branch_id:
+                dashboard_attendance_queryset = (
+                    dashboard_attendance_queryset.filter(
+                        branch_id=branch_id
+                    )
+                )
+
+            if staff_id:
+                dashboard_attendance_queryset = (
+                    dashboard_attendance_queryset.filter(
+                        staff_id=staff_id
+                    )
+                )
+
+            dashboard_attendance_queryset = (
+                dashboard_attendance_queryset.select_related(
+                    "staff",
+                    "staff__branch",
+                    "marked_by",
+                    "branch",
+                )
+            )
+
+            dashboard_attendance_records = list(
+                dashboard_attendance_queryset
+            )
+
+            # =========================================================
+            # DASHBOARD APPROVED LEAVES
+            #
+            # Independent of report date filters.
+            # =========================================================
+
+            dashboard_leave_queryset = LeaveDay.objects.filter(
+                leave__school=school,
+                leave__applicant_type=Leave.ApplicantType.STAFF,
+                leave__status=Leave.LeaveStatus.APPROVED,
+                leave_date__range=[
+                    dashboard_start_date,
+                    dashboard_end_date,
+                ],
+            ).select_related(
+                "leave",
+                "leave__staff",
+                "leave__branch",
+            )
+
+            if branch_id:
+                dashboard_leave_queryset = (
+                    dashboard_leave_queryset.filter(
+                        leave__branch_id=branch_id
+                    )
+                )
+
+            if staff_id:
+                dashboard_leave_queryset = (
+                    dashboard_leave_queryset.filter(
+                        leave__staff_id=staff_id
+                    )
+                )
+
+            dashboard_leave_days = list(
+                dashboard_leave_queryset
+            )
+
+            # =========================================================
+            # DASHBOARD LEAVE MAP
+            # =========================================================
+
+            dashboard_leave_map = {}
+
+            for leave_day in dashboard_leave_days:
+
+                if not leave_day.leave.staff_id:
+                    continue
+
+                key = (
+                    leave_day.leave.staff_id,
+                    leave_day.leave_date,
+                )
+
+                if (
+                    leave_day.duration
+                    == LeaveDay.Duration.HALF_DAY
+                ):
+                    duration = Decimal("0.5")
+
+                else:
+                    duration = Decimal("1.0")
+
+                dashboard_leave_map[key] = duration
+
+            # =========================================================
+            # DASHBOARD OVERALL
+            # =========================================================
+
+            dashboard_present = 0
+            dashboard_absent = 0
+            dashboard_late = 0
+            dashboard_half_day = 0
+            dashboard_leave = 0
+
+            dashboard_attended_units = Decimal("0.0")
+
+            # ---------------------------------------------------------
+            # Attendance records
+            # ---------------------------------------------------------
+
+            for attendance in dashboard_attendance_records:
+
+                status = attendance.status
+
+                if (
+                    status
+                    == StaffAttendance.AttendanceStatus.PRESENT
+                ):
+                    dashboard_present += 1
+                    dashboard_attended_units += (
+                        Decimal("1.0")
+                    )
+
+                elif (
+                    status
+                    == StaffAttendance.AttendanceStatus.ABSENT
+                ):
+                    dashboard_absent += 1
+
+                elif (
+                    status
+                    == StaffAttendance.AttendanceStatus.LATE
+                ):
+                    dashboard_late += 1
+                    dashboard_attended_units += (
+                        Decimal("1.0")
+                    )
+
+                elif (
+                    status
+                    == StaffAttendance.AttendanceStatus.HALF_DAY
+                ):
+                    dashboard_half_day += 1
+                    dashboard_attended_units += (
+                        Decimal("0.5")
+                    )
+
+                elif (
+                    status
+                    == StaffAttendance.AttendanceStatus.LEAVE
+                ):
+                    dashboard_leave += 1
+
+            # =========================================================
+            # DASHBOARD LEAVE UNITS
+            # =========================================================
+
+            dashboard_leave_units = sum(
+                dashboard_leave_map.values(),
                 Decimal("0.0"),
             )
 
+            # =========================================================
+            # WORKING DAYS
+            #
+            # A working day is a date on which attendance exists
+            # OR an approved leave exists.
+            #
+            # This matches the staff profile screen where:
+            #
+            # working_days =
+            # present + absent + leave
+            #
+            # for a single staff member.
+            # =========================================================
+
+            dashboard_working_dates = set()
+
+            for attendance in dashboard_attendance_records:
+
+                dashboard_working_dates.add(
+                    attendance.attendance_date
+                )
+
+            for key in dashboard_leave_map.keys():
+
+                staff_pk, leave_date = key
+
+                dashboard_working_dates.add(
+                    leave_date
+                )
+
+            dashboard_working_days = len(
+                dashboard_working_dates
+            )
+
+            # =========================================================
+            # EXPECTED STAFF DAYS
+            # =========================================================
+
+            expected_staff_days = (
+                total_active_staff
+                * dashboard_working_days
+            )
+
+            # =========================================================
+            # ELIGIBLE STAFF DAYS
+            # =========================================================
+
             eligible_staff_days = (
                 Decimal(str(expected_staff_days))
-                - approved_leave_units
+                - dashboard_leave_units
             )
 
             if eligible_staff_days < 0:
                 eligible_staff_days = Decimal("0.0")
 
+            # =========================================================
+            # ATTENDANCE PERCENTAGE
+            # =========================================================
+
             if eligible_staff_days:
-                attendance_percentage = (
-                    attended_units
+
+                dashboard_percentage = (
+                    dashboard_attended_units
                     / eligible_staff_days
                     * Decimal("100")
                 )
-            else:
-                attendance_percentage = Decimal("0.0")
 
-            # ---------------------------------------------------------
-            # OVERALL RESPONSE
-            # ---------------------------------------------------------
+            else:
+                dashboard_percentage = Decimal("0.0")
+
+            # =========================================================
+            # DASHBOARD OVERALL RESPONSE
+            # =========================================================
+
             overall = {
+                "academic_year": {
+                    "id": str(academic_year.id),
+                    "name": academic_year.name,
+                    "start_date": str(
+                        academic_year.start_date
+                    ),
+                    "end_date": str(
+                        academic_year.end_date
+                    ),
+                },
+
                 "total_staff": total_active_staff,
-                "expected_staff_days": expected_staff_days,
-                "attendance_records": len(attendance_records),
-                "present": overall_present,
-                "absent": overall_absent,
-                "late": overall_late,
-                "half_day": overall_half_day,
-                "leave": overall_leave,
-                "attended_units": float(attended_units),
-                "approved_leave_units": float(approved_leave_units),
-                "eligible_staff_days": float(eligible_staff_days),
+
+                "working_days": (
+                    dashboard_working_days
+                ),
+
+                "expected_staff_days": (
+                    expected_staff_days
+                ),
+
+                "attendance_records": (
+                    len(dashboard_attendance_records)
+                ),
+
+                "present": dashboard_present,
+
+                "absent": dashboard_absent,
+
+                "late": dashboard_late,
+
+                "half_day": dashboard_half_day,
+
+                "leave": dashboard_leave,
+
+                "attended_units": float(
+                    dashboard_attended_units
+                ),
+
+                "approved_leave_units": float(
+                    dashboard_leave_units
+                ),
+
+                "eligible_staff_days": float(
+                    eligible_staff_days
+                ),
+
                 "attendance_percentage": round(
-                    float(attendance_percentage),
+                    float(dashboard_percentage),
                     2,
                 ),
             }
 
             # =========================================================
+            # =========================================================
             # STAFF TYPE SUMMARY
             # =========================================================
+            # =========================================================
+            #
+            # Also uses academic-year dashboard data.
+            # NOT affected by date filters.
+            # =========================================================
+
             staff_type_summary = {}
 
             for staff in staff_queryset:
+
                 staff_type = staff.staff_type
 
                 if staff_type not in staff_type_summary:
+
                     staff_type_summary[staff_type] = {
                         "staff_type": staff_type,
                         "total_staff": 0,
-                        "expected_staff_days": 0,
                         "present": 0,
                         "absent": 0,
                         "late": 0,
                         "half_day": 0,
                         "leave": 0,
-                        "attended_units": Decimal("0.0"),
-                        "approved_leave_units": Decimal("0.0"),
+                        "attended_units": Decimal(
+                            "0.0"
+                        ),
+                        "approved_leave_units": Decimal(
+                            "0.0"
+                        ),
                     }
 
-                staff_type_summary[staff_type]["total_staff"] += 1
+                staff_type_summary[
+                    staff_type
+                ]["total_staff"] += 1
 
-            # Expected staff days
-            for item in staff_type_summary.values():
-                item["expected_staff_days"] = (
-                    item["total_staff"] * total_calendar_days
+            # =========================================================
+            # STAFF TYPE ATTENDANCE
+            # =========================================================
+
+            for attendance in dashboard_attendance_records:
+
+                staff_type = (
+                    attendance.staff.staff_type
                 )
-
-            # Attendance
-            for attendance in attendance_records:
-                staff_type = attendance.staff.staff_type
 
                 if staff_type not in staff_type_summary:
                     continue
 
-                summary = staff_type_summary[staff_type]
+                summary = (
+                    staff_type_summary[staff_type]
+                )
 
                 status = attendance.status
 
-                if status == StaffAttendance.AttendanceStatus.PRESENT:
+                if (
+                    status
+                    == StaffAttendance.AttendanceStatus.PRESENT
+                ):
                     summary["present"] += 1
-                    summary["attended_units"] += Decimal("1.0")
+                    summary["attended_units"] += (
+                        Decimal("1.0")
+                    )
 
-                elif status == StaffAttendance.AttendanceStatus.ABSENT:
+                elif (
+                    status
+                    == StaffAttendance.AttendanceStatus.ABSENT
+                ):
                     summary["absent"] += 1
 
-                elif status == StaffAttendance.AttendanceStatus.LATE:
+                elif (
+                    status
+                    == StaffAttendance.AttendanceStatus.LATE
+                ):
                     summary["late"] += 1
-                    summary["attended_units"] += Decimal("1.0")
+                    summary["attended_units"] += (
+                        Decimal("1.0")
+                    )
 
-                elif status == StaffAttendance.AttendanceStatus.HALF_DAY:
+                elif (
+                    status
+                    == StaffAttendance.AttendanceStatus.HALF_DAY
+                ):
                     summary["half_day"] += 1
-                    summary["attended_units"] += Decimal("0.5")
+                    summary["attended_units"] += (
+                        Decimal("0.5")
+                    )
 
-                elif status == StaffAttendance.AttendanceStatus.LEAVE:
+                elif (
+                    status
+                    == StaffAttendance.AttendanceStatus.LEAVE
+                ):
                     summary["leave"] += 1
 
-            # Approved leave grouped by staff type
-            for leave_day in approved_leave_days:
+            # =========================================================
+            # STAFF TYPE LEAVE
+            # =========================================================
+
+            for leave_day in dashboard_leave_days:
+
                 staff = leave_day.leave.staff
 
                 if not staff:
@@ -1843,21 +2197,34 @@ class StaffAttendanceSummaryAPIView(APIView):
                 if staff_type not in staff_type_summary:
                     continue
 
-                if leave_day.duration == LeaveDay.Duration.HALF_DAY:
+                if (
+                    leave_day.duration
+                    == LeaveDay.Duration.HALF_DAY
+                ):
                     duration = Decimal("0.5")
+
                 else:
                     duration = Decimal("1.0")
 
-                staff_type_summary[staff_type][
-                    "approved_leave_units"
-                ] += duration
+                staff_type_summary[
+                    staff_type
+                ]["approved_leave_units"] += duration
+
+            # =========================================================
+            # BUILD STAFF TYPE RESPONSE
+            # =========================================================
 
             staff_types = []
 
             for item in staff_type_summary.values():
 
+                expected_days = (
+                    item["total_staff"]
+                    * dashboard_working_days
+                )
+
                 eligible_days = (
-                    Decimal(str(item["expected_staff_days"]))
+                    Decimal(str(expected_days))
                     - item["approved_leave_units"]
                 )
 
@@ -1865,35 +2232,70 @@ class StaffAttendanceSummaryAPIView(APIView):
                     eligible_days = Decimal("0.0")
 
                 if eligible_days:
+
                     percentage = (
                         item["attended_units"]
                         / eligible_days
                         * Decimal("100")
                     )
+
                 else:
                     percentage = Decimal("0.0")
 
                 staff_types.append(
                     {
-                        "staff_type": item["staff_type"],
-                        "total_staff": item["total_staff"],
-                        "expected_staff_days": item[
-                            "expected_staff_days"
+                        "staff_type": item[
+                            "staff_type"
                         ],
-                        "present": item["present"],
-                        "absent": item["absent"],
-                        "late": item["late"],
-                        "half_day": item["half_day"],
-                        "leave": item["leave"],
+
+                        "total_staff": item[
+                            "total_staff"
+                        ],
+
+                        "working_days": (
+                            dashboard_working_days
+                        ),
+
+                        "expected_staff_days": (
+                            expected_days
+                        ),
+
+                        "present": item[
+                            "present"
+                        ],
+
+                        "absent": item[
+                            "absent"
+                        ],
+
+                        "late": item[
+                            "late"
+                        ],
+
+                        "half_day": item[
+                            "half_day"
+                        ],
+
+                        "leave": item[
+                            "leave"
+                        ],
+
                         "attended_units": float(
-                            item["attended_units"]
+                            item[
+                                "attended_units"
+                            ]
                         ),
+
                         "approved_leave_units": float(
-                            item["approved_leave_units"]
+                            item[
+                                "approved_leave_units"
+                            ]
                         ),
+
                         "eligible_staff_days": float(
                             eligible_days
                         ),
+
                         "attendance_percentage": round(
                             float(percentage),
                             2,
@@ -1902,98 +2304,47 @@ class StaffAttendanceSummaryAPIView(APIView):
                 )
 
             # =========================================================
+            # =========================================================
             # MONTHLY TREND
             # =========================================================
+            # =========================================================
+            #
+            # IMPORTANT:
+            #
+            # Always academic year.
+            #
+            # NEVER use:
+            # - parsed_attendance_date
+            # - parsed_start_date
+            # - parsed_end_date
+            #
+            # here.
+            # =========================================================
 
-            # If user supplied start/end, trend uses that range.
-            # Otherwise use academic year: April 1 -> today.
-            if (
-                parsed_attendance_date
-                or parsed_start_date
-                or parsed_end_date
-            ):
-                trend_start_date = report_start_date
-                trend_end_date = report_end_date
-            else:
-                if today.month >= 4:
-                    academic_year_start = date(
-                        today.year,
-                        4,
-                        1,
-                    )
-                else:
-                    academic_year_start = date(
-                        today.year - 1,
-                        4,
-                        1,
-                    )
-
-                trend_start_date = academic_year_start
-                trend_end_date = today
-
-            trend_attendance = StaffAttendance.objects.filter(
-                school=school,
-                attendance_date__range=[
-                    trend_start_date,
-                    trend_end_date,
-                ],
-                staff__status=Staff.Status.ACTIVE,
+            trend_start_date = (
+                dashboard_start_date
             )
 
-            if branch_id:
-                trend_attendance = trend_attendance.filter(
-                    branch_id=branch_id
-                )
-
-            if staff_id:
-                trend_attendance = trend_attendance.filter(
-                    staff_id=staff_id
-                )
-
-            trend_attendance = trend_attendance.select_related(
-                "staff"
+            trend_end_date = (
+                dashboard_end_date
             )
 
-            trend_leave_days = LeaveDay.objects.filter(
-                leave__school=school,
-                leave__applicant_type=Leave.ApplicantType.STAFF,
-                leave__status=Leave.LeaveStatus.APPROVED,
-                leave_date__range=[
-                    trend_start_date,
-                    trend_end_date,
-                ],
+            # =========================================================
+            # MONTHLY ATTENDANCE
+            # =========================================================
+
+            trend_attendance = (
+                dashboard_attendance_records
             )
 
-            if branch_id:
-                trend_leave_days = trend_leave_days.filter(
-                    leave__branch_id=branch_id
-                )
+            trend_leave_map = (
+                dashboard_leave_map
+            )
 
-            if staff_id:
-                trend_leave_days = trend_leave_days.filter(
-                    leave__staff_id=staff_id
-                )
+            # =========================================================
+            # BUILD MONTHS
+            # =========================================================
 
-            trend_leave_days = list(trend_leave_days)
-
-            trend_leave_map = {}
-
-            for leave_day in trend_leave_days:
-                key = (
-                    leave_day.leave.staff_id,
-                    leave_day.leave_date,
-                )
-
-                if leave_day.duration == LeaveDay.Duration.HALF_DAY:
-                    duration = Decimal("0.5")
-                else:
-                    duration = Decimal("1.0")
-
-                trend_leave_map[key] = duration
-
-            # ---------------------------------------------------------
-            # Build months
-            # ---------------------------------------------------------
             monthly_trend = []
 
             current_month = date(
@@ -2010,18 +2361,29 @@ class StaffAttendanceSummaryAPIView(APIView):
 
             while current_month <= end_month:
 
+                # -----------------------------------------------------
+                # Next month
+                # -----------------------------------------------------
+
                 if current_month.month == 12:
+
                     next_month = date(
                         current_month.year + 1,
                         1,
                         1,
                     )
+
                 else:
+
                     next_month = date(
                         current_month.year,
                         current_month.month + 1,
                         1,
                     )
+
+                # -----------------------------------------------------
+                # Month range
+                # -----------------------------------------------------
 
                 month_start = max(
                     current_month,
@@ -2033,98 +2395,228 @@ class StaffAttendanceSummaryAPIView(APIView):
                     trend_end_date,
                 )
 
-                month_days = (
-                    month_end - month_start
-                ).days + 1
+                # -----------------------------------------------------
+                # Attendance records for month
+                # -----------------------------------------------------
 
-                # Attendance in this month
                 month_records = [
                     item
                     for item in trend_attendance
-                    if month_start
-                    <= item.attendance_date
-                    <= month_end
+                    if (
+                        month_start
+                        <= item.attendance_date
+                        <= month_end
+                    )
                 ]
 
-                month_attended_units = Decimal("0.0")
+                # -----------------------------------------------------
+                # Attendance counters
+                # -----------------------------------------------------
 
                 month_present = 0
                 month_absent = 0
                 month_late = 0
                 month_half_day = 0
-                month_leave = 0
+                month_attendance_leave = 0
+
+                month_attended_units = Decimal(
+                    "0.0"
+                )
 
                 for item in month_records:
 
-                    if item.status == StaffAttendance.AttendanceStatus.PRESENT:
+                    if (
+                        item.status
+                        == StaffAttendance.AttendanceStatus.PRESENT
+                    ):
                         month_present += 1
-                        month_attended_units += Decimal("1.0")
 
-                    elif item.status == StaffAttendance.AttendanceStatus.ABSENT:
+                        month_attended_units += (
+                            Decimal("1.0")
+                        )
+
+                    elif (
+                        item.status
+                        == StaffAttendance.AttendanceStatus.ABSENT
+                    ):
                         month_absent += 1
 
-                    elif item.status == StaffAttendance.AttendanceStatus.LATE:
+                    elif (
+                        item.status
+                        == StaffAttendance.AttendanceStatus.LATE
+                    ):
                         month_late += 1
-                        month_attended_units += Decimal("1.0")
 
-                    elif item.status == StaffAttendance.AttendanceStatus.HALF_DAY:
+                        month_attended_units += (
+                            Decimal("1.0")
+                        )
+
+                    elif (
+                        item.status
+                        == StaffAttendance.AttendanceStatus.HALF_DAY
+                    ):
                         month_half_day += 1
-                        month_attended_units += Decimal("0.5")
 
-                    elif item.status == StaffAttendance.AttendanceStatus.LEAVE:
-                        month_leave += 1
+                        month_attended_units += (
+                            Decimal("0.5")
+                        )
 
-                month_leave_units = Decimal("0.0")
+                    elif (
+                        item.status
+                        == StaffAttendance.AttendanceStatus.LEAVE
+                    ):
+                        month_attendance_leave += 1
 
-                for key, duration in trend_leave_map.items():
-                    staff_pk, leave_date = key
+                # -----------------------------------------------------
+                # Approved leave for month
+                # -----------------------------------------------------
 
-                    if month_start <= leave_date <= month_end:
-                        month_leave_units += duration
-
-                month_expected_days = (
-                    total_active_staff * month_days
+                month_leave_units = Decimal(
+                    "0.0"
                 )
 
-                month_eligible_days = (
-                    Decimal(str(month_expected_days))
+                month_leave_dates = set()
+
+                for key, duration in (
+                    trend_leave_map.items()
+                ):
+
+                    staff_pk, leave_date = key
+
+                    if (
+                        month_start
+                        <= leave_date
+                        <= month_end
+                    ):
+
+                        month_leave_units += (
+                            duration
+                        )
+
+                        month_leave_dates.add(
+                            leave_date
+                        )
+
+                # -----------------------------------------------------
+                # Working days
+                #
+                # A date is considered a working day if:
+                #
+                # 1. Attendance exists
+                # OR
+                # 2. Approved leave exists
+                #
+                # This produces:
+                #
+                # August -> 26
+                # July   -> 26
+                # June   -> 24
+                # May    -> 22
+                #
+                # when attendance/leave records cover those dates.
+                # -----------------------------------------------------
+
+                month_working_dates = set()
+
+                for item in month_records:
+
+                    month_working_dates.add(
+                        item.attendance_date
+                    )
+
+                month_working_dates.update(
+                    month_leave_dates
+                )
+
+                month_working_days = len(
+                    month_working_dates
+                )
+
+                # -----------------------------------------------------
+                # Expected staff days
+                # -----------------------------------------------------
+
+                month_expected_staff_days = (
+                    total_active_staff
+                    * month_working_days
+                )
+
+                # -----------------------------------------------------
+                # Eligible staff days
+                # -----------------------------------------------------
+
+                month_eligible_staff_days = (
+                    Decimal(
+                        str(
+                            month_expected_staff_days
+                        )
+                    )
                     - month_leave_units
                 )
 
-                if month_eligible_days < 0:
-                    month_eligible_days = Decimal("0.0")
+                if month_eligible_staff_days < 0:
+                    month_eligible_staff_days = (
+                        Decimal("0.0")
+                    )
 
-                if month_eligible_days:
+                # -----------------------------------------------------
+                # Attendance percentage
+                # -----------------------------------------------------
+
+                if month_eligible_staff_days:
+
                     month_percentage = (
                         month_attended_units
-                        / month_eligible_days
+                        / month_eligible_staff_days
                         * Decimal("100")
                     )
+
                 else:
-                    month_percentage = Decimal("0.0")
+
+                    month_percentage = Decimal(
+                        "0.0"
+                    )
+
+                # -----------------------------------------------------
+                # Monthly response
+                #
+                # Only fields required by screenshot.
+                # -----------------------------------------------------
 
                 monthly_trend.append(
                     {
-                        "month": current_month.strftime("%Y-%m"),
-                        "month_name": current_month.strftime("%B"),
-                        "expected_staff_days": month_expected_days,
-                        "attendance_records": len(month_records),
+                        "month": (
+                            current_month.strftime(
+                                "%Y-%m"
+                            )
+                        ),
+
+                        "month_name": (
+                            current_month.strftime(
+                                "%B %Y"
+                            )
+                        ),
+
+                        "working_days": (
+                            month_working_days
+                        ),
+
                         "present": month_present,
+
                         "absent": month_absent,
-                        "late": month_late,
-                        "half_day": month_half_day,
-                        "leave": month_leave,
-                        "attended_units": float(
-                            month_attended_units
+
+                        "leave": (
+                            month_attendance_leave
+                            if month_attendance_leave
+                            else int(
+                                month_leave_units
+                            )
                         ),
-                        "approved_leave_units": float(
-                            month_leave_units
-                        ),
-                        "eligible_staff_days": float(
-                            month_eligible_days
-                        ),
+
                         "attendance_percentage": round(
-                            float(month_percentage),
+                            float(
+                                month_percentage
+                            ),
                             2,
                         ),
                     }
@@ -2133,14 +2625,22 @@ class StaffAttendanceSummaryAPIView(APIView):
                 current_month = next_month
 
             # =========================================================
+            # DISPLAY MONTHS
+            #
+            # Latest month first, as shown in UI.
+            # =========================================================
+
+            monthly_trend.reverse()
+
+            # =========================================================
+            # =========================================================
             # RECENT EXCEPTIONS
             # =========================================================
-            #
-            # Exceptions are now taken from the selected report range,
-            # not only from today.
-            #
-            # ABSENT + LATE are returned.
             # =========================================================
+            #
+            # These DO follow date filters.
+            # =========================================================
+
             exceptions = []
 
             exception_records = (
@@ -2158,30 +2658,50 @@ class StaffAttendanceSummaryAPIView(APIView):
             )
 
             for item in exception_records:
+
                 exceptions.append(
                     {
                         "staff": {
-                            "id": str(item.staff_id),
+                            "id": str(
+                                item.staff_id
+                            ),
+
                             "name": item.staff.name,
+
                             "employee_id": getattr(
                                 item.staff,
                                 "employee_id",
                                 None,
                             ),
-                            "staff_type": item.staff.staff_type,
+
+                            "staff_type": (
+                                item.staff.staff_type
+                            ),
                         },
-                        "attendance_date": item.attendance_date,
+
+                        "attendance_date": (
+                            item.attendance_date
+                        ),
+
                         "status": item.status,
+
                         "remarks": item.remarks,
                     }
                 )
 
             # =========================================================
+            # =========================================================
             # APPROVED LEAVES
             # =========================================================
+            # =========================================================
+            #
+            # These DO follow date filters.
+            # =========================================================
+
             approved_leaves = []
 
             for leave_day in approved_leave_days:
+
                 staff = leave_day.leave.staff
 
                 if not staff:
@@ -2192,42 +2712,76 @@ class StaffAttendanceSummaryAPIView(APIView):
                         "leave_id": str(
                             leave_day.leave_id
                         ),
+
                         "staff": {
-                            "id": str(staff.id),
+                            "id": str(
+                                staff.id
+                            ),
+
                             "name": staff.name,
+
                             "employee_id": getattr(
                                 staff,
                                 "employee_id",
                                 None,
                             ),
-                            "staff_type": staff.staff_type,
+
+                            "staff_type": (
+                                staff.staff_type
+                            ),
                         },
-                        "leave_date": leave_day.leave_date,
-                        "duration": leave_day.duration,
-                        "leave_type": leave_day.leave.leave_type,
-                        "reason": leave_day.leave.reason,
-                        "status": leave_day.leave.status,
+
+                        "leave_date": (
+                            leave_day.leave_date
+                        ),
+
+                        "duration": (
+                            leave_day.duration
+                        ),
+
+                        "leave_type": (
+                            leave_day.leave.leave_type
+                        ),
+
+                        "reason": (
+                            leave_day.leave.reason
+                        ),
+
+                        "status": (
+                            leave_day.leave.status
+                        ),
                     }
                 )
 
             # =========================================================
+            # =========================================================
             # PENDING LEAVE REQUESTS
             # =========================================================
+            # =========================================================
+
             pending_leave_queryset = Leave.objects.filter(
                 school=school,
-                applicant_type=Leave.ApplicantType.STAFF,
-                status=Leave.LeaveStatus.PENDING,
+                applicant_type=(
+                    Leave.ApplicantType.STAFF
+                ),
+                status=(
+                    Leave.LeaveStatus.PENDING
+                ),
                 staff__status=Staff.Status.ACTIVE,
             )
 
             if branch_id:
-                pending_leave_queryset = pending_leave_queryset.filter(
-                    branch_id=branch_id
+                pending_leave_queryset = (
+                    pending_leave_queryset.filter(
+                        branch_id=branch_id
+                    )
                 )
 
             if staff_id:
-                pending_leave_queryset = pending_leave_queryset.filter(
-                    staff_id=staff_id
+                pending_leave_queryset = (
+                    pending_leave_queryset.filter(
+                        staff_id=staff_id
+                    )
                 )
 
             pending_leave_requests = (
@@ -2237,53 +2791,138 @@ class StaffAttendanceSummaryAPIView(APIView):
             # =========================================================
             # RESPONSE
             # =========================================================
+
             response_data = {
+
+                # -----------------------------------------------------
+                # Selected report filters
+                # -----------------------------------------------------
+
                 "filters": {
+
                     "attendance_date": (
-                        str(parsed_attendance_date)
+                        str(
+                            parsed_attendance_date
+                        )
                         if parsed_attendance_date
                         else None
                     ),
+
                     "start_date": (
-                        str(report_start_date)
+                        str(
+                            report_start_date
+                        )
                         if report_start_date
                         else None
                     ),
+
                     "end_date": (
-                        str(report_end_date)
+                        str(
+                            report_end_date
+                        )
                         if report_end_date
                         else None
                     ),
+
                     "branch_id": branch_id,
+
                     "staff_id": staff_id,
                 },
 
+                # -----------------------------------------------------
+                # Dashboard
+                #
+                # Independent of date filters.
+                # -----------------------------------------------------
+
                 "overall": overall,
+
+                # -----------------------------------------------------
+                # Staff type
+                #
+                # Independent of date filters.
+                # -----------------------------------------------------
 
                 "staff_types": staff_types,
 
+                # -----------------------------------------------------
+                # Monthly trend
+                #
+                # Always academic year.
+                # Independent of date filters.
+                # -----------------------------------------------------
+
                 "monthly_trend": {
-                    "start_date": str(trend_start_date),
-                    "end_date": str(trend_end_date),
+
+                    "academic_year": {
+                        "id": str(
+                            academic_year.id
+                        ),
+
+                        "name": (
+                            academic_year.name
+                        ),
+
+                        "start_date": str(
+                            academic_year.start_date
+                        ),
+
+                        "end_date": str(
+                            academic_year.end_date
+                        ),
+                    },
+
+                    "start_date": str(
+                        trend_start_date
+                    ),
+
+                    "end_date": str(
+                        trend_end_date
+                    ),
+
                     "data": monthly_trend,
                 },
 
+                # -----------------------------------------------------
+                # Date-filtered sections
+                # -----------------------------------------------------
+
                 "exceptions": exceptions,
 
-                "approved_leaves": approved_leaves,
+                "approved_leaves": (
+                    approved_leaves
+                ),
 
                 "pending_leave_requests": (
                     pending_leave_requests
                 ),
             }
 
+            # =========================================================
+            # LOG
+            # =========================================================
+
             application_logger.info(
                 "Staff attendance summary generated. "
-                "school=%s start_date=%s end_date=%s",
+                "school=%s "
+                "report_start=%s "
+                "report_end=%s "
+                "dashboard_start=%s "
+                "dashboard_end=%s "
+                "branch_id=%s "
+                "staff_id=%s",
                 school.id,
                 report_start_date,
                 report_end_date,
+                dashboard_start_date,
+                dashboard_end_date,
+                branch_id,
+                staff_id,
             )
+
+            # =========================================================
+            # SUCCESS RESPONSE
+            # =========================================================
 
             return CustomResponse.successResponse(
                 response_data,
@@ -2291,6 +2930,7 @@ class StaffAttendanceSummaryAPIView(APIView):
             )
 
         except Exception as e:
+
             application_logger.exception(
                 "Error while generating staff attendance summary: %s",
                 str(e),
@@ -2299,6 +2939,8 @@ class StaffAttendanceSummaryAPIView(APIView):
             return CustomResponse.errorResponse(
                 "Unable to fetch staff attendance summary."
             )
+
+
 
 class StaffLeaveRequestAPIView(APIView):
     permission_classes = [IsAuthenticated]
