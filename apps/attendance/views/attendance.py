@@ -935,40 +935,40 @@ class StudentAttendanceAPIView(APIView):
 
                         "status": record.status,
 
-                        "student": {
-                            "id": str(record.student_id),
-                            "name": record.student.name,
-                            "admission_number": (
-                                record.student.admission_number
-                            ),
-                        },
-
-                        "grade": (
-                            {
-                                "id": str(record.grade_id),
-                                "name": record.grade.name,
-                            }
-                            if record.grade
-                            else None
-                        ),
-
-                        "section": (
-                            {
-                                "id": str(record.section_id),
-                                "name": record.section.name,
-                            }
-                            if record.section
-                            else None
-                        ),
-
-                        "branch": (
-                            {
-                                "id": str(record.branch_id),
-                                "name": record.branch.name,
-                            }
-                            if record.branch
-                            else None
-                        ),
+                        # "student": {
+                        #     "id": str(record.student_id),
+                        #     "name": record.student.name,
+                        #     "admission_number": (
+                        #         record.student.admission_number
+                        #     ),
+                        # },
+                        #
+                        # "grade": (
+                        #     {
+                        #         "id": str(record.grade_id),
+                        #         "name": record.grade.name,
+                        #     }
+                        #     if record.grade
+                        #     else None
+                        # ),
+                        #
+                        # "section": (
+                        #     {
+                        #         "id": str(record.section_id),
+                        #         "name": record.section.name,
+                        #     }
+                        #     if record.section
+                        #     else None
+                        # ),
+                        #
+                        # "branch": (
+                        #     {
+                        #         "id": str(record.branch_id),
+                        #         "name": record.branch.name,
+                        #     }
+                        #     if record.branch
+                        #     else None
+                        # ),
 
                         "remarks": record.remarks,
 
