@@ -3312,6 +3312,7 @@ class CreateStaffAPIView(APIView):
         mobile = str(request.data.get("mobile", "")).strip()
         branch_id = request.data.get("branch_id")
         email = request.data.get("email")
+        department = request.data.get("department")
 
         application_logger.info(
             "staff_create_requested",
@@ -3340,6 +3341,7 @@ class CreateStaffAPIView(APIView):
             "gender",
             "mobile",
             "joining_date",
+            "department",
         ]
 
         for field in required_fields:
@@ -3369,6 +3371,10 @@ class CreateStaffAPIView(APIView):
         if staff_type not in Staff.StaffType.values:
             return CustomResponse.errorResponse(
                 description="Invalid staff type."
+            )
+        if department not in Staff.Department.values:
+            return CustomResponse.errorResponse(
+                description="Invalid department."
             )
 
         # ---------------------------------------------------------
@@ -3522,6 +3528,7 @@ class CreateStaffAPIView(APIView):
                     branch=branch,
                     employee_id=employee_id,
                     staff_type=staff_type,
+                    department=department,
                     name=name,
                     gender=gender,
                     date_of_birth=request.data.get(
@@ -3651,6 +3658,7 @@ class GetStaffAPIView(APIView):
         school = request.school
         branch_id = request.headers.get("X-Branch-Id")
         staff_type = request.GET.get("staff_type")
+        department = request.GET.get("department")
         search = request.GET.get("search", "").strip()
 
         if school is None:
@@ -3699,6 +3707,10 @@ class GetStaffAPIView(APIView):
                 staffs = staffs.filter(
                     staff_type=staff_type,
                 )
+            if department:
+                staffs = staffs.filter(
+                    department=department,
+                )
 
             if branch_id:
                 staffs = staffs.filter(
@@ -3743,6 +3755,7 @@ class GetStaffAPIView(APIView):
                     "id": str(staff.id),
                     "employee_id": staff.employee_id,
                     "staff_type": staff.staff_type,
+                    "department": staff.department if staff.department else None,
                     "role": role.role_name if role else None,
                     "name": staff.name,
                     "gender": staff.gender,
@@ -3948,6 +3961,15 @@ class UpdateStaffAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Invalid staff type."
             )
+        department = request.data.get(
+            "department",
+            staff.department,
+
+        )
+        if department not in Staff.Department.values:
+            return CustomResponse.errorResponse(
+                description="Invalid department."
+            )
 
         # ---------------------------------------------------------
         # Gender
@@ -4065,6 +4087,7 @@ class UpdateStaffAPIView(APIView):
                 staff.branch = branch
                 staff.employee_id = employee_id
                 staff.staff_type = staff_type
+                staff.department = department
                 staff.name = request.data.get(
                     "name",
                     staff.name,
