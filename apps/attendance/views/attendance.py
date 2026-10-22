@@ -606,7 +606,7 @@ class StudentAttendanceAPIView(APIView):
             if status:
                 valid_statuses = [
                     choice[0]
-                    for choice in StudentAttendance.STATUS_CHOICES
+                    for choice in StudentAttendance.status
                 ]
 
                 if status not in valid_statuses:
