@@ -1078,6 +1078,7 @@ class StudentAttendanceLateNoteAPIView(APIView):
 
             attendance_id = request.data.get("attendance_id")
             late_note = request.data.get("late_note")
+            student_id = request.data.get("student_id")
 
             # ---------------------------------------------------------
             # Validate attendance_id
@@ -1092,6 +1093,18 @@ class StudentAttendanceLateNoteAPIView(APIView):
             except ValueError:
                 return CustomResponse.errorResponse(
                     description="Invalid attendance_id."
+                )
+
+            if not student_id:
+                return CustomResponse.errorResponse(
+                    description="student_id is required."
+                )
+
+            try:
+                student_uuid = UUID(str(student_id))
+            except (ValueError, TypeError):
+                return CustomResponse.errorResponse(
+                    description="Invalid student_id."
                 )
 
             # ---------------------------------------------------------
@@ -1115,6 +1128,7 @@ class StudentAttendanceLateNoteAPIView(APIView):
             attendance = (
                 StudentAttendance.objects.filter(
                     id=attendance_uuid,
+                    student_id=student_uuid,
                     school=school,
                     student__status=Student.Status.ACTIVE,
                 )
