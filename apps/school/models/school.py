@@ -1060,6 +1060,17 @@ class Staff(AuditModel):
         # LAB_ASSISTANT = "LAB_ASSISTANT", "Lab Assistant"
         # TRANSPORT_MANAGER = "TRANSPORT_MANAGER", "Transport Manager"
 
+    class Department(models.TextChoices):
+        ACADEMICS = "ACADEMICS", "Academics"
+        ADMINISTRATION = "ADMINISTRATION", "Administration"
+        ACCOUNTS = "ACCOUNTS", "Accounts"
+        TRANSPORT = "TRANSPORT", "Transport"
+        HUMAN_RESOURCES = "HUMAN_RESOURCES", "Human Resources"
+        IT = "IT", "IT"
+        LIBRARY = "LIBRARY", "Library"
+        SECURITY = "SECURITY", "Security"
+        MAINTENANCE = "MAINTENANCE", "Maintenance"
+
     class Gender(models.TextChoices):
         MALE = "MALE", "Male"
         FEMALE = "FEMALE", "Female"
@@ -1085,6 +1096,8 @@ class Staff(AuditModel):
     employee_id = models.CharField(max_length=50,)
 
     staff_type = models.CharField(max_length=30,choices=StaffType.choices,)
+
+    department = models.CharField(max_length=30,choices=Department.choices,null=True,blank=True,)
 
     name = models.CharField(max_length=255,)
 
