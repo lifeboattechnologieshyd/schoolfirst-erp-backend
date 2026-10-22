@@ -1,6 +1,7 @@
 from calendar import monthrange
 from datetime import date
 from decimal import Decimal
+from tkinter.constants import ACTIVE
 from uuid import UUID
 
 from django.db import transaction
@@ -481,7 +482,7 @@ class StudentAttendanceAPIView(APIView):
                 Student.objects.filter(
                     id=student_uuid,
                     school=school,
-                    is_active=True,
+                    status=ACTIVE,
                 )
                 .select_related(
                     "grade",
