@@ -662,23 +662,23 @@ class StudentAttendanceAPIView(APIView):
             total_days = summary_queryset.count()
 
             present_count = summary_queryset.filter(
-                status=StudentAttendance.Status.PRESENT
+                status=StudentAttendance.AttendanceStatus.PRESENT
             ).count()
 
             absent_count = summary_queryset.filter(
-                status=StudentAttendance.Status.ABSENT
+                status=StudentAttendance.AttendanceStatus.ABSENT
             ).count()
 
             late_count = summary_queryset.filter(
-                status=StudentAttendance.Status.LATE
+                status=StudentAttendance.AttendanceStatus.LATE
             ).count()
 
             leave_count = summary_queryset.filter(
-                status=StudentAttendance.Status.LEAVE
+                status=StudentAttendance.AttendanceStatus.LEAVE
             ).count()
 
             half_day_count = summary_queryset.filter(
-                status=StudentAttendance.Status.HALF_DAY
+                status=StudentAttendance.AttendanceStatus.HALF_DAY
             ).count()
 
             # Leave is excluded from eligible days.
@@ -806,35 +806,35 @@ class StudentAttendanceAPIView(APIView):
                     present=Count(
                         "id",
                         filter=Q(
-                            status=StudentAttendance.Status.PRESENT
+                            status=StudentAttendance.AttendanceStatus.PRESENT
                         ),
                     ),
 
                     absent=Count(
                         "id",
                         filter=Q(
-                            status=StudentAttendance.Status.ABSENT
+                            status=StudentAttendance.AttendanceStatus.ABSENT
                         ),
                     ),
 
                     late=Count(
                         "id",
                         filter=Q(
-                            status=StudentAttendance.Status.LATE
+                            status=StudentAttendance.AttendanceStatus.LATE
                         ),
                     ),
 
                     leave=Count(
                         "id",
                         filter=Q(
-                            status=StudentAttendance.Status.LEAVE
+                            status=StudentAttendance.AttendanceStatus.LEAVE
                         ),
                     ),
 
                     half_day=Count(
                         "id",
                         filter=Q(
-                            status=StudentAttendance.Status.HALF_DAY
+                            status=StudentAttendance.AttendanceStatus.HALF_DAY
                         ),
                     ),
                 )
