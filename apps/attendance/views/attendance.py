@@ -1064,3 +1064,138 @@ class StudentAttendanceAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Failed to fetch student attendance."
             )
+
+class StudentAttendanceLateNoteAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request):
+        try:
+            school = request.school
+
+            attendance_id = request.data.get("attendance_id")
+            late_note = request.data.get("late_note")
+
+            # ---------------------------------------------------------
+            # Validate attendance_id
+            # ---------------------------------------------------------
+            if not attendance_id:
+                return CustomResponse.errorResponse(
+                    description="attendance_id is required."
+                )
+
+            try:
+                attendance_uuid = UUID(attendance_id)
+            except ValueError:
+                return CustomResponse.errorResponse(
+                    description="Invalid attendance_id."
+                )
+
+            # ---------------------------------------------------------
+            # Validate late note
+            # ---------------------------------------------------------
+            if not late_note:
+                return CustomResponse.errorResponse(
+                    description="late_note is required."
+                )
+
+            late_note = late_note.strip()
+
+            if not late_note:
+                return CustomResponse.errorResponse(
+                    description="late_note cannot be empty."
+                )
+
+            # ---------------------------------------------------------
+            # Get attendance
+            # ---------------------------------------------------------
+            attendance = (
+                StudentAttendance.objects.filter(
+                    id=attendance_uuid,
+                    school=school,
+                    student__status=Student.Status.ACTIVE,
+                )
+                .select_related(
+                    "student",
+                    "grade",
+                    "section",
+                    "branch",
+                    "marked_by",
+                )
+                .first()
+            )
+
+            if not attendance:
+                return CustomResponse.errorResponse(
+                    description="Attendance record not found."
+                )
+
+            # ---------------------------------------------------------
+            # Only LATE attendance can have a late note
+            # ---------------------------------------------------------
+            if (
+                attendance.status
+                != StudentAttendance.AttendanceStatus.LATE
+            ):
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Late note can only be submitted "
+                        "for late attendance."
+                    )
+                )
+
+            # ---------------------------------------------------------
+            # Update late note
+            # ---------------------------------------------------------
+            attendance.late_note = late_note
+            attendance.save(
+                update_fields=[
+                    "late_note",
+                    "updated_at",
+                ]
+            )
+
+            application_logger.info(
+                "Student late note submitted successfully. "
+                "attendance_id=%s student_id=%s school_id=%s",
+                attendance.id,
+                attendance.student_id,
+                school.id,
+            )
+
+            # ---------------------------------------------------------
+            # Response
+            # ---------------------------------------------------------
+            data = {
+                "id": str(attendance.id),
+                "attendance_date": (
+                    attendance.attendance_date.isoformat()
+                    if attendance.attendance_date
+                    else None
+                ),
+                "status": attendance.status,
+                "late_note": attendance.late_note,
+                "student": {
+                    "id": str(attendance.student_id),
+                    "name": attendance.student.name,
+                    "admission_number": (
+                        attendance.student.admission_number
+                    ),
+                },
+            }
+
+            return CustomResponse.successResponse(
+                data=data,
+                description="Late note submitted successfully.",
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "Error submitting student late note. "
+                "attendance_id=%s error=%s",
+                request.data.get("attendance_id"),
+                str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to submit late note."
+            )

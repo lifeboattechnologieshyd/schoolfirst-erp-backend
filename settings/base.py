@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "apps.remarks",
     "apps.attendance",
     "apps.contactus",
+    "apps.timetable",
     # Third Party
     "rest_framework",
     "rest_framework.authtoken",
