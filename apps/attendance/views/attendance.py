@@ -1,7 +1,6 @@
 from calendar import monthrange
 from datetime import date
 from decimal import Decimal
-from tkinter.constants import ACTIVE
 from uuid import UUID
 
 from django.db import transaction
