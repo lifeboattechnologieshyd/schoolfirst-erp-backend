@@ -3784,16 +3784,18 @@ class StudentAttendanceSummaryAPIView(APIView):
             )
 
         try:
-            # ==========================================================
+            # =========================================================
             # QUERY PARAMETERS
-            # ==========================================================
+            # =========================================================
 
             attendance_date = request.query_params.get(
                 "attendance_date"
             )
+
             start_date = request.query_params.get(
                 "start_date"
             )
+
             end_date = request.query_params.get(
                 "end_date"
             )
@@ -3801,12 +3803,15 @@ class StudentAttendanceSummaryAPIView(APIView):
             student_id = request.query_params.get(
                 "student_id"
             )
+
             grade_id = request.query_params.get(
                 "grade_id"
             )
+
             section_id = request.query_params.get(
                 "section_id"
             )
+
             branch_id = request.query_params.get(
                 "branch_id"
             )
@@ -3814,6 +3819,7 @@ class StudentAttendanceSummaryAPIView(APIView):
             trend_start_date = request.query_params.get(
                 "trend_start_date"
             )
+
             trend_end_date = request.query_params.get(
                 "trend_end_date"
             )
@@ -3823,9 +3829,9 @@ class StudentAttendanceSummaryAPIView(APIView):
                 10,
             )
 
-            # ==========================================================
-            # RECENT LIMIT
-            # ==========================================================
+            # =========================================================
+            # VALIDATE RECENT LIMIT
+            # =========================================================
 
             try:
                 recent_limit = int(recent_limit)
@@ -3840,9 +3846,9 @@ class StudentAttendanceSummaryAPIView(APIView):
                     )
                 )
 
-            # ==========================================================
+            # =========================================================
             # DATE VALIDATION
-            # ==========================================================
+            # =========================================================
 
             parsed_attendance_date = None
             parsed_start_date = None
@@ -3898,31 +3904,40 @@ class StudentAttendanceSummaryAPIView(APIView):
                     )
                 )
 
-            # ==========================================================
-            # UUID VALIDATION HELPER
-            # ==========================================================
+            # =========================================================
+            # UUID VALIDATION
+            # =========================================================
 
             def parse_uuid(value, field_name):
+
                 if not value:
                     return None, None
 
                 try:
-                    value = uuid.UUID(str(value))
+                    parsed_uuid = uuid.UUID(
+                        str(value)
+                    )
+
                 except (
                     ValueError,
                     TypeError,
                     AttributeError,
                 ):
-                    return None, CustomResponse.errorResponse(
-                        description=f"Invalid {field_name}."
+                    return None, (
+                        CustomResponse.errorResponse(
+                            description=(
+                                f"Invalid {field_name}."
+                            )
+                        )
                     )
 
-                return value, None
+                return parsed_uuid, None
 
             student_uuid, error = parse_uuid(
                 student_id,
                 "student ID",
             )
+
             if error:
                 return error
 
@@ -3930,6 +3945,7 @@ class StudentAttendanceSummaryAPIView(APIView):
                 grade_id,
                 "grade ID",
             )
+
             if error:
                 return error
 
@@ -3937,6 +3953,7 @@ class StudentAttendanceSummaryAPIView(APIView):
                 section_id,
                 "section ID",
             )
+
             if error:
                 return error
 
@@ -3944,133 +3961,188 @@ class StudentAttendanceSummaryAPIView(APIView):
                 branch_id,
                 "branch ID",
             )
+
             if error:
                 return error
 
-            # ==========================================================
-            # VALIDATE STUDENT
-            # ==========================================================
+            # =========================================================
+            # RESOLVE REPORT DATE RANGE
+            # =========================================================
 
-            if student_uuid:
-                if not Student.objects.filter(
-                    id=student_uuid,
-                    school=school,
-                ).exists():
-                    return CustomResponse.errorResponse(
-                        description="Student not found."
-                    )
-
-            # ==========================================================
-            # VALIDATE GRADE
-            # ==========================================================
-
-            if grade_uuid:
-                if not Grade.objects.filter(
-                    id=grade_uuid,
-                    school=school,
-                ).exists():
-                    return CustomResponse.errorResponse(
-                        description="Grade not found."
-                    )
-
-            # ==========================================================
-            # VALIDATE SECTION
-            # ==========================================================
-
-            if section_uuid:
-                if not Section.objects.filter(
-                    id=section_uuid,
-                ).exists():
-                    return CustomResponse.errorResponse(
-                        description="Section not found."
-                    )
-
-            # ==========================================================
-            # VALIDATE BRANCH
-            # ==========================================================
-
-            if branch_uuid:
-                if not Branch.objects.filter(
-                    id=branch_uuid,
-                    school=school,
-                ).exists():
-                    return CustomResponse.errorResponse(
-                        description="Branch not found."
-                    )
-
-            # ==========================================================
-            # STUDENT POPULATION
-            # ==========================================================
-
-            students = Student.objects.filter(
-                school=school,
-            )
-
-            if student_uuid:
-                students = students.filter(
-                    id=student_uuid,
-                )
-
-            if grade_uuid:
-                students = students.filter(
-                    grade_id=grade_uuid,
-                )
-
-            if section_uuid:
-                students = students.filter(
-                    section_id=section_uuid,
-                )
-
-            if branch_uuid:
-                students = students.filter(
-                    branch_id=branch_uuid,
-                )
-
-            total_students = students.count()
-
-            # ==========================================================
-            # ATTENDANCE QUERY
-            # ==========================================================
-
-            attendance = StudentAttendance.objects.filter(
-                school=school,
-                student_id__in=students.values("id"),
-            )
+            today = timezone.localdate()
 
             if parsed_attendance_date:
 
-                attendance = attendance.filter(
-                    attendance_date=parsed_attendance_date,
+                report_start_date = (
+                    parsed_attendance_date
+                )
+
+                report_end_date = (
+                    parsed_attendance_date
+                )
+
+                is_single_date = True
+
+            elif parsed_start_date or parsed_end_date:
+
+                report_start_date = (
+                    parsed_start_date
+                    or parsed_end_date
+                )
+
+                report_end_date = (
+                    parsed_end_date
+                    or parsed_start_date
+                )
+
+                is_single_date = (
+                    report_start_date
+                    == report_end_date
                 )
 
             else:
 
-                if parsed_start_date:
-                    attendance = attendance.filter(
-                        attendance_date__gte=parsed_start_date,
+                # Default = today
+                report_start_date = today
+                report_end_date = today
+
+                is_single_date = True
+
+            # =========================================================
+            # VALIDATE STUDENT
+            # =========================================================
+
+            if student_uuid:
+
+                student_exists = Student.objects.filter(
+                    id=student_uuid,
+                    school=school,
+                ).exists()
+
+                if not student_exists:
+                    return CustomResponse.errorResponse(
+                        description="Student not found."
                     )
 
-                if parsed_end_date:
-                    attendance = attendance.filter(
-                        attendance_date__lte=parsed_end_date,
+            # =========================================================
+            # VALIDATE GRADE
+            # =========================================================
+
+            if grade_uuid:
+
+                grade_exists = Grade.objects.filter(
+                    id=grade_uuid,
+                    school=school,
+                ).exists()
+
+                if not grade_exists:
+                    return CustomResponse.errorResponse(
+                        description="Grade not found."
                     )
 
-            # ==========================================================
+            # =========================================================
+            # VALIDATE SECTION
+            # =========================================================
+
+            if section_uuid:
+
+                section_exists = Section.objects.filter(
+                    id=section_uuid,
+                ).exists()
+
+                if not section_exists:
+                    return CustomResponse.errorResponse(
+                        description="Section not found."
+                    )
+
+            # =========================================================
+            # VALIDATE BRANCH
+            # =========================================================
+
+            if branch_uuid:
+
+                branch_exists = Branch.objects.filter(
+                    id=branch_uuid,
+                    school=school,
+                ).exists()
+
+                if not branch_exists:
+                    return CustomResponse.errorResponse(
+                        description="Branch not found."
+                    )
+
+            # =========================================================
+            # STUDENT POPULATION
+            # =========================================================
+
+            students = Student.objects.filter(
+                school=school,
+                status=Student.Status.ACTIVE,
+            )
+
+            if student_uuid:
+                students = students.filter(
+                    id=student_uuid
+                )
+
+            if grade_uuid:
+                students = students.filter(
+                    grade_id=grade_uuid
+                )
+
+            if section_uuid:
+                students = students.filter(
+                    section_id=section_uuid
+                )
+
+            if branch_uuid:
+                students = students.filter(
+                    branch_id=branch_uuid
+                )
+
+            total_students = students.count()
+
+            # =========================================================
+            # ATTENDANCE QUERY
+            # =========================================================
+
+            attendance = StudentAttendance.objects.filter(
+                school=school,
+                student_id__in=students.values("id"),
+                attendance_date__range=[
+                    report_start_date,
+                    report_end_date,
+                ],
+            )
+
+            attendance = attendance.select_related(
+                "student",
+                "grade",
+                "section",
+                "branch",
+                "marked_by",
+            )
+
+            # =========================================================
             # OVERALL SUMMARY
             #
-            # For a single day, ALWAYS use unique students.
-            # ==========================================================
+            # SINGLE DATE:
+            #   One student should contribute only one status.
+            #
+            # DATE RANGE:
+            #   Every attendance record is counted.
+            #
+            # Leave is excluded from attendance percentage.
+            # =========================================================
 
-            if parsed_attendance_date:
+            if is_single_date:
+
+                # -----------------------------------------------------
+                # Single day
+                # -----------------------------------------------------
 
                 attendance_records = list(
-                    attendance
-                    .select_related(
-                        "student",
-                        "grade",
-                        "section",
-                    )
-                    .order_by(
+                    attendance.order_by(
                         "student_id",
                         "-created_at",
                     )
@@ -4080,7 +4152,9 @@ class StudentAttendanceSummaryAPIView(APIView):
 
                 for record in attendance_records:
 
-                    if record.student_id not in student_attendance:
+                    if record.student_id not in (
+                        student_attendance
+                    ):
                         student_attendance[
                             record.student_id
                         ] = record
@@ -4089,81 +4163,75 @@ class StudentAttendanceSummaryAPIView(APIView):
                     student_attendance
                 )
 
+                attendance_records_count = (
+                    marked_students
+                )
+
                 present = 0
                 absent = 0
                 late = 0
                 leave = 0
                 half_day = 0
 
-                for record in student_attendance.values():
+                for record in (
+                    student_attendance.values()
+                ):
 
-                    if record.status == (
-                        StudentAttendance
+                    if (
+                        record.status
+                        == StudentAttendance
                         .AttendanceStatus
                         .PRESENT
                     ):
                         present += 1
 
-                    elif record.status == (
-                        StudentAttendance
+                    elif (
+                        record.status
+                        == StudentAttendance
                         .AttendanceStatus
                         .ABSENT
                     ):
                         absent += 1
 
-                    elif record.status == (
-                        StudentAttendance
+                    elif (
+                        record.status
+                        == StudentAttendance
                         .AttendanceStatus
                         .LATE
                     ):
                         late += 1
 
-                    elif record.status == (
-                        StudentAttendance
+                    elif (
+                        record.status
+                        == StudentAttendance
                         .AttendanceStatus
                         .LEAVE
                     ):
                         leave += 1
 
-                    elif record.status == (
-                        StudentAttendance
+                    elif (
+                        record.status
+                        == StudentAttendance
                         .AttendanceStatus
                         .HALF_DAY
                     ):
                         half_day += 1
 
-                attendance_records_count = (
-                    marked_students
-                )
-
-                attended_units = (
-                    present
-                    + late
-                    + (half_day * 0.5)
-                )
-
-                eligible_students = (
-                    total_students - leave
-                )
-
-                if eligible_students > 0:
-
-                    attendance_percentage = round(
-                        (
-                            attended_units
-                            / eligible_students
-                        ) * 100,
-                        2,
-                    )
-
-                else:
-                    attendance_percentage = 0
-
             else:
 
-                # ------------------------------------------------------
+                # -----------------------------------------------------
                 # Date range
-                # ------------------------------------------------------
+                #
+                # IMPORTANT:
+                # Do NOT use distinct student count as denominator.
+                #
+                # Example:
+                #
+                # 6 students
+                # 24 attendance records
+                #
+                # A student can have multiple records.
+                # -----------------------------------------------------
 
                 marked_students = (
                     attendance
@@ -4216,52 +4284,72 @@ class StudentAttendanceSummaryAPIView(APIView):
                     )
                 ).count()
 
-                attended_units = (
-                    present
-                    + late
-                    + (half_day * 0.5)
+            # =========================================================
+            # ATTENDANCE PERCENTAGE
+            #
+            # PRESENT = 1
+            # LATE = 1
+            # HALF_DAY = 0.5
+            # ABSENT = 0
+            # LEAVE = excluded
+            # =========================================================
+
+            attended_units = (
+                present
+                + late
+                + (half_day * 0.5)
+            )
+
+            eligible_attendance_records = (
+                attendance_records_count
+                - leave
+            )
+
+            if eligible_attendance_records > 0:
+
+                attendance_percentage = round(
+                    (
+                        attended_units
+                        / eligible_attendance_records
+                    ) * 100,
+                    2,
                 )
 
-                eligible_students = (
-                    marked_students - leave
-                )
+            else:
 
-                if eligible_students > 0:
+                attendance_percentage = 0
 
-                    attendance_percentage = round(
-                        (
-                            attended_units
-                            / eligible_students
-                        ) * 100,
-                        2,
-                    )
-
-                else:
-                    attendance_percentage = 0
-
-            # ==========================================================
+            # =========================================================
             # OVERALL
-            # ==========================================================
+            # =========================================================
 
             overall = {
                 "total_students": total_students,
+
                 "marked_students": marked_students,
+
                 "attendance_records": (
                     attendance_records_count
                 ),
+
                 "present": present,
+
                 "absent": absent,
+
                 "late": late,
+
                 "leave": leave,
+
                 "half_day": half_day,
+
                 "attendance_percentage": (
                     attendance_percentage
                 ),
             }
 
-            # ==========================================================
+            # =========================================================
             # GRADE + SECTION SUMMARY
-            # ==========================================================
+            # =========================================================
 
             class_summary = (
                 students
@@ -4295,9 +4383,9 @@ class StudentAttendanceSummaryAPIView(APIView):
                     class_data["section_id"]
                 )
 
-                # ------------------------------------------------------
-                # Students actually belonging to this class
-                # ------------------------------------------------------
+                # -----------------------------------------------------
+                # Students in this grade/section
+                # -----------------------------------------------------
 
                 class_students = students.filter(
                     grade_id=class_grade_id,
@@ -4315,23 +4403,21 @@ class StudentAttendanceSummaryAPIView(APIView):
                     class_student_ids
                 )
 
-                # ------------------------------------------------------
-                # Attendance for these students
-                # ------------------------------------------------------
+                # -----------------------------------------------------
+                # Attendance
+                # -----------------------------------------------------
 
                 class_attendance = attendance.filter(
                     student_id__in=class_student_ids,
                 )
 
-                # ------------------------------------------------------
-                # Single date
+                # -----------------------------------------------------
+                # Single day
                 #
                 # One status per student.
-                # ------------------------------------------------------
+                # -----------------------------------------------------
 
-                class_student_attendance = {}
-
-                if parsed_attendance_date:
+                if is_single_date:
 
                     class_records = (
                         class_attendance
@@ -4340,6 +4426,8 @@ class StudentAttendanceSummaryAPIView(APIView):
                             "-created_at",
                         )
                     )
+
+                    class_student_attendance = {}
 
                     for record in class_records:
 
@@ -4351,120 +4439,171 @@ class StudentAttendanceSummaryAPIView(APIView):
                                 record.student_id
                             ] = record
 
-                # ------------------------------------------------------
-                # Date range
-                #
-                # Count records normally.
-                # ------------------------------------------------------
-
-                else:
+                    class_present = 0
+                    class_absent = 0
+                    class_late = 0
+                    class_leave = 0
+                    class_half_day = 0
 
                     for record in (
-                        class_attendance
-                        .order_by(
-                            "student_id",
-                            "-attendance_date",
-                            "-created_at",
-                        )
+                        class_student_attendance.values()
                     ):
 
                         if (
-                            record.student_id
-                            not in class_student_attendance
+                            record.status
+                            == StudentAttendance
+                            .AttendanceStatus
+                            .PRESENT
                         ):
-                            class_student_attendance[
-                                record.student_id
-                            ] = record
+                            class_present += 1
 
-                # ------------------------------------------------------
-                # Count unique student statuses
-                # ------------------------------------------------------
+                        elif (
+                            record.status
+                            == StudentAttendance
+                            .AttendanceStatus
+                            .ABSENT
+                        ):
+                            class_absent += 1
 
-                class_present = 0
-                class_absent = 0
-                class_late = 0
-                class_leave = 0
-                class_half_day = 0
+                        elif (
+                            record.status
+                            == StudentAttendance
+                            .AttendanceStatus
+                            .LATE
+                        ):
+                            class_late += 1
 
-                for record in (
-                    class_student_attendance.values()
-                ):
+                        elif (
+                            record.status
+                            == StudentAttendance
+                            .AttendanceStatus
+                            .LEAVE
+                        ):
+                            class_leave += 1
 
-                    if record.status == (
-                        StudentAttendance
-                        .AttendanceStatus
-                        .PRESENT
-                    ):
-                        class_present += 1
+                        elif (
+                            record.status
+                            == StudentAttendance
+                            .AttendanceStatus
+                            .HALF_DAY
+                        ):
+                            class_half_day += 1
 
-                    elif record.status == (
-                        StudentAttendance
-                        .AttendanceStatus
-                        .ABSENT
-                    ):
-                        class_absent += 1
+                    class_total_records = (
+                        len(
+                            class_student_attendance
+                        )
+                    )
 
-                    elif record.status == (
-                        StudentAttendance
-                        .AttendanceStatus
-                        .LATE
-                    ):
-                        class_late += 1
+                # -----------------------------------------------------
+                # Date range
+                #
+                # Count every attendance record.
+                # -----------------------------------------------------
 
-                    elif record.status == (
-                        StudentAttendance
-                        .AttendanceStatus
-                        .LEAVE
-                    ):
-                        class_leave += 1
+                else:
 
-                    elif record.status == (
-                        StudentAttendance
-                        .AttendanceStatus
-                        .HALF_DAY
-                    ):
-                        class_half_day += 1
+                    class_total_records = (
+                        class_attendance.count()
+                    )
 
-                # ------------------------------------------------------
-                # Attendance percentage
-                # ------------------------------------------------------
+                    class_present = (
+                        class_attendance.filter(
+                            status=(
+                                StudentAttendance
+                                .AttendanceStatus
+                                .PRESENT
+                            )
+                        ).count()
+                    )
+
+                    class_absent = (
+                        class_attendance.filter(
+                            status=(
+                                StudentAttendance
+                                .AttendanceStatus
+                                .ABSENT
+                            )
+                        ).count()
+                    )
+
+                    class_late = (
+                        class_attendance.filter(
+                            status=(
+                                StudentAttendance
+                                .AttendanceStatus
+                                .LATE
+                            )
+                        ).count()
+                    )
+
+                    class_leave = (
+                        class_attendance.filter(
+                            status=(
+                                StudentAttendance
+                                .AttendanceStatus
+                                .LEAVE
+                            )
+                        ).count()
+                    )
+
+                    class_half_day = (
+                        class_attendance.filter(
+                            status=(
+                                StudentAttendance
+                                .AttendanceStatus
+                                .HALF_DAY
+                            )
+                        ).count()
+                    )
+
+                # -----------------------------------------------------
+                # Class percentage
+                # -----------------------------------------------------
 
                 class_attended_units = (
                     class_present
                     + class_late
-                    + (class_half_day * 0.5)
+                    + (
+                        class_half_day
+                        * 0.5
+                    )
                 )
 
-                class_eligible_students = (
-                    class_total_students
+                class_eligible_records = (
+                    class_total_records
                     - class_leave
                 )
 
-                if class_eligible_students > 0:
+                if class_eligible_records > 0:
 
                     class_percentage = round(
                         (
                             class_attended_units
-                            / class_eligible_students
+                            / class_eligible_records
                         ) * 100,
                         2,
                     )
 
                 else:
+
                     class_percentage = 0
 
-                # ------------------------------------------------------
-                # FINAL GRADE RESPONSE
-                # ------------------------------------------------------
+                # -----------------------------------------------------
+                # Grade response
+                # -----------------------------------------------------
 
                 grades.append(
                     {
                         "grade": {
                             "id": (
-                                str(class_grade_id)
+                                str(
+                                    class_grade_id
+                                )
                                 if class_grade_id
                                 else None
                             ),
+
                             "name": (
                                 class_data[
                                     "grade__name"
@@ -4474,10 +4613,13 @@ class StudentAttendanceSummaryAPIView(APIView):
 
                         "section": {
                             "id": (
-                                str(class_section_id)
+                                str(
+                                    class_section_id
+                                )
                                 if class_section_id
                                 else None
                             ),
+
                             "name": (
                                 class_data[
                                     "section__name"
@@ -4489,13 +4631,21 @@ class StudentAttendanceSummaryAPIView(APIView):
                             class_total_students
                         ),
 
-                        "present": class_present,
+                        "present": (
+                            class_present
+                        ),
 
-                        "absent": class_absent,
+                        "absent": (
+                            class_absent
+                        ),
 
-                        "late": class_late,
+                        "late": (
+                            class_late
+                        ),
 
-                        "leave": class_leave,
+                        "leave": (
+                            class_leave
+                        ),
 
                         "attendance_percentage": (
                             class_percentage
@@ -4503,11 +4653,17 @@ class StudentAttendanceSummaryAPIView(APIView):
                     }
                 )
 
-            # ==========================================================
-            # MONTHLY TREND
-            # ==========================================================
-
-            today = timezone.localdate()
+            # =========================================================
+            # MONTHLY TREND DATE RANGE
+            # =========================================================
+            #
+            # Priority:
+            #
+            # 1. trend_start_date/trend_end_date
+            # 2. start_date/end_date
+            # 3. attendance_date
+            # 4. current academic year
+            # =========================================================
 
             if trend_start_date:
 
@@ -4523,23 +4679,62 @@ class StudentAttendanceSummaryAPIView(APIView):
                         )
                     )
 
+            elif (
+                parsed_attendance_date
+                or parsed_start_date
+                or parsed_end_date
+            ):
+
+                parsed_trend_start = (
+                    report_start_date
+                )
+
             else:
 
-                if today.month >= 4:
+                # -----------------------------------------------------
+                # Use active academic year
+                # -----------------------------------------------------
 
-                    parsed_trend_start = date(
-                        today.year,
-                        4,
-                        1,
+                academic_year = (
+                    AcademicYear.objects.filter(
+                        school=school,
+                        status=(
+                            AcademicYear
+                            .Status
+                            .ACTIVE
+                        ),
+                        start_date__lte=today,
+                        end_date__gte=today,
+                    )
+                    .order_by("-start_date")
+                    .first()
+                )
+
+                if academic_year:
+
+                    parsed_trend_start = (
+                        academic_year.start_date
                     )
 
                 else:
 
-                    parsed_trend_start = date(
-                        today.year - 1,
-                        4,
-                        1,
-                    )
+                    # Fallback only if academic year
+                    # is not configured.
+                    if today.month >= 4:
+
+                        parsed_trend_start = date(
+                            today.year,
+                            4,
+                            1,
+                        )
+
+                    else:
+
+                        parsed_trend_start = date(
+                            today.year - 1,
+                            4,
+                            1,
+                        )
 
             if trend_end_date:
 
@@ -4555,6 +4750,16 @@ class StudentAttendanceSummaryAPIView(APIView):
                         )
                     )
 
+            elif (
+                parsed_attendance_date
+                or parsed_start_date
+                or parsed_end_date
+            ):
+
+                parsed_trend_end = (
+                    report_end_date
+                )
+
             else:
 
                 parsed_trend_end = today
@@ -4567,18 +4772,24 @@ class StudentAttendanceSummaryAPIView(APIView):
                     )
                 )
 
+            # =========================================================
+            # MONTHLY TREND ATTENDANCE
+            # =========================================================
+
             trend_attendance = (
                 StudentAttendance.objects.filter(
                     school=school,
                     student_id__in=students.values("id"),
-                    attendance_date__gte=(
-                        parsed_trend_start
-                    ),
-                    attendance_date__lte=(
-                        parsed_trend_end
-                    ),
+                    attendance_date__range=[
+                        parsed_trend_start,
+                        parsed_trend_end,
+                    ],
                 )
             )
+
+            # =========================================================
+            # MONTHLY SUMMARY
+            # =========================================================
 
             monthly_summary = (
                 trend_attendance
@@ -4589,7 +4800,9 @@ class StudentAttendanceSummaryAPIView(APIView):
                 )
                 .values("month")
                 .annotate(
-                    total_records=Count("id"),
+                    total_records=Count(
+                        "id"
+                    ),
 
                     present=Count(
                         "id",
@@ -4677,23 +4890,41 @@ class StudentAttendanceSummaryAPIView(APIView):
                     item["half_day"] or 0
                 )
 
+                # -----------------------------------------------------
+                # Attended units
+                # -----------------------------------------------------
+
                 month_attended_units = (
                     month_present
                     + month_late
-                    + (month_half_day * 0.5)
+                    + (
+                        month_half_day
+                        * 0.5
+                    )
                 )
 
-                month_percentage = (
-                    round(
+                # -----------------------------------------------------
+                # Exclude leave from denominator
+                # -----------------------------------------------------
+
+                month_eligible_records = (
+                    total_records
+                    - month_leave
+                )
+
+                if month_eligible_records > 0:
+
+                    month_percentage = round(
                         (
                             month_attended_units
-                            / total_records
+                            / month_eligible_records
                         ) * 100,
                         2,
                     )
-                    if total_records
-                    else 0
-                )
+
+                else:
+
+                    month_percentage = 0
 
                 monthly_trend.append(
                     {
@@ -4709,15 +4940,25 @@ class StudentAttendanceSummaryAPIView(APIView):
                             total_records
                         ),
 
-                        "present": month_present,
+                        "present": (
+                            month_present
+                        ),
 
-                        "absent": month_absent,
+                        "absent": (
+                            month_absent
+                        ),
 
-                        "late": month_late,
+                        "late": (
+                            month_late
+                        ),
 
-                        "leave": month_leave,
+                        "leave": (
+                            month_leave
+                        ),
 
-                        "half_day": month_half_day,
+                        "half_day": (
+                            month_half_day
+                        ),
 
                         "attendance_percentage": (
                             month_percentage
@@ -4725,9 +4966,12 @@ class StudentAttendanceSummaryAPIView(APIView):
                     }
                 )
 
-            # ==========================================================
+            # =========================================================
             # RECENT ABSENTEES
-            # ==========================================================
+            #
+            # IMPORTANT:
+            # Apply the selected report date range.
+            # =========================================================
 
             recent_absent_attendance = (
                 StudentAttendance.objects.filter(
@@ -4738,6 +4982,10 @@ class StudentAttendanceSummaryAPIView(APIView):
                         .AttendanceStatus
                         .ABSENT
                     ),
+                    attendance_date__range=[
+                        report_start_date,
+                        report_end_date,
+                    ],
                 )
             )
 
@@ -4753,7 +5001,10 @@ class StudentAttendanceSummaryAPIView(APIView):
                     "section__name",
                 )
                 .annotate(
-                    absent_days=Count("id"),
+                    absent_days=Count(
+                        "id"
+                    ),
+
                     latest_absent_date=Max(
                         "attendance_date"
                     ),
@@ -4772,11 +5023,15 @@ class StudentAttendanceSummaryAPIView(APIView):
                     {
                         "student": {
                             "id": str(
-                                item["student_id"]
+                                item[
+                                    "student_id"
+                                ]
                             ),
+
                             "name": item[
                                 "student__name"
                             ],
+
                             "admission_number": (
                                 item[
                                     "student__admission_number"
@@ -4787,11 +5042,16 @@ class StudentAttendanceSummaryAPIView(APIView):
                         "grade": {
                             "id": (
                                 str(
-                                    item["grade_id"]
+                                    item[
+                                        "grade_id"
+                                    ]
                                 )
-                                if item["grade_id"]
+                                if item[
+                                    "grade_id"
+                                ]
                                 else None
                             ),
+
                             "name": item[
                                 "grade__name"
                             ],
@@ -4800,18 +5060,25 @@ class StudentAttendanceSummaryAPIView(APIView):
                         "section": {
                             "id": (
                                 str(
-                                    item["section_id"]
+                                    item[
+                                        "section_id"
+                                    ]
                                 )
-                                if item["section_id"]
+                                if item[
+                                    "section_id"
+                                ]
                                 else None
                             ),
+
                             "name": item[
                                 "section__name"
                             ],
                         },
 
                         "absent_days": (
-                            item["absent_days"]
+                            item[
+                                "absent_days"
+                            ]
                         ),
 
                         "latest_absent_date": str(
@@ -4822,34 +5089,95 @@ class StudentAttendanceSummaryAPIView(APIView):
                     }
                 )
 
-            # ==========================================================
+            # =========================================================
             # FINAL RESPONSE
-            # ==========================================================
+            # =========================================================
 
             data = {
+                "filters": {
+                    "attendance_date": (
+                        str(
+                            parsed_attendance_date
+                        )
+                        if parsed_attendance_date
+                        else None
+                    ),
+
+                    "start_date": str(
+                        report_start_date
+                    ),
+
+                    "end_date": str(
+                        report_end_date
+                    ),
+
+                    "student_id": (
+                        str(student_uuid)
+                        if student_uuid
+                        else None
+                    ),
+
+                    "grade_id": (
+                        str(grade_uuid)
+                        if grade_uuid
+                        else None
+                    ),
+
+                    "section_id": (
+                        str(section_uuid)
+                        if section_uuid
+                        else None
+                    ),
+
+                    "branch_id": (
+                        str(branch_uuid)
+                        if branch_uuid
+                        else None
+                    ),
+                },
+
                 "overall": overall,
+
                 "grades": grades,
+
                 "monthly_trend": monthly_trend,
+
                 "recent_absentees": (
                     recent_absentees_data
                 ),
             }
 
+            # =========================================================
+            # LOG
+            # =========================================================
+
             application_logger.info(
-                "student_attendance_summary_fetched",
-                school_id=str(school.id),
-                requested_by=str(request.user.id),
-                total_students=total_students,
-                marked_students=marked_students,
-                attendance_records=(
-                    attendance_records_count
-                ),
-                grade_count=len(grades),
-                monthly_count=len(monthly_trend),
-                recent_absentees_count=len(
-                    recent_absentees_data
-                ),
+                "student_attendance_summary_fetched "
+                "school_id=%s "
+                "requested_by=%s "
+                "start_date=%s "
+                "end_date=%s "
+                "total_students=%s "
+                "marked_students=%s "
+                "attendance_records=%s "
+                "grade_count=%s "
+                "monthly_count=%s "
+                "recent_absentees_count=%s",
+                school.id,
+                request.user.id,
+                report_start_date,
+                report_end_date,
+                total_students,
+                marked_students,
+                attendance_records_count,
+                len(grades),
+                len(monthly_trend),
+                len(recent_absentees_data),
             )
+
+            # =========================================================
+            # RESPONSE
+            # =========================================================
 
             return CustomResponse.successResponse(
                 data=data,
@@ -4869,9 +5197,12 @@ class StudentAttendanceSummaryAPIView(APIView):
 
             return CustomResponse.errorResponse(
                 description=(
-                    "Unable to fetch student attendance summary."
+                    "Unable to fetch student attendance "
+                    "summary."
                 )
             )
+
+
 
 class StudentAttendanceProfileAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
