@@ -443,7 +443,7 @@ class StudentAttendanceAPIView(APIView):
 
     def get(self, request):
         try:
-            school = request.user.school
+            school = request.school
 
             student_id = request.query_params.get("student_id")
             month = request.query_params.get("month")
