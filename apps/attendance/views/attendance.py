@@ -265,6 +265,8 @@ class StudentLeaveLISTAPIView(APIView):
         leave_type = request.GET.get("leave_type")
         start_date = request.GET.get("start_date")
         end_date = request.GET.get("end_date")
+        if not student_id:
+            return CustomResponse.errorResponse(description="Student ID is required.")
 
         try:
             # -----------------------------
