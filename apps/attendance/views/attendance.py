@@ -459,9 +459,9 @@ class StudentAttendanceAPIView(APIView):
                 "trend_end_date"
             )
 
-            # ---------------------------------------------------------
+            # =========================================================
             # Validate student_id
-            # ---------------------------------------------------------
+            # =========================================================
             if not student_id:
                 return CustomResponse.errorResponse(
                     description="student_id is required."
@@ -474,9 +474,9 @@ class StudentAttendanceAPIView(APIView):
                     description="Invalid student_id."
                 )
 
-            # ---------------------------------------------------------
-            # Get student
-            # ---------------------------------------------------------
+            # =========================================================
+            # Get Student
+            # =========================================================
             student = (
                 Student.objects.filter(
                     id=student_uuid,
@@ -496,9 +496,9 @@ class StudentAttendanceAPIView(APIView):
                     description="Student not found."
                 )
 
-            # ---------------------------------------------------------
-            # Base attendance queryset
-            # ---------------------------------------------------------
+            # =========================================================
+            # Attendance Query
+            # =========================================================
             attendance = (
                 StudentAttendance.objects.filter(
                     school=school,
@@ -513,9 +513,9 @@ class StudentAttendanceAPIView(APIView):
                 )
             )
 
-            # ---------------------------------------------------------
-            # Month filter
-            # ---------------------------------------------------------
+            # =========================================================
+            # Month Filter
+            # =========================================================
             parsed_month = None
 
             if month:
@@ -535,9 +535,9 @@ class StudentAttendanceAPIView(APIView):
                     attendance_date__month=parsed_month
                 )
 
-            # ---------------------------------------------------------
-            # Year filter
-            # ---------------------------------------------------------
+            # =========================================================
+            # Year Filter
+            # =========================================================
             parsed_year = None
 
             if year:
@@ -552,9 +552,9 @@ class StudentAttendanceAPIView(APIView):
                     attendance_date__year=parsed_year
                 )
 
-            # ---------------------------------------------------------
-            # Start / End date filter
-            # ---------------------------------------------------------
+            # =========================================================
+            # Date Filters
+            # =========================================================
             parsed_start_date = None
             parsed_end_date = None
 
@@ -600,9 +600,9 @@ class StudentAttendanceAPIView(APIView):
                     )
                 )
 
-            # ---------------------------------------------------------
-            # Status filter
-            # ---------------------------------------------------------
+            # =========================================================
+            # Status Filter
+            # =========================================================
             if status:
                 valid_statuses = [
                     choice[0]
@@ -622,9 +622,9 @@ class StudentAttendanceAPIView(APIView):
                     status=status
                 )
 
-            # ---------------------------------------------------------
-            # Attendance records
-            # ---------------------------------------------------------
+            # =========================================================
+            # Attendance History
+            # =========================================================
             attendance_records = attendance.order_by(
                 "-attendance_date",
                 "-created_at",
@@ -633,7 +633,6 @@ class StudentAttendanceAPIView(APIView):
             # =========================================================
             # SUMMARY
             # =========================================================
-
             summary_queryset = StudentAttendance.objects.filter(
                 school=school,
                 student=student,
@@ -681,7 +680,7 @@ class StudentAttendanceAPIView(APIView):
                 status=StudentAttendance.AttendanceStatus.HALF_DAY
             ).count()
 
-            # Leave is excluded from eligible days.
+            # Leave is not included in eligible days.
             eligible_days = (
                 present_count
                 + absent_count
@@ -719,7 +718,6 @@ class StudentAttendanceAPIView(APIView):
             # =========================================================
             # CURRENT ACADEMIC YEAR
             # =========================================================
-
             today = timezone.localdate()
 
             academic_year = (
@@ -742,14 +740,15 @@ class StudentAttendanceAPIView(APIView):
             # MONTHLY TREND
             # =========================================================
 
-            # By default, use the school's academic year.
+            # Default:
+            # Use school's configured academic year.
             parsed_trend_start = academic_year.start_date
             parsed_trend_end = min(
                 academic_year.end_date,
                 today,
             )
 
-            # Allow frontend to override the trend range.
+            # Custom trend start
             if trend_start_date:
                 parsed_trend_start = parse_date(
                     trend_start_date
@@ -763,6 +762,7 @@ class StudentAttendanceAPIView(APIView):
                         )
                     )
 
+            # Custom trend end
             if trend_end_date:
                 parsed_trend_end = parse_date(
                     trend_end_date
@@ -784,9 +784,9 @@ class StudentAttendanceAPIView(APIView):
                     )
                 )
 
-            # ---------------------------------------------------------
-            # Trend attendance query
-            # ---------------------------------------------------------
+            # =========================================================
+            # Monthly Attendance Query
+            # =========================================================
             trend_attendance = StudentAttendance.objects.filter(
                 school=school,
                 student=student,
@@ -806,35 +806,50 @@ class StudentAttendanceAPIView(APIView):
                     present=Count(
                         "id",
                         filter=Q(
-                            status=StudentAttendance.AttendanceStatus.PRESENT
+                            status=(
+                                StudentAttendance
+                                .AttendanceStatus.PRESENT
+                            )
                         ),
                     ),
 
                     absent=Count(
                         "id",
                         filter=Q(
-                            status=StudentAttendance.AttendanceStatus.ABSENT
+                            status=(
+                                StudentAttendance
+                                .AttendanceStatus.ABSENT
+                            )
                         ),
                     ),
 
                     late=Count(
                         "id",
                         filter=Q(
-                            status=StudentAttendance.AttendanceStatus.LATE
+                            status=(
+                                StudentAttendance
+                                .AttendanceStatus.LATE
+                            )
                         ),
                     ),
 
                     leave=Count(
                         "id",
                         filter=Q(
-                            status=StudentAttendance.AttendanceStatus.LEAVE
+                            status=(
+                                StudentAttendance
+                                .AttendanceStatus.LEAVE
+                            )
                         ),
                     ),
 
                     half_day=Count(
                         "id",
                         filter=Q(
-                            status=StudentAttendance.AttendanceStatus.HALF_DAY
+                            status=(
+                                StudentAttendance
+                                .AttendanceStatus.HALF_DAY
+                            )
                         ),
                     ),
                 )
@@ -887,45 +902,25 @@ class StudentAttendanceAPIView(APIView):
                         "late": month_late,
                         "leave": month_leave,
                         "half_day": month_half_day,
-                        "attendance_percentage": month_percentage,
+                        "attendance_percentage": (
+                            month_percentage
+                        ),
                     }
                 )
 
             # =========================================================
-            # ATTENDANCE HISTORY
+            # ATTENDANCE HISTORY RESPONSE
             # =========================================================
-
             attendance_data = []
 
             for record in attendance_records:
-                created_by = None
 
-                if (
-                    record.created_by_id
-                    and record.created_by
-                ):
-                    if hasattr(
-                        record.created_by,
-                        "get_full_name",
-                    ):
-                        created_by_name = (
-                            record.created_by.get_full_name()
-                        )
-                    elif hasattr(
-                        record.created_by,
-                        "name",
-                    ):
-                        created_by_name = (
-                            record.created_by.name
-                        )
-                    else:
-                        created_by_name = str(
-                            record.created_by
-                        )
+                marked_by = None
 
-                    created_by = {
-                        "id": str(record.created_by_id),
-                        "name": created_by_name,
+                if record.marked_by_id and record.marked_by:
+                    marked_by = {
+                        "id": str(record.marked_by_id),
+                        "name": record.marked_by.name,
                     }
 
                 attendance_data.append(
@@ -983,14 +978,13 @@ class StudentAttendanceAPIView(APIView):
                             else None
                         ),
 
-                        "created_by": created_by,
+                        "marked_by": marked_by,
                     }
                 )
 
             # =========================================================
             # FINAL RESPONSE
             # =========================================================
-
             data = {
                 "student": {
                     "id": str(student.id),
@@ -1046,7 +1040,7 @@ class StudentAttendanceAPIView(APIView):
             }
 
             application_logger.info(
-                "Student attendance details fetched successfully. "
+                "Student attendance fetched successfully. "
                 "student_id=%s school_id=%s",
                 student_id,
                 school.id,
@@ -1068,7 +1062,5 @@ class StudentAttendanceAPIView(APIView):
             )
 
             return CustomResponse.errorResponse(
-                description=(
-                    "Failed to fetch student attendance."
-                )
+                description="Failed to fetch student attendance."
             )
