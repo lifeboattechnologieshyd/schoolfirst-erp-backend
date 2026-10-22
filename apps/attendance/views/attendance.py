@@ -1,6 +1,7 @@
 from calendar import monthrange
 from datetime import date
 from decimal import Decimal
+from uuid import UUID
 
 from django.db import transaction
 from django.db.models import Count, Q
@@ -441,419 +442,542 @@ class StudentAttendanceAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        school = request.school
+        try:
+            school = request.user.school
 
-        student_id = request.query_params.get("student_id")
-        month = request.query_params.get("month")
-        year = request.query_params.get("year")
-        start_date = request.query_params.get("start_date")
-        end_date = request.query_params.get("end_date")
-        status = request.query_params.get("status")
+            student_id = request.query_params.get("student_id")
+            month = request.query_params.get("month")
+            year = request.query_params.get("year")
+            start_date = request.query_params.get("start_date")
+            end_date = request.query_params.get("end_date")
+            status = request.query_params.get("status")
 
-        if not student_id:
-            return CustomResponse.errorResponse(
-                description="Student ID is required."
-            )
+            trend_start_date = request.query_params.get("trend_start_date")
+            trend_end_date = request.query_params.get("trend_end_date")
 
-        # -----------------------------------
-        # Validate student
-        # -----------------------------------
-        student = Student.objects.filter(
-            id=student_id,
-            school=school,
-        ).first()
-
-        if not student:
-            return CustomResponse.errorResponse(
-                description="Student not found."
-            )
-
-        # -----------------------------------
-        # Validate month and year
-        # -----------------------------------
-        first_day = None
-        last_day = None
-
-        if month or year:
-            if not month or not year:
+            # ---------------------------------------------------------
+            # Validate student_id
+            # ---------------------------------------------------------
+            if not student_id:
                 return CustomResponse.errorResponse(
-                    description="Both month and year are required."
+                    description="student_id is required."
                 )
 
             try:
-                month = int(month)
-                year = int(year)
-
-                if not 1 <= month <= 12:
-                    raise ValueError
-
-                if not 1900 <= year <= 9999:
-                    raise ValueError
-
-                first_day = date(year, month, 1)
-
-                last_day = date(
-                    year,
-                    month,
-                    monthrange(year, month)[1],
-                )
-
-            except (ValueError, TypeError):
+                student_uuid = UUID(student_id)
+            except ValueError:
                 return CustomResponse.errorResponse(
-                    description="Invalid month or year."
+                    description="Invalid student_id."
                 )
 
-        # -----------------------------------
-        # Validate custom date range
-        # -----------------------------------
-        parsed_start_date = None
-        parsed_end_date = None
+            student = (
+                Student.objects.filter(
+                    id=student_uuid,
+                    school=school,
+                    is_active=True,
+                )
+                .select_related(
+                    "grade",
+                    "section",
+                    "branch",
+                )
+                .first()
+            )
 
-        if start_date:
-            parsed_start_date = parse_date(start_date)
-
-            if not parsed_start_date:
+            if not student:
                 return CustomResponse.errorResponse(
-                    description="Invalid start_date. Use YYYY-MM-DD."
+                    description="Student not found."
                 )
 
-        if end_date:
-            parsed_end_date = parse_date(end_date)
+            # ---------------------------------------------------------
+            # Base attendance queryset
+            # ---------------------------------------------------------
+            attendance = StudentAttendance.objects.filter(
+                school=school,
+                student=student,
+            ).select_related(
+                "student",
+                "grade",
+                "section",
+                "branch",
+                "created_by",
+            )
 
-            if not parsed_end_date:
-                return CustomResponse.errorResponse(
-                    description="Invalid end_date. Use YYYY-MM-DD."
+            # ---------------------------------------------------------
+            # Month / Year filter
+            # ---------------------------------------------------------
+            if month:
+                try:
+                    month = int(month)
+                except ValueError:
+                    return CustomResponse.errorResponse(
+                        description="Invalid month."
+                    )
+
+                if month < 1 or month > 12:
+                    return CustomResponse.errorResponse(
+                        description="Month must be between 1 and 12."
+                    )
+
+                attendance = attendance.filter(
+                    attendance_date__month=month
                 )
 
-        if (
-            parsed_start_date
-            and parsed_end_date
-            and parsed_start_date > parsed_end_date
-        ):
-            return CustomResponse.errorResponse(
-                description="Start date cannot be after end date."
-            )
+            if year:
+                try:
+                    year = int(year)
+                except ValueError:
+                    return CustomResponse.errorResponse(
+                        description="Invalid year."
+                    )
 
-        # -----------------------------------
-        # Validate status
-        # -----------------------------------
-        if status and status not in StudentAttendance.AttendanceStatus.values:
-            return CustomResponse.errorResponse(
-                description="Invalid attendance status."
-            )
-
-        # -----------------------------------
-        # Base attendance queryset
-        # -----------------------------------
-        attendance = StudentAttendance.objects.filter(
-            school=school,
-            student=student,
-        ).select_related(
-            "grade",
-            "section",
-            "branch",
-            "created_by",
-        )
-
-        # -----------------------------------
-        # Apply date filters
-        # -----------------------------------
-        if first_day and last_day:
-            attendance = attendance.filter(
-                attendance_date__range=(
-                    first_day,
-                    last_day,
+                attendance = attendance.filter(
+                    attendance_date__year=year
                 )
+
+            # ---------------------------------------------------------
+            # Start / End date filter
+            # ---------------------------------------------------------
+            parsed_start_date = None
+            parsed_end_date = None
+
+            if start_date:
+                parsed_start_date = parse_date(start_date)
+
+                if not parsed_start_date:
+                    return CustomResponse.errorResponse(
+                        description="Invalid start_date. Use YYYY-MM-DD."
+                    )
+
+                attendance = attendance.filter(
+                    attendance_date__gte=parsed_start_date
+                )
+
+            if end_date:
+                parsed_end_date = parse_date(end_date)
+
+                if not parsed_end_date:
+                    return CustomResponse.errorResponse(
+                        description="Invalid end_date. Use YYYY-MM-DD."
+                    )
+
+                attendance = attendance.filter(
+                    attendance_date__lte=parsed_end_date
+                )
+
+            if parsed_start_date and parsed_end_date:
+                if parsed_start_date > parsed_end_date:
+                    return CustomResponse.errorResponse(
+                        description="start_date cannot be greater than end_date."
+                    )
+
+            # ---------------------------------------------------------
+            # Status filter
+            # ---------------------------------------------------------
+            if status:
+                valid_statuses = [
+                    choice[0]
+                    for choice in StudentAttendance.STATUS_CHOICES
+                ]
+
+                if status not in valid_statuses:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            f"Invalid status. "
+                            f"Allowed values: {', '.join(valid_statuses)}."
+                        )
+                    )
+
+                attendance = attendance.filter(
+                    status=status
+                )
+
+            # ---------------------------------------------------------
+            # Fetch attendance records
+            # ---------------------------------------------------------
+            attendance_records = attendance.order_by(
+                "-attendance_date",
+                "-created_at",
             )
 
-        if parsed_start_date:
-            attendance = attendance.filter(
-                attendance_date__gte=parsed_start_date
+            # ---------------------------------------------------------
+            # Overall Summary
+            # ---------------------------------------------------------
+            summary_queryset = StudentAttendance.objects.filter(
+                school=school,
+                student=student,
             )
 
-        if parsed_end_date:
-            attendance = attendance.filter(
-                attendance_date__lte=parsed_end_date
-            )
+            if parsed_start_date:
+                summary_queryset = summary_queryset.filter(
+                    attendance_date__gte=parsed_start_date
+                )
 
-        # ==========================================================
-        # SUMMARY
-        # ==========================================================
+            if parsed_end_date:
+                summary_queryset = summary_queryset.filter(
+                    attendance_date__lte=parsed_end_date
+                )
 
-        summary = attendance.aggregate(
-            total_days=Count("id"),
+            if month:
+                summary_queryset = summary_queryset.filter(
+                    attendance_date__month=month
+                )
 
-            present_days=Count(
-                "id",
-                filter=Q(
-                    status=StudentAttendance.AttendanceStatus.PRESENT
-                ),
-            ),
+            if year:
+                summary_queryset = summary_queryset.filter(
+                    attendance_date__year=year
+                )
 
-            absent_days=Count(
-                "id",
-                filter=Q(
-                    status=StudentAttendance.AttendanceStatus.ABSENT
-                ),
-            ),
+            total_days = summary_queryset.count()
 
-            late_days=Count(
-                "id",
-                filter=Q(
-                    status=StudentAttendance.AttendanceStatus.LATE
-                ),
-            ),
+            present_count = summary_queryset.filter(
+                status=StudentAttendance.Status.PRESENT
+            ).count()
 
-            half_days=Count(
-                "id",
-                filter=Q(
-                    status=StudentAttendance.AttendanceStatus.HALF_DAY
-                ),
-            ),
+            absent_count = summary_queryset.filter(
+                status=StudentAttendance.Status.ABSENT
+            ).count()
 
-            leave_days=Count(
-                "id",
-                filter=Q(
-                    status=StudentAttendance.AttendanceStatus.LEAVE
-                ),
-            ),
-        )
+            late_count = summary_queryset.filter(
+                status=StudentAttendance.Status.LATE
+            ).count()
 
-        eligible_days = (
-            summary["present_days"]
-            + summary["absent_days"]
-            + summary["late_days"]
-            + summary["half_days"]
-        )
+            leave_count = summary_queryset.filter(
+                status=StudentAttendance.Status.LEAVE
+            ).count()
 
-        attended_days = (
-            summary["present_days"]
-            + summary["late_days"]
-        )
+            half_day_count = summary_queryset.filter(
+                status=StudentAttendance.Status.HALF_DAY
+            ).count()
 
-        summary["attendance_percentage"] = (
-            round(
-                attended_days / eligible_days * 100,
-                2,
-            )
-            if eligible_days
-            else 0
-        )
-
-        # ==========================================================
-        # MONTHLY TREND
-        # ==========================================================
-
-        monthly_trend = (
-            attendance
-            .annotate(
-                month_date=TruncMonth("attendance_date")
-            )
-            .values(
-                "month_date"
-            )
-            .annotate(
-                total_days=Count("id"),
-
-                present_days=Count(
-                    "id",
-                    filter=Q(
-                        status=StudentAttendance.AttendanceStatus.PRESENT
-                    ),
-                ),
-
-                absent_days=Count(
-                    "id",
-                    filter=Q(
-                        status=StudentAttendance.AttendanceStatus.ABSENT
-                    ),
-                ),
-
-                late_days=Count(
-                    "id",
-                    filter=Q(
-                        status=StudentAttendance.AttendanceStatus.LATE
-                    ),
-                ),
-
-                half_days=Count(
-                    "id",
-                    filter=Q(
-                        status=StudentAttendance.AttendanceStatus.HALF_DAY
-                    ),
-                ),
-
-                leave_days=Count(
-                    "id",
-                    filter=Q(
-                        status=StudentAttendance.AttendanceStatus.LEAVE
-                    ),
-                ),
-            )
-            .order_by("month_date")
-        )
-
-        monthly_data = []
-
-        for item in monthly_trend:
-            total_days = item["total_days"] or 0
-            present_days = item["present_days"] or 0
-            absent_days = item["absent_days"] or 0
-            late_days = item["late_days"] or 0
-            half_days = item["half_days"] or 0
-            leave_days = item["leave_days"] or 0
-
+            # Leave days are excluded from attendance percentage.
             eligible_days = (
-                present_days
-                + absent_days
-                + late_days
-                + half_days
+                present_count
+                + absent_count
+                + late_count
+                + half_day_count
             )
 
             attended_days = (
-                present_days
-                + late_days
+                present_count
+                + late_count
+                + (half_day_count * 0.5)
             )
 
             attendance_percentage = (
                 round(
-                    attended_days / eligible_days * 100,
+                    (attended_days / eligible_days) * 100,
                     2,
                 )
                 if eligible_days
                 else 0
             )
 
-            monthly_data.append({
-                "month": item["month_date"].strftime("%B"),
-                "month_number": item["month_date"].month,
-                "year": item["month_date"].year,
+            summary = {
                 "total_days": total_days,
-                "present_days": present_days,
-                "absent_days": absent_days,
-                "late_days": late_days,
-                "leave_days": leave_days,
-                "half_days": half_days,
-                "attendance_percentage": (
-                    attendance_percentage
-                ),
-            })
+                "present": present_count,
+                "absent": absent_count,
+                "late": late_count,
+                "leave": leave_count,
+                "half_day": half_day_count,
+                "eligible_days": eligible_days,
+                "attended_days": attended_days,
+                "attendance_percentage": attendance_percentage,
+            }
 
-        # ==========================================================
-        # ATTENDANCE HISTORY
-        # ==========================================================
+            # ---------------------------------------------------------
+            # Monthly Trend
+            #
+            # Same approach as StudentAttendanceSummaryAPIView.
+            #
+            # Default:
+            # Academic year April -> today
+            # ---------------------------------------------------------
+            today = timezone.localdate()
 
-        # Status filter is applied only to attendance history.
-        if status:
-            attendance = attendance.filter(
-                status=status
+            if trend_start_date:
+                parsed_trend_start = parse_date(trend_start_date)
+
+                if not parsed_trend_start:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Invalid trend_start_date. "
+                            "Use YYYY-MM-DD."
+                        )
+                    )
+            else:
+                if today.month >= 4:
+                    parsed_trend_start = date(
+                        today.year,
+                        4,
+                        1,
+                    )
+                else:
+                    parsed_trend_start = date(
+                        today.year - 1,
+                        4,
+                        1,
+                    )
+
+            if trend_end_date:
+                parsed_trend_end = parse_date(trend_end_date)
+
+                if not parsed_trend_end:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Invalid trend_end_date. "
+                            "Use YYYY-MM-DD."
+                        )
+                    )
+            else:
+                parsed_trend_end = today
+
+            if parsed_trend_start > parsed_trend_end:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "trend_start_date cannot be greater than "
+                        "trend_end_date."
+                    )
+                )
+
+            trend_attendance = StudentAttendance.objects.filter(
+                school=school,
+                student=student,
+                attendance_date__gte=parsed_trend_start,
+                attendance_date__lte=parsed_trend_end,
             )
 
-        attendance = attendance.order_by(
-            "-attendance_date"
-        )
-
-        paginator = CustomPageNumberPagination()
-
-        paginated_attendance = paginator.paginate_queryset(
-            attendance,
-            request,
-        )
-
-        data = []
-
-        for record in paginated_attendance:
-
-            created_by_data = None
-
-            if record.created_by_id and record.created_by:
-                created_by_data = {
-                    "id": str(record.created_by_id),
-                    "name": (
-                        record.created_by.get_full_name()
-                        if hasattr(
-                            record.created_by,
-                            "get_full_name"
-                        )
-                        else str(record.created_by)
+            monthly_summary = (
+                trend_attendance
+                .annotate(
+                    month=TruncMonth("attendance_date")
+                )
+                .values("month")
+                .annotate(
+                    total_records=Count("id"),
+                    present=Count(
+                        "id",
+                        filter=Q(
+                            status=StudentAttendance.Status.PRESENT
+                        ),
                     ),
-                }
+                    absent=Count(
+                        "id",
+                        filter=Q(
+                            status=StudentAttendance.Status.ABSENT
+                        ),
+                    ),
+                    late=Count(
+                        "id",
+                        filter=Q(
+                            status=StudentAttendance.Status.LATE
+                        ),
+                    ),
+                    leave=Count(
+                        "id",
+                        filter=Q(
+                            status=StudentAttendance.Status.LEAVE
+                        ),
+                    ),
+                    half_day=Count(
+                        "id",
+                        filter=Q(
+                            status=StudentAttendance.Status.HALF_DAY
+                        ),
+                    ),
+                )
+                .order_by("month")
+            )
 
-            data.append({
-                "attendance_id": str(record.id),
+            monthly_trend = []
 
-                "attendance_date": str(
-                    record.attendance_date
-                ),
+            for item in monthly_summary:
+                month_present = item["present"]
+                month_absent = item["absent"]
+                month_late = item["late"]
+                month_leave = item["leave"]
+                month_half_day = item["half_day"]
 
-                "status": record.status,
+                month_attended_units = (
+                    month_present
+                    + month_late
+                    + (month_half_day * 0.5)
+                )
 
-                "remarks": record.remarks,
+                month_eligible_days = (
+                    month_present
+                    + month_absent
+                    + month_late
+                    + month_half_day
+                )
 
-                "grade": (
+                month_percentage = (
+                    round(
+                        (
+                            month_attended_units
+                            / month_eligible_days
+                        ) * 100,
+                        2,
+                    )
+                    if month_eligible_days
+                    else 0
+                )
+
+                monthly_trend.append(
                     {
-                        "id": str(record.grade_id),
-                        "name": str(record.grade),
+                        "month": item["month"].strftime("%b"),
+                        "year": item["month"].year,
+                        "total_attendance_records": item[
+                            "total_records"
+                        ],
+                        "present": month_present,
+                        "absent": month_absent,
+                        "late": month_late,
+                        "leave": month_leave,
+                        "half_day": month_half_day,
+                        "attendance_percentage": month_percentage,
                     }
-                    if record.grade_id
-                    else None
-                ),
+                )
 
-                "section": (
+            # ---------------------------------------------------------
+            # Attendance History
+            # ---------------------------------------------------------
+            attendance_data = []
+
+            for record in attendance_records:
+
+                created_by = None
+
+                if record.created_by_id and record.created_by:
+                    if hasattr(record.created_by, "get_full_name"):
+                        created_by_name = (
+                            record.created_by.get_full_name()
+                        )
+                    elif hasattr(record.created_by, "name"):
+                        created_by_name = record.created_by.name
+                    else:
+                        created_by_name = str(record.created_by)
+
+                    created_by = {
+                        "id": str(record.created_by_id),
+                        "name": created_by_name,
+                    }
+
+                attendance_data.append(
                     {
-                        "id": str(record.section_id),
-                        "name": str(record.section),
+                        "id": str(record.id),
+                        "attendance_date": (
+                            record.attendance_date.isoformat()
+                            if record.attendance_date
+                            else None
+                        ),
+                        "status": record.status,
+
+                        "student": {
+                            "id": str(record.student_id),
+                            "name": record.student.name,
+                            "admission_number": (
+                                record.student.admission_number
+                            ),
+                        },
+
+                        "grade": (
+                            {
+                                "id": str(record.grade_id),
+                                "name": record.grade.name,
+                            }
+                            if record.grade
+                            else None
+                        ),
+
+                        "section": (
+                            {
+                                "id": str(record.section_id),
+                                "name": record.section.name,
+                            }
+                            if record.section
+                            else None
+                        ),
+
+                        "branch": (
+                            {
+                                "id": str(record.branch_id),
+                                "name": record.branch.name,
+                            }
+                            if record.branch
+                            else None
+                        ),
+
+                        "remarks": record.remarks,
+
+                        "created_at": (
+                            record.created_at.isoformat()
+                            if record.created_at
+                            else None
+                        ),
+
+                        "created_by": created_by,
                     }
-                    if record.section_id
-                    else None
-                ),
+                )
 
-                "branch": (
-                    {
-                        "id": str(record.branch_id),
-                        "name": str(record.branch),
-                    }
-                    if record.branch_id
-                    else None
-                ),
+            # ---------------------------------------------------------
+            # Final Response
+            # ---------------------------------------------------------
+            data = {
+                "student": {
+                    "id": str(student.id),
+                    "name": student.name,
+                    "admission_number": student.admission_number,
+                    "grade": (
+                        {
+                            "id": str(student.grade_id),
+                            "name": student.grade.name,
+                        }
+                        if student.grade
+                        else None
+                    ),
+                    "section": (
+                        {
+                            "id": str(student.section_id),
+                            "name": student.section.name,
+                        }
+                        if student.section
+                        else None
+                    ),
+                    "branch": (
+                        {
+                            "id": str(student.branch_id),
+                            "name": student.branch.name,
+                        }
+                        if student.branch
+                        else None
+                    ),
+                },
+                "summary": summary,
+                "monthly_trend": monthly_trend,
+                "attendance": attendance_data,
+            }
 
-                "created_at": (
-                    record.created_at.isoformat()
-                    if record.created_at
-                    else None
-                ),
+            application_logger.info(
+                "Student attendance details fetched successfully. "
+                "student_id=%s school_id=%s",
+                student_id,
+                school.id,
+            )
 
-                "created_by": created_by_data,
-            })
+            return CustomResponse.successResponse(
+                data=data,
+                description="Student attendance fetched successfully.",
+            )
 
-        # ==========================================================
-        # RESPONSE
-        # ==========================================================
+        except Exception as e:
+            application_logger.exception(
+                "Error fetching student attendance. "
+                "student_id=%s error=%s",
+                request.query_params.get("student_id"),
+                str(e),
+            )
 
-        response_data = {
-            "student": {
-                "student_id": str(student.id),
-                "student_name": student.name,
-                "admission_number": student.admission_number,
-            },
-
-            "summary": summary,
-
-            "monthly_trend": monthly_data,
-
-            "attendance": data,
-        }
-
-        application_logger.info(
-            "student_attendance_fetched",
-            school_id=str(school.id),
-            student_id=str(student.id),
-            requested_by=str(request.user.id),
-            total=summary["total_days"],
-        )
-
-        return CustomResponse.successResponse(
-            data=response_data,
-            total=paginator.page.paginator.count,
-            description="Student attendance fetched successfully.",
-        )
+            return CustomResponse.errorResponse(
+                description="Failed to fetch student attendance."
+            )
