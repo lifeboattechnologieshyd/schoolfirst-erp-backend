@@ -509,7 +509,7 @@ class StudentAttendanceAPIView(APIView):
                     "grade",
                     "section",
                     "branch",
-                    "created_by",
+                    "marked_by",
                 )
             )
 
