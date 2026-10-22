@@ -482,7 +482,7 @@ class StudentAttendanceAPIView(APIView):
                 Student.objects.filter(
                     id=student_uuid,
                     school=school,
-                    status=ACTIVE,
+                    status=Student.Status.ACTIVE,
                 )
                 .select_related(
                     "grade",
