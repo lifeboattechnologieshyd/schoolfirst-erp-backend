@@ -81,6 +81,7 @@ class StudentAttendance(AuditModel):
         null=True,
         blank=True,
     )
+    absent_note = models.TextField(null=True,blank=True)
 
     marked_by = models.ForeignKey(
         Staff,
