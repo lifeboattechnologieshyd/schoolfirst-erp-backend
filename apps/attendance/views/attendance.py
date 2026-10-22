@@ -937,6 +937,7 @@ class StudentAttendanceAPIView(APIView):
                         ),
 
                         "status": record.status,
+                        "late_note": record.late_note if record.late_note else None,
 
                         # "student": {
                         #     "id": str(record.student_id),
