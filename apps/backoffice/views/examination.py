@@ -4427,7 +4427,7 @@ class ExaminationMarksUploadAPIView(APIView):
                                 "status": (
                                     ExaminationResult
                                     .Status
-                                    .DRAFT
+                                    .PUBLISHED
                                 ),
                             },
                         )
