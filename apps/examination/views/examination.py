@@ -240,6 +240,7 @@ class ExaminationDetailAPIView(APIView):
                 examination_grades__grade_id=student.grade_id,
             ).select_related(
                 "examination_type",
+                "school",
                 "academic_year",
                 "branch",
             ).first()
@@ -327,6 +328,11 @@ class ExaminationDetailAPIView(APIView):
                 "id": str(examination.id),
 
                 "name": examination.name,
+                "school": {
+                    "id":str(examination.school_id),
+                    "name": examination.school.name,
+                    "phone_number": examination.phone_number,
+                },
 
                 "examination_type": {
                     "id": str(
@@ -1146,6 +1152,7 @@ class HallTicketDetailAPIView(APIView):
                     ),
 
                     "instructions": schedule.instructions,
+                    "pdf": schedule.pdf,
                 })
 
             # -----------------------------------------
@@ -1582,6 +1589,7 @@ class ReportCardDetailAPIView(APIView):
                     "result": report_card.result,
                     "teacher_remarks": report_card.teacher_remarks,
                     "published_at": report_card.published_at,
+                    "pdf": report_card.pdf,
                 },
 
                 "student": {

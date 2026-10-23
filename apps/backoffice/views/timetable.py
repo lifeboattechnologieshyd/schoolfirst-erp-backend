@@ -1,10 +1,16 @@
 import uuid
+from django.http import HttpResponse
+from io import BytesIO
+from openpyxl import load_workbook, Workbook
 
+from django.db import transaction
+from openpyxl.styles import Alignment, PatternFill, Font
+from openpyxl.worksheet.datavalidation import DataValidation
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.school.models.school import Branch, AcademicYear
-from apps.timetable.models import TimetableTerm, TimetablePeriod, Room
+from apps.timetable.models import TimetableTerm, TimetablePeriod, Room, Timetable
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
@@ -1860,4 +1866,406 @@ class RoomExcelImportAPIView(APIView):
 
             return CustomResponse.errorResponse(
                 message="Failed to import rooms"
+            )
+
+class RoomExcelTemplateDownloadAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "room.create"
+
+    def get(self, request):
+        try:
+            workbook = Workbook()
+
+            sheet = workbook.active
+            sheet.title = "Rooms"
+
+            # -------------------------
+            # Headers
+            # -------------------------
+
+            headers = [
+                "name",
+                "room_type",
+                "location",
+                "capacity",
+                "facilities",
+                "status",
+                "branch_id",
+            ]
+
+            for column, header in enumerate(headers, start=1):
+                cell = sheet.cell(
+                    row=1,
+                    column=column,
+                    value=header
+                )
+
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill(
+                    start_color="D9EAF7",
+                    end_color="D9EAF7",
+                    fill_type="solid"
+                )
+                cell.alignment = Alignment(
+                    horizontal="center"
+                )
+
+            # -------------------------
+            # Example rows
+            # -------------------------
+
+            example_rows = [
+                [
+                    "Room 101",
+                    "CLASSROOM",
+                    "First Floor",
+                    40,
+                    "Projector",
+                    "ACTIVE",
+                    ""
+                ],
+                [
+                    "Science Lab",
+                    "LAB",
+                    "Ground Floor",
+                    30,
+                    "Computers, Projector",
+                    "ACTIVE",
+                    ""
+                ],
+            ]
+
+            for row in example_rows:
+                sheet.append(row)
+
+            # -------------------------
+            # Column widths
+            # -------------------------
+
+            sheet.column_dimensions["A"].width = 25
+            sheet.column_dimensions["B"].width = 20
+            sheet.column_dimensions["C"].width = 25
+            sheet.column_dimensions["D"].width = 12
+            sheet.column_dimensions["E"].width = 35
+            sheet.column_dimensions["F"].width = 15
+            sheet.column_dimensions["G"].width = 40
+
+            # -------------------------
+            # Room type dropdown
+            # -------------------------
+
+            room_types = [
+                choice[0]
+                for choice in Room.ROOM_TYPE_CHOICES
+            ]
+
+            room_type_formula = (
+                '"' + ",".join(room_types) + '"'
+            )
+
+            room_type_validation = DataValidation(
+                type="list",
+                formula1=room_type_formula,
+                allow_blank=False
+            )
+
+            room_type_validation.error = (
+                "Please select a valid room type."
+            )
+
+            room_type_validation.errorTitle = (
+                "Invalid Room Type"
+            )
+
+            sheet.add_data_validation(
+                room_type_validation
+            )
+
+            room_type_validation.add(
+                "B2:B1000"
+            )
+
+            # -------------------------
+            # Status dropdown
+            # -------------------------
+
+            statuses = [
+                choice[0]
+                for choice in Room.RoomType
+            ]
+
+            status_formula = (
+                '"' + ",".join(statuses) + '"'
+            )
+
+            status_validation = DataValidation(
+                type="list",
+                formula1=status_formula,
+                allow_blank=False
+            )
+
+            status_validation.error = (
+                "Please select a valid status."
+            )
+
+            status_validation.errorTitle = (
+                "Invalid Status"
+            )
+
+            sheet.add_data_validation(
+                status_validation
+            )
+
+            status_validation.add(
+                "F2:F1000"
+            )
+
+            # -------------------------
+            # Capacity validation
+            # -------------------------
+
+            capacity_validation = DataValidation(
+                type="whole",
+                operator="greaterThanOrEqual",
+                formula1="0",
+                allow_blank=False
+            )
+
+            capacity_validation.error = (
+                "Capacity must be 0 or greater."
+            )
+
+            capacity_validation.errorTitle = (
+                "Invalid Capacity"
+            )
+
+            sheet.add_data_validation(
+                capacity_validation
+            )
+
+            capacity_validation.add(
+                "D2:D1000"
+            )
+
+            # -------------------------
+            # Freeze header
+            # -------------------------
+
+            sheet.freeze_panes = "A2"
+
+            # -------------------------
+            # Create response
+            # -------------------------
+
+            output = BytesIO()
+
+            workbook.save(output)
+            output.seek(0)
+
+            application_logger.info(
+                "room_excel_template_downloaded | "
+                "school_id=%s",
+                request.school.id
+            )
+
+            response = HttpResponse(
+                output.getvalue(),
+                content_type=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                )
+            )
+
+            response[
+                "Content-Disposition"
+            ] = (
+                'attachment; '
+                'filename="room_import_template.xlsx"'
+            )
+
+            return response
+
+        except Exception:
+            application_logger.exception(
+                "room_excel_template_download_failed"
+            )
+
+            return CustomResponse.errorResponse(
+                message="Failed to generate room Excel template"
+            )
+
+class TimetableCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "timetable.create"
+
+    def post(self, request):
+        try:
+            school = request.school
+
+            name = request.data.get("name")
+            academic_year_id = request.data.get("academic_year_id")
+            term_id = request.data.get("term_id")
+            branch_id = request.data.get("branch_id")
+            status = request.data.get("status", "DRAFT")
+
+            if not name:
+                return CustomResponse.errorResponse(
+                    message="Timetable name is required"
+                )
+
+            if not academic_year_id:
+                return CustomResponse.errorResponse(
+                    message="Academic year is required"
+                )
+
+            if not term_id:
+                return CustomResponse.errorResponse(
+                    message="Timetable term is required"
+                )
+
+            # -------------------------
+            # UUID validation
+            # -------------------------
+
+            try:
+                academic_year_uuid = uuid.UUID(
+                    str(academic_year_id)
+                )
+                term_uuid = uuid.UUID(
+                    str(term_id)
+                )
+            except (ValueError, AttributeError):
+                return CustomResponse.errorResponse(
+                    message="Invalid academic_year_id or term_id"
+                )
+
+            # -------------------------
+            # Academic Year
+            # -------------------------
+
+            academic_year = AcademicYear.objects.filter(
+                id=academic_year_uuid,
+                school=school,
+            ).first()
+
+            if not academic_year:
+                return CustomResponse.errorResponse(
+                    message="Academic year not found"
+                )
+
+            # -------------------------
+            # Timetable Term
+            # -------------------------
+
+            term = TimetableTerm.objects.filter(
+                id=term_uuid,
+                school=school,
+                academic_year=academic_year,
+            ).first()
+
+            if not term:
+                return CustomResponse.errorResponse(
+                    message="Timetable term not found"
+                )
+
+            # -------------------------
+            # Branch
+            # -------------------------
+
+            branch = None
+
+            if branch_id:
+                try:
+                    branch_uuid = uuid.UUID(
+                        str(branch_id)
+                    )
+                except (ValueError, AttributeError):
+                    return CustomResponse.errorResponse(
+                        message="Invalid branch_id"
+                    )
+
+                branch = Branch.objects.filter(
+                    id=branch_uuid,
+                    school=school,
+                ).first()
+
+                if not branch:
+                    return CustomResponse.errorResponse(
+                        message="Branch not found"
+                    )
+
+            # -------------------------
+            # Status
+            # -------------------------
+
+            valid_statuses = dict(
+                Timetable.STATUS_CHOICES
+            )
+
+            if status not in valid_statuses:
+                return CustomResponse.errorResponse(
+                    message="Invalid timetable status"
+                )
+
+            # -------------------------
+            # Duplicate
+            # -------------------------
+
+            if Timetable.objects.filter(
+                school=school,
+                academic_year=academic_year,
+                term=term,
+                name__iexact=name.strip(),
+            ).exists():
+                return CustomResponse.errorResponse(
+                    message="Timetable with this name already exists"
+                )
+
+            # -------------------------
+            # Create
+            # -------------------------
+
+            timetable = Timetable.objects.create(
+                school=school,
+                branch=branch,
+                academic_year=academic_year,
+                term=term,
+                name=name.strip(),
+                status=status,
+            )
+
+            application_logger.info(
+                "timetable_created | timetable_id=%s | school_id=%s",
+                timetable.id,
+                school.id,
+            )
+
+            return CustomResponse.successResponse(
+                message="Timetable created successfully",
+                data={
+                    "id": str(timetable.id),
+                    "name": timetable.name,
+                    "status": timetable.status,
+                    "academic_year": {
+                        "id": str(academic_year.id),
+                        "name": academic_year.name,
+                    },
+                    "term": {
+                        "id": str(term.id),
+                        "name": term.name,
+                    },
+                    "branch": {
+                        "id": str(branch.id),
+                        "name": branch.name,
+                    } if branch else None,
+                },
+            )
+
+        except Exception:
+            application_logger.exception(
+                "timetable_create_failed"
+            )
+
+            return CustomResponse.errorResponse(
+                message="Failed to create timetable"
             )

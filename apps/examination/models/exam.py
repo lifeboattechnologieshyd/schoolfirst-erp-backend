@@ -374,6 +374,8 @@ class HallTicket(AuditModel):
         choices=Status.choices,
         default=Status.GENERATED,
     )
+    pdf = models.CharField(max_length=500, blank=True, null=True)
+
 
     generated_at = models.DateTimeField(
         auto_now_add=True,
@@ -738,6 +740,8 @@ class ReportCard(AuditModel):
         null=True,
         blank=True,
     )
+    pdf = models.CharField(max_length=500, blank=True, null=True)
+
 
     teacher_remarks = models.TextField(
         null=True,
