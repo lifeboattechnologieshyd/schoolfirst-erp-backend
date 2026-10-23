@@ -5331,6 +5331,8 @@ class HallTicketListAPIView(APIView):
                         "admission_number": (
                             student.admission_number
                         ),
+                        "photo":student.photo_url,
+
                         "grade": (
                             student.grade.name
                             if student.grade
@@ -5574,6 +5576,8 @@ class HallTicketPreviewAPIView(APIView):
                     "admission_number": (
                         student.admission_number
                     ),
+                    "photo":student.photo_url,
+                    "roll_number":student.roll_number,
                     "grade": (
                         student.grade.name
                         if student.grade
