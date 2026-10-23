@@ -5921,7 +5921,6 @@ class GenerateReportCardAPIView(APIView):
                         .filter(
                             school=school,
                             academic_year=examination.academic_year,
-                            grade=grade.name,
                             min_percentage__lte=percentage,
                             max_percentage__gte=percentage,
                         )
@@ -5932,12 +5931,8 @@ class GenerateReportCardAPIView(APIView):
                     overall_grade_point = None
 
                     if grade_configuration:
-                        overall_grade = (
-                            grade_configuration.grade
-                        )
-                        overall_grade_point = (
-                            grade_configuration.grade_point
-                        )
+                        overall_grade = grade_configuration.grade
+                        overall_grade_point = grade_configuration.grade_point
 
                     # ---------------------------------
                     # Overall Result
@@ -6216,6 +6211,7 @@ class ReportCardListAPIView(APIView):
                         "admission_number": (
                             student.admission_number
                         ),
+                        "roll_number":student.roll_number,
                         "grade": (
                             student.grade.name
                             if student.grade

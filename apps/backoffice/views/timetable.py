@@ -870,3 +870,289 @@ class TimetablePeriodListAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Failed to fetch timetable periods."
             )
+
+
+class TimetablePeriodUpdateAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "timetable_period.update"
+
+    def put(self, request):
+        try:
+            school = request.school
+
+            period_id = request.data.get("period_id")
+
+            if not period_id:
+                return CustomResponse.errorResponse(
+                    description="period_id is required."
+                )
+
+            try:
+                period_uuid = uuid.UUID(str(period_id))
+            except (ValueError, AttributeError):
+                return CustomResponse.errorResponse(
+                    description="Invalid period_id."
+                )
+
+            period = TimetablePeriod.objects.filter(
+                id=period_uuid,
+                school=school,
+            ).first()
+
+            if not period:
+                return CustomResponse.errorResponse(
+                    description="Timetable period not found."
+                )
+
+            name = request.data.get("name")
+            period_number = request.data.get("period_number")
+            start_time = request.data.get("start_time")
+            end_time = request.data.get("end_time")
+            is_break = request.data.get("is_break")
+            status = request.data.get("status")
+
+            # ---------------------------------
+            # Name
+            # ---------------------------------
+
+            if name is not None:
+                name = name.strip()
+
+                if not name:
+                    return CustomResponse.errorResponse(
+                        description="Period name cannot be empty."
+                    )
+
+                period.name = name
+
+            # ---------------------------------
+            # Period number
+            # ---------------------------------
+
+            if period_number is not None:
+
+                try:
+                    period_number = int(period_number)
+                except (ValueError, TypeError):
+                    return CustomResponse.errorResponse(
+                        description="Invalid period number."
+                    )
+
+                if period_number <= 0:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Period number must be greater than 0."
+                        )
+                    )
+
+                if TimetablePeriod.objects.filter(
+                    school=school,
+                    period_number=period_number,
+                ).exclude(
+                    id=period.id
+                ).exists():
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "A period with this period number "
+                            "already exists."
+                        )
+                    )
+
+                period.period_number = period_number
+
+            # ---------------------------------
+            # Final times
+            # ---------------------------------
+
+            final_start_time = (
+                start_time
+                if start_time is not None
+                else period.start_time
+            )
+
+            final_end_time = (
+                end_time
+                if end_time is not None
+                else period.end_time
+            )
+
+            if final_start_time >= final_end_time:
+                return CustomResponse.errorResponse(
+                    description="Start time must be before end time."
+                )
+
+            # ---------------------------------
+            # Overlapping period
+            # ---------------------------------
+
+            overlapping_period = (
+                TimetablePeriod.objects
+                .filter(
+                    school=school,
+                    start_time__lt=final_end_time,
+                    end_time__gt=final_start_time,
+                )
+                .exclude(
+                    id=period.id
+                )
+                .exists()
+            )
+
+            if overlapping_period:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "This period overlaps with an "
+                        "existing period."
+                    )
+                )
+
+            if start_time is not None:
+                period.start_time = start_time
+
+            if end_time is not None:
+                period.end_time = end_time
+
+            # ---------------------------------
+            # Break
+            # ---------------------------------
+
+            if is_break is not None:
+
+                if not isinstance(is_break, bool):
+                    is_break = (
+                        str(is_break).lower() == "true"
+                    )
+
+                period.is_break = is_break
+
+            # ---------------------------------
+            # Status
+            # ---------------------------------
+
+            if status is not None:
+
+                valid_statuses = [
+                    choice[0]
+                    for choice in TimetablePeriod.Status.choices
+                ]
+
+                if status not in valid_statuses:
+                    return CustomResponse.errorResponse(
+                        description="Invalid status."
+                    )
+
+                period.status = status
+
+            period.save()
+
+            application_logger.info(
+                "timetable_period_updated",
+                school_id=str(school.id),
+                period_id=str(period.id),
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "id": period.id,
+                    "name": period.name,
+                    "period_number": period.period_number,
+                    "start_time": period.start_time,
+                    "end_time": period.end_time,
+                    "is_break": period.is_break,
+                    "status": period.status,
+                },
+                description="Timetable period updated successfully.",
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "timetable_period_update_failed",
+                error=str(e),
+                school_id=(
+                    str(school.id)
+                    if school
+                    else None
+                ),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to update timetable period."
+            )
+
+class TimetablePeriodDeleteAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "timetable_period.delete"
+
+    def delete(self, request):
+        try:
+            school = request.school
+
+            period_id = request.data.get("period_id")
+
+            if not period_id:
+                return CustomResponse.errorResponse(
+                    description="period_id is required."
+                )
+
+            try:
+                period_uuid = uuid.UUID(str(period_id))
+            except (ValueError, AttributeError):
+                return CustomResponse.errorResponse(
+                    description="Invalid period_id."
+                )
+
+            period = TimetablePeriod.objects.filter(
+                id=period_uuid,
+                school=school,
+            ).first()
+
+            if not period:
+                return CustomResponse.errorResponse(
+                    description="Timetable period not found."
+                )
+
+            period.status = TimetablePeriod.Status.INACTIVE
+
+            period.save(
+                update_fields=[
+                    "status",
+                    "updated_at",
+                ]
+            )
+
+            application_logger.info(
+                "timetable_period_deactivated",
+                school_id=str(school.id),
+                period_id=str(period.id),
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "id": period.id,
+                    "status": period.status,
+                },
+                description="Timetable period deactivated successfully.",
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                "timetable_period_deactivate_failed",
+                error=str(e),
+                school_id=(
+                    str(school.id)
+                    if school
+                    else None
+                ),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to deactivate timetable period."
+            )
