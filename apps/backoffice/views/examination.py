@@ -5929,10 +5929,12 @@ class GenerateReportCardAPIView(APIView):
 
                     overall_grade = None
                     overall_grade_point = None
+                    overall_grade_color = None
 
                     if grade_configuration:
                         overall_grade = grade_configuration.grade
                         overall_grade_point = grade_configuration.grade_point
+                        overall_grade_color = grade_configuration.color
 
                     # ---------------------------------
                     # Overall Result
@@ -5971,6 +5973,7 @@ class GenerateReportCardAPIView(APIView):
                         "percentage": percentage,
                         "grade": overall_grade,
                         "grade_point": overall_grade_point,
+                        "grade_color": overall_grade_color,
                         "result": result_status,
                     })
 
@@ -6472,6 +6475,7 @@ class ReportCardPreviewAPIView(APIView):
                     "percentage": report_card.percentage,
 
                     "grade": report_card.grade,
+                    "grade_color":report_card.grade.color,
                     "grade_point": report_card.grade_point,
 
                     "result": report_card.result,
@@ -6488,6 +6492,8 @@ class ReportCardPreviewAPIView(APIView):
                 "school": {
                     "id": school.id,
                     "name": school.name,
+                    "address": school.address,
+                    "board":school.board,
                 },
 
                 "student": {

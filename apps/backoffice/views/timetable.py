@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.school.models.school import Branch, AcademicYear
-from apps.timetable.models import TimetableTerm, TimetablePeriod
+from apps.timetable.models import TimetableTerm, TimetablePeriod, Room
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
@@ -1152,4 +1152,712 @@ class TimetablePeriodDeleteAPIView(APIView):
 
             return CustomResponse.errorResponse(
                 description="Failed to deactivate timetable period."
+            )
+
+class RoomCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "room.create"
+
+    def post(self, request):
+        try:
+            school = request.school
+
+            name = request.data.get("name")
+            room_type = request.data.get("room_type")
+            location = request.data.get("location")
+            capacity = request.data.get("capacity", 0)
+            facilities = request.data.get("facilities")
+            branch_id = request.data.get("branch_id")
+
+            if not name:
+                return CustomResponse.errorResponse(
+                    message="Room name is required"
+                )
+
+            if not room_type:
+                return CustomResponse.errorResponse(
+                    message="Room type is required"
+                )
+
+            valid_room_types = dict(Room.ROOM_TYPE_CHOICES)
+
+            if room_type not in valid_room_types:
+                return CustomResponse.errorResponse(
+                    message="Invalid room type"
+                )
+
+            try:
+                capacity = int(capacity)
+            except (TypeError, ValueError):
+                return CustomResponse.errorResponse(
+                    message="Capacity must be a valid number"
+                )
+
+            if capacity < 0:
+                return CustomResponse.errorResponse(
+                    message="Capacity cannot be negative"
+                )
+
+            branch = None
+
+            if branch_id:
+                try:
+                    branch_id = uuid.UUID(str(branch_id))
+                except ValueError:
+                    return CustomResponse.errorResponse(
+                        message="Invalid branch_id"
+                    )
+
+                branch = Branch.objects.filter(
+                    id=branch_id,
+                    school=school
+                ).first()
+
+                if not branch:
+                    return CustomResponse.errorResponse(
+                        message="Branch not found"
+                    )
+
+            if Room.objects.filter(
+                school=school,
+                name__iexact=name.strip()
+            ).exists():
+                return CustomResponse.errorResponse(
+                    message="Room with this name already exists"
+                )
+
+            room = Room.objects.create(
+                school=school,
+                branch=branch,
+                name=name.strip(),
+                room_type=room_type,
+                location=location,
+                capacity=capacity,
+                facilities=facilities,
+                status="ACTIVE"
+            )
+
+            application_logger.info(
+                "room_created | room_id=%s | school_id=%s",
+                room.id,
+                school.id
+            )
+
+            return CustomResponse.successResponse(
+                message="Room created successfully",
+                data={
+                    "id": str(room.id),
+                    "name": room.name,
+                    "room_type": room.room_type,
+                    "location": room.location,
+                    "capacity": room.capacity,
+                    "facilities": room.facilities,
+                    "status": room.status,
+                    "branch_id": str(room.branch_id) if room.branch_id else None
+                }
+            )
+
+        except Exception:
+            application_logger.exception("room_create_failed")
+
+            return CustomResponse.errorResponse(
+                message="Failed to create room"
+            )
+
+class RoomListAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "room.view"
+
+    def get(self, request):
+        try:
+            school = request.school
+
+            search = request.GET.get("search")
+            room_type = request.GET.get("room_type")
+            branch_id = request.GET.get("branch_id")
+            status = request.GET.get("status")
+
+            rooms = Room.objects.filter(
+                school=school
+            ).select_related("branch").order_by("name")
+
+            if search:
+                rooms = rooms.filter(
+                    Q(name__icontains=search) |
+                    Q(location__icontains=search) |
+                    Q(facilities__icontains=search)
+                )
+
+            if room_type:
+                rooms = rooms.filter(
+                    room_type=room_type
+                )
+
+            if status:
+                rooms = rooms.filter(
+                    status=status
+                )
+
+            if branch_id:
+                try:
+                    branch_id = uuid.UUID(str(branch_id))
+                except ValueError:
+                    return CustomResponse.errorResponse(
+                        message="Invalid branch_id"
+                    )
+
+                rooms = rooms.filter(
+                    branch_id=branch_id
+                )
+
+            paginator = CustomPageNumberPagination()
+            paginated_rooms = paginator.paginate_queryset(
+                rooms,
+                request
+            )
+
+            data = []
+
+            for room in paginated_rooms:
+                data.append({
+                    "id": str(room.id),
+                    "name": room.name,
+                    "room_type": room.room_type,
+                    "room_type_display": room.get_room_type_display(),
+                    "location": room.location,
+                    "capacity": room.capacity,
+                    "facilities": room.facilities,
+                    "status": room.status,
+                    "branch": {
+                        "id": str(room.branch_id),
+                        "name": room.branch.name
+                    } if room.branch else None
+                })
+
+            return paginator.get_paginated_response(data)
+
+        except Exception:
+            application_logger.exception("room_list_failed")
+
+            return CustomResponse.errorResponse(
+                message="Failed to fetch rooms"
+            )
+
+class RoomUpdateAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "room.update"
+
+    def put(self, request):
+        try:
+            school = request.school
+            room_id = request.data.get("room_id")
+
+            if not room_id:
+                return CustomResponse.errorResponse(
+                    message="room_id is required"
+                )
+
+            try:
+                room_id = uuid.UUID(str(room_id))
+            except ValueError:
+                return CustomResponse.errorResponse(
+                    message="Invalid room_id"
+                )
+
+            room = Room.objects.filter(
+                id=room_id,
+                school=school
+            ).first()
+
+            if not room:
+                return CustomResponse.errorResponse(
+                    message="Room not found"
+                )
+
+            name = request.data.get("name")
+            room_type = request.data.get("room_type")
+            location = request.data.get("location")
+            capacity = request.data.get("capacity")
+            facilities = request.data.get("facilities")
+            branch_id = request.data.get("branch_id")
+            status = request.data.get("status")
+
+            if name is not None:
+                name = name.strip()
+
+                if not name:
+                    return CustomResponse.errorResponse(
+                        message="Room name cannot be empty"
+                    )
+
+                if Room.objects.filter(
+                    school=school,
+                    name__iexact=name
+                ).exclude(id=room.id).exists():
+                    return CustomResponse.errorResponse(
+                        message="Room with this name already exists"
+                    )
+
+                room.name = name
+
+            if room_type is not None:
+                valid_room_types = dict(Room.ROOM_TYPE_CHOICES)
+
+                if room_type not in valid_room_types:
+                    return CustomResponse.errorResponse(
+                        message="Invalid room type"
+                    )
+
+                room.room_type = room_type
+
+            if location is not None:
+                room.location = location
+
+            if capacity is not None:
+                try:
+                    capacity = int(capacity)
+                except (TypeError, ValueError):
+                    return CustomResponse.errorResponse(
+                        message="Capacity must be a valid number"
+                    )
+
+                if capacity < 0:
+                    return CustomResponse.errorResponse(
+                        message="Capacity cannot be negative"
+                    )
+
+                room.capacity = capacity
+
+            if facilities is not None:
+                room.facilities = facilities
+
+            if branch_id is not None:
+                if branch_id:
+                    try:
+                        branch_id = uuid.UUID(str(branch_id))
+                    except ValueError:
+                        return CustomResponse.errorResponse(
+                            message="Invalid branch_id"
+                        )
+
+                    branch = Branch.objects.filter(
+                        id=branch_id,
+                        school=school
+                    ).first()
+
+                    if not branch:
+                        return CustomResponse.errorResponse(
+                            message="Branch not found"
+                        )
+
+                    room.branch = branch
+                else:
+                    room.branch = None
+
+            if status is not None:
+                valid_statuses = dict(Room.STATUS_CHOICES)
+
+                if status not in valid_statuses:
+                    return CustomResponse.errorResponse(
+                        message="Invalid status"
+                    )
+
+                room.status = status
+
+            room.save()
+
+            application_logger.info(
+                "room_updated | room_id=%s | school_id=%s",
+                room.id,
+                school.id
+            )
+
+            return CustomResponse.successResponse(
+                message="Room updated successfully",
+                data={
+                    "id": str(room.id),
+                    "name": room.name,
+                    "room_type": room.room_type,
+                    "location": room.location,
+                    "capacity": room.capacity,
+                    "facilities": room.facilities,
+                    "status": room.status,
+                    "branch_id": (
+                        str(room.branch_id)
+                        if room.branch_id else None
+                    )
+                }
+            )
+
+        except Exception:
+            application_logger.exception("room_update_failed")
+
+            return CustomResponse.errorResponse(
+                message="Failed to update room"
+            )
+
+class RoomDeleteAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "room.delete"
+
+    def delete(self, request):
+        try:
+            school = request.school
+            room_id = request.GET.get("room_id")
+
+            if not room_id:
+                return CustomResponse.errorResponse(
+                    message="room_id is required"
+                )
+
+            try:
+                room_id = uuid.UUID(str(room_id))
+            except ValueError:
+                return CustomResponse.errorResponse(
+                    message="Invalid room_id"
+                )
+
+            room = Room.objects.filter(
+                id=room_id,
+                school=school
+            ).first()
+
+            if not room:
+                return CustomResponse.errorResponse(
+                    message="Room not found"
+                )
+
+            room.status = "INACTIVE"
+            room.save(update_fields=["status"])
+
+            application_logger.info(
+                "room_deactivated | room_id=%s | school_id=%s",
+                room.id,
+                school.id
+            )
+
+            return CustomResponse.successResponse(
+                message="Room deactivated successfully"
+            )
+
+        except Exception:
+            application_logger.exception("room_delete_failed")
+
+            return CustomResponse.errorResponse(
+                message="Failed to deactivate room"
+            )
+
+class RoomExcelImportAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "room.create"
+
+    def post(self, request):
+        try:
+            school = request.school
+            excel_file = request.FILES.get("file")
+
+            if not excel_file:
+                return CustomResponse.errorResponse(
+                    message="Excel file is required"
+                )
+
+            if not excel_file.name.lower().endswith(
+                (".xlsx", ".xls")
+            ):
+                return CustomResponse.errorResponse(
+                    message="Only Excel files are allowed"
+                )
+
+            try:
+                workbook = load_workbook(
+                    excel_file,
+                    data_only=True
+                )
+            except Exception:
+                return CustomResponse.errorResponse(
+                    message="Invalid Excel file"
+                )
+
+            if "Rooms" not in workbook.sheetnames:
+                return CustomResponse.errorResponse(
+                    message="Rooms sheet is required"
+                )
+
+            sheet = workbook["Rooms"]
+
+            rows = list(sheet.iter_rows(values_only=True))
+
+            if not rows:
+                return CustomResponse.errorResponse(
+                    message="Excel file is empty"
+                )
+
+            headers = [
+                str(value).strip().lower()
+                if value is not None else ""
+                for value in rows[0]
+            ]
+
+            required_columns = [
+                "name",
+                "room_type",
+                "capacity",
+            ]
+
+            missing_columns = [
+                column
+                for column in required_columns
+                if column not in headers
+            ]
+
+            if missing_columns:
+                return CustomResponse.errorResponse(
+                    message="Required columns are missing",
+                    data={
+                        "missing_columns": missing_columns
+                    }
+                )
+
+            column_index = {
+                column: headers.index(column)
+                for column in headers
+                if column
+            }
+
+            valid_room_types = dict(Room.ROOM_TYPE_CHOICES)
+            valid_statuses = dict(Room.STATUS_CHOICES)
+
+            errors = []
+            valid_rows = []
+
+            for row_number, row in enumerate(
+                rows[1:],
+                start=2
+            ):
+                # Skip completely empty rows
+                if not any(
+                    value is not None
+                    for value in row
+                ):
+                    continue
+
+                def get_value(column):
+                    index = column_index.get(column)
+
+                    if index is None or index >= len(row):
+                        return None
+
+                    value = row[index]
+
+                    if isinstance(value, str):
+                        return value.strip()
+
+                    return value
+
+                name = get_value("name")
+                room_type = get_value("room_type")
+                location = get_value("location")
+                capacity = get_value("capacity")
+                facilities = get_value("facilities")
+                status = get_value("status") or "ACTIVE"
+                branch_id = get_value("branch_id")
+
+                row_errors = []
+
+                # -------------------------
+                # Name validation
+                # -------------------------
+
+                if not name:
+                    row_errors.append(
+                        "Room name is required"
+                    )
+
+                # -------------------------
+                # Room type validation
+                # -------------------------
+
+                if not room_type:
+                    row_errors.append(
+                        "Room type is required"
+                    )
+                elif room_type not in valid_room_types:
+                    row_errors.append(
+                        f"Invalid room_type '{room_type}'. "
+                        f"Allowed values: "
+                        f"{', '.join(valid_room_types.keys())}"
+                    )
+
+                # -------------------------
+                # Capacity validation
+                # -------------------------
+
+                try:
+                    capacity = int(capacity)
+                    if capacity < 0:
+                        row_errors.append(
+                            "Capacity cannot be negative"
+                        )
+                except (TypeError, ValueError):
+                    row_errors.append(
+                        "Capacity must be a valid number"
+                    )
+
+                # -------------------------
+                # Status validation
+                # -------------------------
+
+                if status not in valid_statuses:
+                    row_errors.append(
+                        f"Invalid status '{status}'"
+                    )
+
+                # -------------------------
+                # Branch validation
+                # -------------------------
+
+                branch = None
+
+                if branch_id:
+
+                    try:
+                        branch_uuid = uuid.UUID(
+                            str(branch_id)
+                        )
+                    except ValueError:
+                        row_errors.append(
+                            "Invalid branch_id"
+                        )
+                        branch_uuid = None
+
+                    if branch_uuid:
+                        branch = Branch.objects.filter(
+                            id=branch_uuid,
+                            school=school
+                        ).first()
+
+                        if not branch:
+                            row_errors.append(
+                                "Branch not found"
+                            )
+
+                # -------------------------
+                # Duplicate in database
+                # -------------------------
+
+                if name:
+                    if Room.objects.filter(
+                        school=school,
+                        name__iexact=name
+                    ).exists():
+                        row_errors.append(
+                            f"Room '{name}' already exists"
+                        )
+
+                # -------------------------
+                # Duplicate inside Excel
+                # -------------------------
+
+                if name:
+                    duplicate_excel = any(
+                        item["name"].lower() == name.lower()
+                        for item in valid_rows
+                    )
+
+                    if duplicate_excel:
+                        row_errors.append(
+                            f"Duplicate room '{name}' "
+                            f"found in Excel"
+                        )
+
+                if row_errors:
+                    errors.append({
+                        "row": row_number,
+                        "name": name,
+                        "errors": row_errors
+                    })
+                    continue
+
+                valid_rows.append({
+                    "name": name,
+                    "room_type": room_type,
+                    "location": location,
+                    "capacity": capacity,
+                    "facilities": facilities,
+                    "status": status,
+                    "branch": branch
+                })
+
+            # --------------------------------
+            # Do not insert anything if errors
+            # --------------------------------
+
+            if errors:
+                return CustomResponse.errorResponse(
+                    message="Excel validation failed",
+                    data={
+                        "total_rows": len(rows) - 1,
+                        "valid_rows": len(valid_rows),
+                        "error_rows": len(errors),
+                        "errors": errors
+                    }
+                )
+
+            # --------------------------------
+            # Create rooms atomically
+            # --------------------------------
+
+            with transaction.atomic():
+
+                rooms = Room.objects.bulk_create([
+                    Room(
+                        school=school,
+                        branch=item["branch"],
+                        name=item["name"],
+                        room_type=item["room_type"],
+                        location=item["location"],
+                        capacity=item["capacity"],
+                        facilities=item["facilities"],
+                        status=item["status"]
+                    )
+                    for item in valid_rows
+                ])
+
+            application_logger.info(
+                "rooms_excel_imported | school_id=%s | count=%s",
+                school.id,
+                len(rooms)
+            )
+
+            return CustomResponse.successResponse(
+                message="Rooms imported successfully",
+                data={
+                    "total_rooms": len(rooms),
+                    "rooms": [
+                        {
+                            "id": str(room.id),
+                            "name": room.name,
+                            "room_type": room.room_type,
+                            "location": room.location,
+                            "capacity": room.capacity,
+                            "facilities": room.facilities,
+                            "status": room.status,
+                            "branch_id": (
+                                str(room.branch_id)
+                                if room.branch_id
+                                else None
+                            )
+                        }
+                        for room in rooms
+                    ]
+                }
+            )
+
+        except Exception:
+            application_logger.exception(
+                "rooms_excel_import_failed"
+            )
+
+            return CustomResponse.errorResponse(
+                message="Failed to import rooms"
             )
