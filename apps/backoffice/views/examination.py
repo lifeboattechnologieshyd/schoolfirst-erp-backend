@@ -5568,6 +5568,8 @@ class HallTicketPreviewAPIView(APIView):
                 "school": {
                     "id": school.id,
                     "name": school.name,
+                    "board":school.board,
+                    "address": school.address,
                 },
 
                 "student": {
