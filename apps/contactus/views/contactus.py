@@ -37,7 +37,7 @@ class CreateSupportTicketAPIView(APIView):
                 message=message,
                 file=file
             )
-        return CustomResponse().successResponse(data={}, description="Ticket created successfully")
+        return CustomResponse().successResponse(data={"id":ticket.id}, description="Ticket created successfully")
 
     def get(self, request):
         tickets = SupportTickets.objects.filter(
