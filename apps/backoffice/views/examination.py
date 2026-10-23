@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from decimal import Decimal,InvalidOperation
 from openpyxl import load_workbook
 from apps.examination.models import ExaminationType, Examination, ExaminationGrade, ExaminationSchedule, \
-    ExaminationResult, GradeConfiguration, HallTicket
+    ExaminationResult, GradeConfiguration, HallTicket, ReportCard
 from apps.school.models.school import Branch, AcademicYear, Grade, Subject, SubjectGrade, Student
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
@@ -5635,4 +5635,659 @@ class HallTicketPreviewAPIView(APIView):
 
             return CustomResponse.errorResponse(
                 description="Failed to fetch hall ticket preview."
+            )
+
+
+
+
+class GenerateReportCardAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "report_card.create"
+
+    def post(self, request):
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required."
+            )
+
+        examination_id = request.data.get("examination_id")
+        grade_id = request.data.get("grade_id")
+        section_id = request.data.get("section_id")
+
+        # ---------------------------------
+        # Required validations
+        # ---------------------------------
+
+        if not examination_id:
+            return CustomResponse.errorResponse(
+                description="Examination is required."
+            )
+
+        if not grade_id:
+            return CustomResponse.errorResponse(
+                description="Grade is required."
+            )
+
+        if not section_id:
+            return CustomResponse.errorResponse(
+                description="Section is required."
+            )
+
+        # ---------------------------------
+        # UUID validation
+        # ---------------------------------
+
+        try:
+            examination_uuid = uuid.UUID(str(examination_id))
+            grade_uuid = uuid.UUID(str(grade_id))
+            section_uuid = uuid.UUID(str(section_id))
+        except (ValueError, AttributeError):
+            return CustomResponse.errorResponse(
+                description="Invalid examination, grade or section."
+            )
+
+        try:
+            # ---------------------------------
+            # Validate examination
+            # ---------------------------------
+
+            examination = (
+                Examination.objects
+                .select_related(
+                    "academic_year",
+                    "examination_type",
+                )
+                .filter(
+                    id=examination_uuid,
+                    school=school,
+                )
+                .first()
+            )
+
+            if not examination:
+                return CustomResponse.errorResponse(
+                    description="Examination not found."
+                )
+
+            # ---------------------------------
+            # Validate grade
+            # ---------------------------------
+
+            examination_grade = (
+                ExaminationGrade.objects
+                .select_related("grade")
+                .filter(
+                    examination=examination,
+                    grade_id=grade_uuid,
+                )
+                .first()
+            )
+
+            if not examination_grade:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Selected grade is not assigned "
+                        "to this examination."
+                    )
+                )
+
+            grade = examination_grade.grade
+
+            # ---------------------------------
+            # Get examination schedules
+            # ---------------------------------
+
+            schedules = list(
+                ExaminationSchedule.objects
+                .filter(
+                    examination=examination,
+                    grade=grade,
+                )
+                .select_related("subject")
+                .order_by(
+                    "exam_date",
+                    "start_time",
+                )
+            )
+
+            if not schedules:
+                return CustomResponse.errorResponse(
+                    description="No examination schedules found."
+                )
+
+            schedule_ids = [
+                schedule.id
+                for schedule in schedules
+            ]
+
+            # ---------------------------------
+            # Get students
+            # ---------------------------------
+
+            students = (
+                Student.objects
+                .filter(
+                    school=school,
+                    grade_id=grade_uuid,
+                    section_id=section_uuid,
+                )
+                .order_by("id")
+            )
+
+            total_students = students.count()
+
+            if total_students == 0:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "No students found for the selected "
+                        "grade and section."
+                    )
+                )
+
+            generated = 0
+            already_generated = 0
+            pending = 0
+
+            generated_report_cards = []
+
+            with transaction.atomic():
+
+                for student in students:
+
+                    # ---------------------------------
+                    # Existing Report Card
+                    # ---------------------------------
+
+                    report_card = (
+                        ReportCard.objects
+                        .filter(
+                            examination=examination,
+                            student=student,
+                        )
+                        .first()
+                    )
+
+                    if report_card:
+                        already_generated += 1
+
+                        generated_report_cards.append({
+                            "id": report_card.id,
+                            "student_id": student.id,
+                            "status": report_card.status,
+                        })
+
+                        continue
+
+                    # ---------------------------------
+                    # Get Results
+                    # ---------------------------------
+
+                    results = list(
+                        ExaminationResult.objects
+                        .filter(
+                            examination=examination,
+                            examination_schedule_id__in=schedule_ids,
+                            student=student,
+                        )
+                        .select_related(
+                            "examination_schedule",
+                        )
+                    )
+
+                    result_map = {
+                        result.examination_schedule_id: result
+                        for result in results
+                    }
+
+                    # ---------------------------------
+                    # Check all subjects have results
+                    # ---------------------------------
+
+                    missing_results = [
+                        schedule
+                        for schedule in schedules
+                        if schedule.id not in result_map
+                    ]
+
+                    if missing_results:
+                        pending += 1
+
+                        continue
+
+                    # ---------------------------------
+                    # Calculate total marks
+                    # ---------------------------------
+
+                    total_marks = Decimal("0")
+                    obtained_marks = Decimal("0")
+
+                    failed_subject = False
+
+                    for schedule in schedules:
+
+                        result = result_map[schedule.id]
+
+                        total_marks += Decimal(
+                            str(schedule.maximum_marks)
+                        )
+
+                        if result.marks_obtained is not None:
+                            obtained_marks += Decimal(
+                                str(result.marks_obtained)
+                            )
+
+                        # Subject pass/fail
+                        if (
+                            result.marks_obtained is None
+                            or result.marks_obtained
+                            < schedule.passing_marks
+                        ):
+                            failed_subject = True
+
+                    # ---------------------------------
+                    # Percentage
+                    # ---------------------------------
+
+                    if total_marks > 0:
+                        percentage = (
+                            obtained_marks
+                            / total_marks
+                        ) * Decimal("100")
+                    else:
+                        percentage = Decimal("0")
+
+                    percentage = percentage.quantize(
+                        Decimal("0.01")
+                    )
+
+                    # ---------------------------------
+                    # Overall Grade
+                    # ---------------------------------
+
+                    grade_configuration = (
+                        GradeConfiguration.objects
+                        .filter(
+                            school=school,
+                            academic_year=examination.academic_year,
+                            grade=grade.name,
+                            min_percentage__lte=percentage,
+                            max_percentage__gte=percentage,
+                        )
+                        .first()
+                    )
+
+                    overall_grade = None
+                    overall_grade_point = None
+
+                    if grade_configuration:
+                        overall_grade = (
+                            grade_configuration.grade
+                        )
+                        overall_grade_point = (
+                            grade_configuration.grade_point
+                        )
+
+                    # ---------------------------------
+                    # Overall Result
+                    # ---------------------------------
+
+                    result_status = (
+                        "FAIL"
+                        if failed_subject
+                        else "PASS"
+                    )
+
+                    # ---------------------------------
+                    # Create Report Card
+                    # ---------------------------------
+
+                    report_card = ReportCard.objects.create(
+                        examination=examination,
+                        student=student,
+                        total_marks=total_marks,
+                        obtained_marks=obtained_marks,
+                        percentage=percentage,
+                        grade=overall_grade,
+                        grade_point=overall_grade_point,
+                        result=result_status,
+                        status=ReportCard.Status.DRAFT,
+                    )
+
+                    generated += 1
+
+                    generated_report_cards.append({
+                        "id": report_card.id,
+                        "student_id": student.id,
+                        "status": report_card.status,
+                        "total_marks": total_marks,
+                        "obtained_marks": obtained_marks,
+                        "percentage": percentage,
+                        "grade": overall_grade,
+                        "grade_point": overall_grade_point,
+                        "result": result_status,
+                    })
+
+            # ---------------------------------
+            # Log
+            # ---------------------------------
+
+            application_logger.info(
+                "report_cards_generated",
+                examination_id=str(examination.id),
+                grade_id=str(grade.id),
+                section_id=str(section_uuid),
+                total_students=total_students,
+                generated=generated,
+                already_generated=already_generated,
+                pending=pending,
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "examination": {
+                        "id": examination.id,
+                        "name": examination.name,
+                    },
+
+                    "grade": {
+                        "id": grade.id,
+                        "name": grade.name,
+                    },
+
+                    "section_id": section_uuid,
+
+                    "summary": {
+                        "total_students": total_students,
+                        "generated": generated,
+                        "already_generated": already_generated,
+                        "pending": pending,
+                    },
+
+                    "report_cards": generated_report_cards,
+                },
+                description="Report cards generated successfully.",
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "report_card_generation_failed",
+                error=str(e),
+                examination_id=str(examination_id),
+                grade_id=str(grade_id),
+                section_id=str(section_id),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to generate report cards."
+            )
+
+
+class ReportCardListAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "report_card.view"
+
+    def get(self, request):
+        try:
+            school = request.school
+
+            examination_id = request.query_params.get(
+                "examination_id"
+            )
+            grade_id = request.query_params.get("grade_id")
+            section_id = request.query_params.get("section_id")
+            student_id = request.query_params.get("student_id")
+            status = request.query_params.get("status")
+            search = request.query_params.get("search")
+
+            # ---------------------------------
+            # Base Query
+            # ---------------------------------
+
+            queryset = (
+                ReportCard.objects
+                .filter(
+                    examination__school=school
+                )
+                .select_related(
+                    "examination",
+                    "examination__examination_type",
+                    "examination__academic_year",
+                    "student",
+                    "student__grade",
+                    "student__section",
+                )
+                .order_by(
+                    "-examination__start_date",
+                    "student__name",
+                    "-created_at",
+                )
+            )
+
+            # ---------------------------------
+            # Examination filter
+            # ---------------------------------
+
+            if examination_id:
+                try:
+                    examination_uuid = uuid.UUID(
+                        str(examination_id)
+                    )
+                except (ValueError, AttributeError):
+                    return CustomResponse.errorResponse(
+                        description="Invalid examination_id."
+                    )
+
+                queryset = queryset.filter(
+                    examination_id=examination_uuid
+                )
+
+            # ---------------------------------
+            # Grade filter
+            # ---------------------------------
+
+            if grade_id:
+                try:
+                    grade_uuid = uuid.UUID(str(grade_id))
+                except (ValueError, AttributeError):
+                    return CustomResponse.errorResponse(
+                        description="Invalid grade_id."
+                    )
+
+                queryset = queryset.filter(
+                    student__grade_id=grade_uuid
+                )
+
+            # ---------------------------------
+            # Section filter
+            # ---------------------------------
+
+            if section_id:
+                try:
+                    section_uuid = uuid.UUID(str(section_id))
+                except (ValueError, AttributeError):
+                    return CustomResponse.errorResponse(
+                        description="Invalid section_id."
+                    )
+
+                queryset = queryset.filter(
+                    student__section_id=section_uuid
+                )
+
+            # ---------------------------------
+            # Student filter
+            # ---------------------------------
+
+            if student_id:
+                try:
+                    student_uuid = uuid.UUID(str(student_id))
+                except (ValueError, AttributeError):
+                    return CustomResponse.errorResponse(
+                        description="Invalid student_id."
+                    )
+
+                queryset = queryset.filter(
+                    student_id=student_uuid
+                )
+
+            # ---------------------------------
+            # Status filter
+            # ---------------------------------
+
+            if status:
+                valid_statuses = [
+                    choice[0]
+                    for choice in ReportCard.Status.choices
+                ]
+
+                if status not in valid_statuses:
+                    return CustomResponse.errorResponse(
+                        description="Invalid report card status."
+                    )
+
+                queryset = queryset.filter(
+                    status=status
+                )
+
+            # ---------------------------------
+            # Search
+            # ---------------------------------
+
+            if search:
+                search = search.strip()
+
+                queryset = queryset.filter(
+                    Q(
+                        student__name__icontains=search
+                    )
+                    | Q(
+                        student__admission_number__icontains=search
+                    )
+                )
+
+            # ---------------------------------
+            # Total
+            # ---------------------------------
+
+            total = queryset.count()
+
+            # ---------------------------------
+            # Pagination
+            # ---------------------------------
+
+            paginator = CustomPageNumberPagination()
+
+            page = paginator.paginate_queryset(
+                queryset,
+                request,
+            )
+
+            report_cards = []
+
+            for report_card in page:
+
+                student = report_card.student
+                examination = report_card.examination
+
+                report_cards.append({
+                    "id": report_card.id,
+
+                    "student": {
+                        "id": student.id,
+                        "name": student.name,
+                        "admission_number": (
+                            student.admission_number
+                        ),
+                        "grade": (
+                            student.grade.name
+                            if student.grade
+                            else None
+                        ),
+                        "section": (
+                            student.section.name
+                            if student.section
+                            else None
+                        ),
+                    },
+
+                    "examination": {
+                        "id": examination.id,
+                        "name": examination.name,
+                        "examination_type": (
+                            examination.examination_type.name
+                            if examination.examination_type
+                            else None
+                        ),
+                        "academic_year": (
+                            examination.academic_year.name
+                            if examination.academic_year
+                            else None
+                        ),
+                        "start_date": examination.start_date,
+                        "end_date": examination.end_date,
+                    },
+
+                    "total_marks": report_card.total_marks,
+                    "obtained_marks": report_card.obtained_marks,
+                    "percentage": report_card.percentage,
+                    "grade": report_card.grade,
+                    "grade_point": report_card.grade_point,
+                    "result": report_card.result,
+
+                    "status": report_card.status,
+
+                    "teacher_remarks": (
+                        report_card.teacher_remarks
+                    ),
+
+                    "published_at": (
+                        report_card.published_at
+                    ),
+
+                    "created_at": report_card.created_at,
+                })
+
+            application_logger.info(
+                "report_card_list_fetched",
+                school_id=str(school.id),
+                examination_id=examination_id,
+                grade_id=grade_id,
+                section_id=section_id,
+                student_id=student_id,
+                status=status,
+                total=total,
+            )
+
+            return CustomResponse.successResponse(
+                data=report_cards,
+                total=total,
+                description="Report cards fetched successfully.",
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "report_card_list_failed",
+                error=str(e),
+                school_id=(
+                    str(school.id)
+                    if school
+                    else None
+                ),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to fetch report cards."
             )
