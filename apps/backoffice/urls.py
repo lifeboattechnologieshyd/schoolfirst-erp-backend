@@ -17,7 +17,8 @@ from apps.backoffice.views.examination import ExaminationTypeCreateAPIView, Exam
     ExaminationGradeSubjectListAPIView, ExaminationScheduleCreateAPIView, ExaminationScheduleListAPIView, \
     ExaminationScheduleUpdateAPIView, ExaminationStatusUpdateAPIView, ExaminationMarksUploadAPIView, \
     ExaminationResultListAPIView, GradeSubjectListAPIView, GradeConfigurationCreateAPIView, \
-    GradeConfigurationListAPIView, GradeConfigurationUpdateAPIView
+    GradeConfigurationListAPIView, GradeConfigurationUpdateAPIView, GenerateHallTicketAPIView, HallTicketListAPIView, \
+    HallTicketPreviewAPIView
 from apps.backoffice.views.fee import CreateFeeTypeAPIView, FeeTypeListAPIView, UpdateFeeTypeAPIView, \
     DeleteFeeTypeAPIView, CreateFeeTemplateAPIView, FeeTemplateListAPIView, FeeTemplateDetailAPIView, \
     UpdateFeeTemplateAPIView, DeleteFeeTemplateAPIView, CreateFeeTemplateItemAPIView, FeeTemplateItemListAPIView, \
@@ -529,6 +530,12 @@ urlpatterns = [
     path("exam/<uuid:examination_id>/grades/<uuid:grade_id>/subjects/<uuid:subject_id>/marks/upload",ExaminationMarksUploadAPIView.as_view(),),
 
     path("exam/results/<uuid:examination_id>",ExaminationResultListAPIView.as_view(),),
+
+    path("generate/hall-ticket",GenerateHallTicketAPIView.as_view()),
+
+    path("hall-tickets",HallTicketListAPIView.as_view(),),
+
+    path("hall-ticket/preview",HallTicketPreviewAPIView.as_view(),),
 
 
     path("gallery/category",GalleryCategoryAPIView.as_view(),),

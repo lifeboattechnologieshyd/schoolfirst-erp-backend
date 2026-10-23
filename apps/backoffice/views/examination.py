@@ -1,13 +1,16 @@
+import uuid
+
 from django.db import transaction
 from django.db.models import Q, Max, Avg, F
+from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from decimal import Decimal,InvalidOperation
 from openpyxl import load_workbook
 from apps.examination.models import ExaminationType, Examination, ExaminationGrade, ExaminationSchedule, \
-    ExaminationResult, GradeConfiguration
+    ExaminationResult, GradeConfiguration, HallTicket
 from apps.school.models.school import Branch, AcademicYear, Grade, Subject, SubjectGrade, Student
-from shared.mixins import CustomResponse
+from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
 from django.db import transaction
@@ -4884,4 +4887,752 @@ class ExaminationResultListAPIView(APIView):
 
             return CustomResponse.errorResponse(
                 description="Internal server error."
+            )
+
+
+class GenerateHallTicketAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "hall_ticket.create"
+
+    def post(self, request):
+        school = request.school
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School is required."
+            )
+
+        examination_id = request.data.get("examination_id")
+        grade_id = request.data.get("grade_id")
+        section_id = request.data.get("section_id")
+
+        # ---------------------------------
+        # Required validations
+        # ---------------------------------
+
+        if not examination_id:
+            return CustomResponse.errorResponse(
+                description="Examination is required."
+            )
+
+        if not grade_id:
+            return CustomResponse.errorResponse(
+                description="Grade is required."
+            )
+
+        if not section_id:
+            return CustomResponse.errorResponse(
+                description="Section is required."
+            )
+
+        # ---------------------------------
+        # UUID validation
+        # ---------------------------------
+
+        try:
+            examination_uuid = uuid.UUID(str(examination_id))
+            grade_uuid = uuid.UUID(str(grade_id))
+            section_uuid = uuid.UUID(str(section_id))
+        except (ValueError, AttributeError):
+            return CustomResponse.errorResponse(
+                description="Invalid examination, grade or section."
+            )
+
+        try:
+            # ---------------------------------
+            # Validate examination
+            # ---------------------------------
+
+            examination = (
+                Examination.objects
+                .select_related(
+                    "academic_year",
+                    "examination_type",
+                )
+                .filter(
+                    id=examination_uuid,
+                    school=school,
+                )
+                .first()
+            )
+
+            if not examination:
+                return CustomResponse.errorResponse(
+                    description="Examination not found."
+                )
+
+            # ---------------------------------
+            # Validate grade is assigned
+            # to examination
+            # ---------------------------------
+
+            examination_grade = (
+                ExaminationGrade.objects
+                .select_related("grade")
+                .filter(
+                    examination=examination,
+                    grade_id=grade_uuid,
+                )
+                .first()
+            )
+
+            if not examination_grade:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Selected grade is not assigned "
+                        "to this examination."
+                    )
+                )
+
+            # ---------------------------------
+            # Get students
+            # ---------------------------------
+
+            students = (
+                Student.objects
+                .filter(
+                    school=school,
+                    grade_id=grade_uuid,
+                    section_id=section_uuid,
+                )
+                .order_by("id")
+            )
+
+            total_students = students.count()
+
+            if total_students == 0:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "No students found for the selected "
+                        "grade and section."
+                    )
+                )
+
+            generated = 0
+            existing = 0
+            generated_tickets = []
+
+            # ---------------------------------
+            # Generate Hall Tickets
+            # ---------------------------------
+
+            with transaction.atomic():
+
+                for student in students:
+
+                    hall_ticket = (
+                        HallTicket.objects
+                        .filter(
+                            examination=examination,
+                            student=student,
+                        )
+                        .first()
+                    )
+
+                    if hall_ticket:
+                        existing += 1
+
+                        generated_tickets.append({
+                            "id": hall_ticket.id,
+                            "student_id": student.id,
+                            "hall_ticket_number": (
+                                hall_ticket.hall_ticket_number
+                            ),
+                            "status": hall_ticket.status,
+                        })
+
+                        continue
+
+                    # ---------------------------------
+                    # Generate unique ticket number
+                    # ---------------------------------
+
+                    hall_ticket_number = (
+                        f"HT-"
+                        f"{examination.start_date.year}-"
+                        f"{student.id.hex[:8].upper()}"
+                    )
+
+                    hall_ticket = HallTicket.objects.create(
+                        examination=examination,
+                        student=student,
+                        hall_ticket_number=hall_ticket_number,
+                        status=HallTicket.Status.GENERATED,
+                        generated_at=timezone.now(),
+                    )
+
+                    generated += 1
+
+                    generated_tickets.append({
+                        "id": hall_ticket.id,
+                        "student_id": student.id,
+                        "hall_ticket_number": (
+                            hall_ticket.hall_ticket_number
+                        ),
+                        "status": hall_ticket.status,
+                    })
+
+            # ---------------------------------
+            # Log
+            # ---------------------------------
+
+            application_logger.info(
+                "hall_tickets_generated",
+                examination_id=str(examination.id),
+                grade_id=str(grade_uuid),
+                section_id=str(section_uuid),
+                total_students=total_students,
+                generated=generated,
+                existing=existing,
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "examination": {
+                        "id": examination.id,
+                        "name": examination.name,
+                    },
+
+                    "grade": {
+                        "id": examination_grade.grade.id,
+                        "name": examination_grade.grade.name,
+                    },
+
+                    "section_id": section_uuid,
+
+                    "summary": {
+                        "total_students": total_students,
+                        "generated": generated,
+                        "already_generated": existing,
+                        "pending": 0,
+                    },
+
+                    "hall_tickets": generated_tickets,
+                },
+                description="Hall tickets generated successfully.",
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "hall_ticket_generation_failed",
+                error=str(e),
+                examination_id=str(examination_id),
+                grade_id=str(grade_id),
+                section_id=str(section_id),
+                school_id=str(school.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to generate hall tickets."
+            )
+
+class HallTicketListAPIView(APIView):
+    permission_classes = [IsAuthenticated,HasPermission,]
+
+    required_permission = "hall_ticket.view"
+
+    def get(self, request):
+        try:
+            school = request.school
+
+            examination_id = request.query_params.get("examination_id")
+            grade_id = request.query_params.get("grade_id")
+            section_id = request.query_params.get("section_id")
+            status = request.query_params.get("status")
+            student_id = request.query_params.get("student_id")
+            hall_ticket_number = request.query_params.get(
+                "hall_ticket_number"
+            )
+            search = request.query_params.get("search")
+
+            # ---------------------------------
+            # Base Query
+            # ---------------------------------
+
+            queryset = (
+                HallTicket.objects
+                .filter(
+                    examination__school=school
+                )
+                .select_related(
+                    "examination",
+                    "examination__examination_type",
+                    "examination__academic_year",
+                    "student",
+                    "student__grade",
+                    "student__section",
+                )
+                .order_by("-created_at")
+            )
+
+            # ---------------------------------
+            # Examination filter
+            # ---------------------------------
+
+            if examination_id:
+                try:
+                    examination_uuid = uuid.UUID(
+                        str(examination_id)
+                    )
+                except ValueError:
+                    return CustomResponse.errorResponse(
+                        description="Invalid examination_id."
+                    )
+
+                queryset = queryset.filter(
+                    examination_id=examination_uuid
+                )
+
+            # ---------------------------------
+            # Grade filter
+            # ---------------------------------
+
+            if grade_id:
+                try:
+                    grade_uuid = uuid.UUID(str(grade_id))
+                except ValueError:
+                    return CustomResponse.errorResponse(
+                        description="Invalid grade_id."
+                    )
+
+                queryset = queryset.filter(
+                    student__grade_id=grade_uuid
+                )
+
+            # ---------------------------------
+            # Section filter
+            # ---------------------------------
+
+            if section_id:
+                try:
+                    section_uuid = uuid.UUID(str(section_id))
+                except ValueError:
+                    return CustomResponse.errorResponse(
+                        description="Invalid section_id."
+                    )
+
+                queryset = queryset.filter(
+                    student__section_id=section_uuid
+                )
+
+            # ---------------------------------
+            # Status filter
+            # ---------------------------------
+
+            if status:
+                valid_statuses = [
+                    choice[0]
+                    for choice in HallTicket.Status.choices
+                ]
+
+                if status not in valid_statuses:
+                    return CustomResponse.errorResponse(
+                        description="Invalid hall ticket status."
+                    )
+
+                queryset = queryset.filter(
+                    status=status
+                )
+
+            # ---------------------------------
+            # Student filter
+            # ---------------------------------
+
+            if student_id:
+                try:
+                    student_uuid = uuid.UUID(str(student_id))
+                except ValueError:
+                    return CustomResponse.errorResponse(
+                        description="Invalid student_id."
+                    )
+
+                queryset = queryset.filter(
+                    student_id=student_uuid
+                )
+
+            # ---------------------------------
+            # Hall Ticket Number filter
+            # ---------------------------------
+
+            if hall_ticket_number:
+                queryset = queryset.filter(
+                    hall_ticket_number__icontains=hall_ticket_number.strip()
+                )
+
+            # ---------------------------------
+            # Search
+            # ---------------------------------
+
+            if search:
+                search = search.strip()
+
+                queryset = queryset.filter(
+                    Q(
+                        student__name__icontains=search
+                    )
+                    | Q(
+                        student__admission_number__icontains=search
+                    )
+                    | Q(
+                        hall_ticket_number__icontains=search
+                    )
+                )
+
+            # ---------------------------------
+            # Total
+            # ---------------------------------
+
+            total = queryset.count()
+
+            # ---------------------------------
+            # Pagination
+            # ---------------------------------
+
+            paginator = CustomPageNumberPagination()
+
+            page = paginator.paginate_queryset(
+                queryset,
+                request
+            )
+
+            hall_tickets = []
+
+            for hall_ticket in page:
+
+                student = hall_ticket.student
+                examination = hall_ticket.examination
+
+                hall_tickets.append({
+                    "id": hall_ticket.id,
+
+                    "hall_ticket_number": (
+                        hall_ticket.hall_ticket_number
+                    ),
+
+                    "status": hall_ticket.status,
+
+                    "generated_at": (
+                        hall_ticket.generated_at
+                    ),
+
+                    "published_at": (
+                        hall_ticket.published_at
+                    ),
+
+                    "student": {
+                        "id": student.id,
+                        "name": student.name,
+                        "admission_number": (
+                            student.admission_number
+                        ),
+                        "grade": (
+                            student.grade.name
+                            if student.grade
+                            else None
+                        ),
+                        "section": (
+                            student.section.name
+                            if student.section
+                            else None
+                        ),
+                    },
+
+                    "examination": {
+                        "id": examination.id,
+                        "name": examination.name,
+                        "examination_type": (
+                            examination.examination_type.name
+                            if examination.examination_type
+                            else None
+                        ),
+                        "academic_year": (
+                            examination.academic_year.name
+                            if examination.academic_year
+                            else None
+                        ),
+                        "start_date": examination.start_date,
+                        "end_date": examination.end_date,
+                        "status": examination.status,
+                    },
+                })
+
+            application_logger.info(
+                "hall_ticket_list_fetched",
+                school_id=str(school.id),
+                examination_id=examination_id,
+                grade_id=grade_id,
+                section_id=section_id,
+                status=status,
+                total=total,
+            )
+
+            return CustomResponse.successResponse(
+                data=hall_tickets,
+                total=total,
+                description="Hall tickets fetched successfully.",
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "hall_ticket_list_failed",
+                error=str(e),
+                school_id=str(
+                    school.id
+                ) if school else None,
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to fetch hall tickets."
+            )
+
+class HallTicketPreviewAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "hall_ticket.view"
+
+    def get(self, request):
+        try:
+            school = request.school
+
+            student_id = request.query_params.get("student_id")
+            examination_id = request.query_params.get("examination_id")
+
+            if not student_id:
+                return CustomResponse.errorResponse(
+                    description="student_id is required."
+                )
+
+            if not examination_id:
+                return CustomResponse.errorResponse(
+                    description="examination_id is required."
+                )
+
+            try:
+                student_uuid = uuid.UUID(str(student_id))
+                examination_uuid = uuid.UUID(str(examination_id))
+            except (ValueError, AttributeError):
+                return CustomResponse.errorResponse(
+                    description="Invalid student_id or examination_id."
+                )
+
+            # ---------------------------------
+            # Student
+            # ---------------------------------
+
+            student = (
+                Student.objects
+                .select_related(
+                    "grade",
+                    "section",
+                    "branch",
+                )
+                .filter(
+                    id=student_uuid,
+                    school=school,
+                )
+                .first()
+            )
+
+            if not student:
+                return CustomResponse.errorResponse(
+                    description="Student not found."
+                )
+
+            if not student.grade_id:
+                return CustomResponse.errorResponse(
+                    description="Student grade is not assigned."
+                )
+
+            # ---------------------------------
+            # Examination
+            # ---------------------------------
+
+            examination = (
+                Examination.objects
+                .select_related(
+                    "examination_type",
+                    "academic_year",
+                    "branch",
+                )
+                .filter(
+                    id=examination_uuid,
+                    school=school,
+                    examination_grades__grade_id=student.grade_id,
+                )
+                .first()
+            )
+
+            if not examination:
+                return CustomResponse.errorResponse(
+                    description="Examination not found."
+                )
+
+            # ---------------------------------
+            # Hall Ticket
+            # ---------------------------------
+
+            hall_ticket = (
+                HallTicket.objects
+                .filter(
+                    examination=examination,
+                    student=student,
+                )
+                .first()
+            )
+
+            if not hall_ticket:
+                return CustomResponse.errorResponse(
+                    description="Hall ticket has not been generated."
+                )
+
+            # ---------------------------------
+            # Examination Schedules
+            # ---------------------------------
+
+            schedules = (
+                ExaminationSchedule.objects
+                .filter(
+                    examination=examination,
+                    grade_id=student.grade_id,
+                )
+                .select_related(
+                    "subject",
+                    "grade",
+                )
+                .order_by(
+                    "exam_date",
+                    "start_time",
+                )
+            )
+
+            subjects = []
+
+            for schedule in schedules:
+
+                duration_minutes = (
+                    (
+                        schedule.end_time.hour * 60
+                        + schedule.end_time.minute
+                    )
+                    -
+                    (
+                        schedule.start_time.hour * 60
+                        + schedule.start_time.minute
+                    )
+                )
+
+                subjects.append({
+                    "subject_id": schedule.subject.id,
+                    "subject_name": schedule.subject.name,
+
+                    "exam_date": schedule.exam_date,
+                    "start_time": schedule.start_time,
+                    "end_time": schedule.end_time,
+
+                    "duration_minutes": duration_minutes,
+
+                    "room_number": schedule.room_number,
+
+                    "maximum_marks": schedule.maximum_marks,
+
+                    "instructions": schedule.instructions,
+                })
+
+            # ---------------------------------
+            # Response
+            # ---------------------------------
+
+            data = {
+                "hall_ticket": {
+                    "id": hall_ticket.id,
+                    "hall_ticket_number": (
+                        hall_ticket.hall_ticket_number
+                    ),
+                    "status": hall_ticket.status,
+                    "generated_at": hall_ticket.generated_at,
+                    "published_at": hall_ticket.published_at,
+                },
+
+                "school": {
+                    "id": school.id,
+                    "name": school.name,
+                },
+
+                "student": {
+                    "id": student.id,
+                    "name": student.name,
+                    "admission_number": (
+                        student.admission_number
+                    ),
+                    "grade": (
+                        student.grade.name
+                        if student.grade
+                        else None
+                    ),
+                    "section": (
+                        student.section.name
+                        if student.section
+                        else None
+                    ),
+                },
+
+                "examination": {
+                    "id": examination.id,
+                    "name": examination.name,
+                    "examination_type": (
+                        examination.examination_type.name
+                        if examination.examination_type
+                        else None
+                    ),
+                    "academic_year": (
+                        examination.academic_year.name
+                        if examination.academic_year
+                        else None
+                    ),
+                    "start_date": examination.start_date,
+                    "end_date": examination.end_date,
+                    "reporting_date": examination.reporting_date,
+                    "status": examination.status,
+                },
+
+                "subjects": subjects,
+            }
+
+            application_logger.info(
+                "hall_ticket_preview_fetched",
+                school_id=str(school.id),
+                student_id=str(student.id),
+                examination_id=str(examination.id),
+                hall_ticket_id=str(hall_ticket.id),
+            )
+
+            return CustomResponse.successResponse(
+                data=data,
+                description="Hall ticket preview fetched successfully.",
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "hall_ticket_preview_failed",
+                error=str(e),
+                school_id=(
+                    str(request.school.id)
+                    if getattr(request, "school", None)
+                    else None
+                ),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to fetch hall ticket preview."
             )
