@@ -331,7 +331,7 @@ class ExaminationDetailAPIView(APIView):
                 "school": {
                     "id":str(examination.school_id),
                     "name": examination.school.name,
-                    "phone_number": examination.phone_number,
+                    "phone_number": examination.school.phone_number,
                 },
 
                 "examination_type": {
