@@ -1095,6 +1095,7 @@ class HallTicketDetailAPIView(APIView):
                 status=HallTicket.Status.PUBLISHED,
             ).select_related(
                 "examination",
+                "examination__school",
                 "examination__examination_type",
                 "examination__academic_year",
             ).first()
@@ -1164,6 +1165,12 @@ class HallTicketDetailAPIView(APIView):
                     "hall_ticket_number": (
                         hall_ticket.hall_ticket_number
                     ),
+                    "school": {
+                        "id": str(school.id),
+                        "name": school.name,
+                        "address": school.address,
+                        "board": school.board,
+                    },
                     "status": hall_ticket.status,
                     "generated_at": (
                         hall_ticket.generated_at.isoformat()
