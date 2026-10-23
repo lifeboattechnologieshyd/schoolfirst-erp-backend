@@ -5957,7 +5957,7 @@ class GenerateReportCardAPIView(APIView):
                         grade=overall_grade,
                         grade_point=overall_grade_point,
                         result=result_status,
-                        status=ReportCard.Status.DRAFT,
+                        status=ReportCard.Status.PUBLISHED,
                     )
 
                     generated += 1
