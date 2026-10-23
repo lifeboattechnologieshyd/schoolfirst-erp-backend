@@ -358,11 +358,10 @@ class TimetableTermUpdateAPIView(APIView):
 
     required_permission = "timetable_term.update"
 
-    def put(self, request):
+    def put(self, request,term_id):
         try:
             school = request.school
 
-            term_id = request.data.get("term_id")
 
             if not term_id:
                 return CustomResponse.errorResponse(
@@ -880,11 +879,10 @@ class TimetablePeriodUpdateAPIView(APIView):
 
     required_permission = "timetable_period.update"
 
-    def put(self, request):
+    def put(self, request,period_id):
         try:
             school = request.school
 
-            period_id = request.data.get("period_id")
 
             if not period_id:
                 return CustomResponse.errorResponse(
@@ -1091,11 +1089,10 @@ class TimetablePeriodDeleteAPIView(APIView):
 
     required_permission = "timetable_period.delete"
 
-    def delete(self, request):
+    def delete(self, request,period_id):
         try:
             school = request.school
 
-            period_id = request.data.get("period_id")
 
             if not period_id:
                 return CustomResponse.errorResponse(

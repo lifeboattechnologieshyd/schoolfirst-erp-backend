@@ -63,6 +63,9 @@ from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdmin
     UpdateOrganizationAPIView, SchoolListAPIView, CreateSchoolAPIView, UpdateSchoolAPIView, CreateBranchAPIView, \
     UpdateBranchAPIView, BranchListAPIView, UserListAPIView, GetSchoolClientInfoAPIView, \
     CreateSchoolConfigurationAPIView, GetSchoolConfigurationAPIView, UpdateSchoolConfigurationAPIView
+from apps.backoffice.views.timetable import TimetableTermCreateAPIView, TimetableTermListAPIView, \
+    TimetableTermUpdateAPIView, TimetablePeriodCreateAPIView, TimetablePeriodListAPIView, TimetablePeriodUpdateAPIView, \
+    TimetablePeriodDeleteAPIView
 from apps.backoffice.views.transport import CreateVehicleAPIView, VehicleListAPIView, UpdateVehicleAPIView, \
     CreateVehicleDocumentAPIView, VehicleDocumentListAPIView, UpdateVehicleDocumentAPIView, CreateRouteAPIView, \
     RouteListAPIView, UpdateRouteAPIView, CreateStopAPIView, StopListAPIView, UpdateStopAPIView, \
@@ -622,6 +625,22 @@ urlpatterns = [
     path("support/ticket-details", AdminSupportTicketDetailAPIView.as_view()),
     path("support/reply", AdminReplySupportTicketAPIView.as_view()),
     path("support/ticket/update", AdminUpdateSupportTicketStatusAPIView.as_view()),
+
+    path("timetable-term/create",TimetableTermCreateAPIView.as_view(),),
+
+    path("timetable-term",TimetableTermListAPIView.as_view(),),
+
+    path("timetable-term/<uuid:term_id>",TimetableTermUpdateAPIView.as_view(),),
+
+    path("timetable/period/create",TimetablePeriodCreateAPIView.as_view(),),
+
+    path("timetable/period",TimetablePeriodListAPIView.as_view(),),
+
+    path("timetable/period/<uuid:period_id>",TimetablePeriodUpdateAPIView.as_view(),),
+
+    path("timetable/period/<uuid:period_id>/delete",TimetablePeriodDeleteAPIView.as_view(),),
+
+
 
 
 
