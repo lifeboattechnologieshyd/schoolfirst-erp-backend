@@ -9,7 +9,8 @@ from apps.backoffice.views.attendance import StaffAttendanceListAPIView, BulkMar
     StudentAttendanceProfileAPIView
 from apps.backoffice.views.bulletin import BulletinCategoryListAPIView, BulletinCategoryCreateAPIView, \
     BulletinCategoryDeleteAPIView, BulletinCategoryUpdateAPIView, BulletinListAPIView, BulletinCreateAPIView, \
-    BulletinUpdateAPIView, BulletinDeleteAPIView
+    BulletinUpdateAPIView, BulletinDeleteAPIView, BulletinBannerCreateAPIView, BulletinBannerListAPIView, \
+    BulletinBannerUpdateAPIView, BulletinBannerDeleteAPIView
 from apps.backoffice.views.contactus import AdminSupportTicketsAPIView, AdminSupportTicketDetailAPIView, \
     AdminReplySupportTicketAPIView, AdminUpdateSupportTicketStatusAPIView
 from apps.backoffice.views.events import CreateCalendarEventAPIView, CalendarEventListAPIView, \
@@ -659,23 +660,12 @@ urlpatterns = [
 
     path("bulletins/<uuid:bulletin_id>/delete",BulletinDeleteAPIView.as_view(),),
 
+    path("bulletin-banner/create",BulletinBannerCreateAPIView.as_view(),),
 
+    path("bulletin-banner",BulletinBannerListAPIView.as_view(),),
 
+    path("bulletin-banner/<uuid:bulletin_id>",BulletinBannerUpdateAPIView.as_view(),),
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    path("bulletin-banner/<uuid:bulletin_id>/delete", BulletinBannerDeleteAPIView.as_view(), ),
 
 ]

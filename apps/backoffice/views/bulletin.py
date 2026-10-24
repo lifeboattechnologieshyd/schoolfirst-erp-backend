@@ -1,10 +1,11 @@
 import uuid
 
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
+from django.db.models import Prefetch
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.bulletin.models import BulletinCategory, Bulletin
+from apps.bulletin.models import BulletinCategory, Bulletin, BulletinAttachment, BulletinBanner
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
@@ -1117,6 +1118,968 @@ class BulletinDeleteAPIView(APIView):
             return CustomResponse.errorResponse(
                 description=(
                     "Failed to delete bulletin."
+                )
+            )
+
+
+class BulletinBannerCreateAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "bulletin.create"
+
+    @transaction.atomic
+    def post(self, request, bulletin_id):
+        try:
+            school = request.school
+
+            # =========================================================
+            # VALIDATE BULLETIN ID
+            # =========================================================
+
+            try:
+                bulletin_uuid = uuid.UUID(
+                    str(bulletin_id)
+                )
+            except (ValueError, TypeError):
+                return CustomResponse.errorResponse(
+                    description="Invalid bulletin_id."
+                )
+
+            # =========================================================
+            # GET BULLETIN
+            # =========================================================
+
+            bulletin = Bulletin.objects.filter(
+                id=bulletin_uuid,
+                school=school,
+                is_active=True,
+            ).first()
+
+            if not bulletin:
+                return CustomResponse.errorResponse(
+                    description="Bulletin not found."
+                )
+
+            # =========================================================
+            # CHECK EXISTING BANNER
+            # =========================================================
+
+            if BulletinBanner.objects.filter(
+                bulletin=bulletin,
+                is_active=True,
+            ).exists():
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Banner already exists for this bulletin."
+                    )
+                )
+
+            # =========================================================
+            # REQUEST DATA
+            # =========================================================
+
+            label = request.data.get("label")
+            headline = request.data.get("headline")
+            sub_text = request.data.get("sub_text")
+            banner_color = request.data.get(
+                "banner_color"
+            )
+
+            # =========================================================
+            # VALIDATE HEADLINE
+            # =========================================================
+
+            if not headline:
+                return CustomResponse.errorResponse(
+                    description="headline is required."
+                )
+
+            headline = str(headline).strip()
+
+            if not headline:
+                return CustomResponse.errorResponse(
+                    description="headline cannot be empty."
+                )
+
+            # =========================================================
+            # VALIDATE COLOR
+            # =========================================================
+
+            if not banner_color:
+                banner_color = (
+                    BulletinBanner
+                    .BannerColor
+                    .INDIGO
+                )
+
+            banner_color = str(
+                banner_color
+            ).upper().strip()
+
+            valid_colors = [
+                choice[0]
+                for choice in (
+                    BulletinBanner
+                    .BannerColor
+                    .choices
+                )
+            ]
+
+            if banner_color not in valid_colors:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Invalid banner_color. "
+                        f"Allowed values: "
+                        f"{', '.join(valid_colors)}."
+                    )
+                )
+
+            # =========================================================
+            # CREATE BANNER
+            # =========================================================
+
+            banner = BulletinBanner.objects.create(
+                bulletin=bulletin,
+
+                label=(
+                    str(label).strip()
+                    if label
+                    else None
+                ),
+
+                headline=headline,
+
+                sub_text=(
+                    str(sub_text).strip()
+                    if sub_text
+                    else None
+                ),
+
+                banner_color=banner_color,
+
+                is_active=True,
+
+                created_by=request.user,
+            )
+
+            # =========================================================
+            # ATTACHMENTS
+            # =========================================================
+            #
+            # Frontend:
+            #
+            # attachments = multiple files
+            #
+            # Example:
+            # attachments: file1.pdf
+            # attachments: file2.pdf
+            # =========================================================
+
+            files = request.FILES.getlist(
+                "attachments"
+            )
+
+            attachment_data = []
+
+            for file in files:
+
+                attachment = (
+                    BulletinAttachment.objects.create(
+                        bulletin=banner,
+
+                        pdf=file.name,
+
+                        name=file.name,
+
+                        is_active=True,
+
+                        created_by=request.user,
+                    )
+                )
+
+                attachment_data.append(
+                    {
+                        "id": str(
+                            attachment.id
+                        ),
+                        "name": attachment.name,
+                        "pdf": attachment.pdf,
+                        "is_active": (
+                            attachment.is_active
+                        ),
+                    }
+                )
+
+            # =========================================================
+            # LOG
+            # =========================================================
+
+            application_logger.info(
+                "Bulletin banner created successfully. "
+                "banner_id=%s bulletin_id=%s "
+                "school_id=%s attachment_count=%s "
+                "created_by=%s",
+                banner.id,
+                bulletin.id,
+                school.id,
+                len(attachment_data),
+                request.user.id,
+            )
+
+            # =========================================================
+            # RESPONSE
+            # =========================================================
+
+            data = {
+                "id": str(banner.id),
+
+                "bulletin_id": str(
+                    banner.bulletin_id
+                ),
+
+                "label": banner.label,
+
+                "headline": banner.headline,
+
+                "sub_text": banner.sub_text,
+
+                "banner_color": banner.banner_color,
+
+                "is_active": banner.is_active,
+
+                "attachments": attachment_data,
+            }
+
+            return CustomResponse.successResponse(
+                data=data,
+                description=(
+                    "Bulletin banner created successfully."
+                ),
+            )
+
+        except IntegrityError:
+
+            application_logger.exception(
+                "Banner already exists for bulletin. "
+                "bulletin_id=%s",
+                bulletin_id,
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Banner already exists for this bulletin."
+                )
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "Error creating bulletin banner. "
+                "bulletin_id=%s error=%s",
+                bulletin_id,
+                str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Failed to create bulletin banner."
+                )
+            )
+
+class BulletinBannerListAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "bulletin.view"
+
+    def get(self, request):
+        try:
+            school = request.school
+
+            # =========================================================
+            # QUERY PARAMETERS
+            # =========================================================
+
+            category_id = request.query_params.get(
+                "category_id"
+            )
+
+            search = request.query_params.get(
+                "search"
+            )
+
+            # =========================================================
+            # BANNERS
+            # =========================================================
+
+            banners = (
+                BulletinBanner.objects
+                .filter(
+                    bulletin__school=school,
+                    bulletin__is_active=True,
+                    is_active=True,
+                )
+                .select_related(
+                    "bulletin",
+                    "bulletin__category",
+                )
+                .prefetch_related(
+                    Prefetch(
+                        "attachments",
+                        queryset=(
+                            BulletinAttachment.objects
+                            .filter(
+                                is_active=True,
+                            )
+                            .order_by(
+                                "-created_at"
+                            )
+                        ),
+                    )
+                )
+                .order_by("-created_at")
+            )
+
+            # =========================================================
+            # CATEGORY FILTER
+            # =========================================================
+
+            if category_id:
+
+                try:
+                    category_uuid = uuid.UUID(
+                        str(category_id)
+                    )
+
+                except (ValueError, TypeError):
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Invalid category_id."
+                        )
+                    )
+
+                banners = banners.filter(
+                    bulletin__category_id=category_uuid
+                )
+
+            # =========================================================
+            # SEARCH
+            # =========================================================
+
+            if search:
+
+                search = search.strip()
+
+                if search:
+
+                    banners = banners.filter(
+                        bulletin__name__icontains=search
+                    )
+
+            # =========================================================
+            # RESPONSE
+            # =========================================================
+
+            data = []
+
+            for banner in banners:
+
+                attachments = []
+
+                for attachment in (
+                    banner.attachments.all()
+                ):
+                    attachments.append(
+                        {
+                            "id": str(
+                                attachment.id
+                            ),
+
+                            "name": (
+                                attachment.name
+                            ),
+
+                            "pdf": (
+                                attachment.pdf
+                            ),
+                        }
+                    )
+
+                data.append(
+                    {
+                        "id": str(
+                            banner.id
+                        ),
+
+                        "bulletin": {
+                            "id": str(
+                                banner.bulletin_id
+                            ),
+
+                            "name": (
+                                banner.bulletin.name
+                            ),
+                        },
+
+                        "category": {
+                            "id": str(
+                                banner
+                                .bulletin
+                                .category_id
+                            ),
+
+                            "name": (
+                                banner
+                                .bulletin
+                                .category
+                                .name
+                            ),
+                        },
+
+                        "label": (
+                            banner.label
+                        ),
+
+                        "headline": (
+                            banner.headline
+                        ),
+
+                        "sub_text": (
+                            banner.sub_text
+                        ),
+
+                        "banner_color": (
+                            banner.banner_color
+                        ),
+
+                        "is_active": (
+                            banner.is_active
+                        ),
+
+                        "attachments": (
+                            attachments
+                        ),
+
+                        "created_at": (
+                            banner.created_at
+                            if banner.created_at
+                            else None
+                        ),
+                    }
+                )
+
+            # =========================================================
+            # LOG
+            # =========================================================
+
+            application_logger.info(
+                "Bulletin banners fetched successfully. "
+                "school_id=%s count=%s",
+                school.id,
+                len(data),
+            )
+
+            # =========================================================
+            # RESPONSE
+            # =========================================================
+
+            return CustomResponse.successResponse(
+                data=data,
+                description=(
+                    "Bulletin banners fetched successfully."
+                ),
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "Error fetching bulletin banners. "
+                "error=%s",
+                str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Failed to fetch bulletin banners."
+                )
+            )
+
+
+class BulletinBannerUpdateAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "bulletin.update"
+
+    @transaction.atomic
+    def put(self, request, bulletin_id):
+        try:
+            school = request.school
+
+            # =========================================================
+            # VALIDATE BULLETIN ID
+            # =========================================================
+
+            try:
+                bulletin_uuid = uuid.UUID(
+                    str(bulletin_id)
+                )
+            except (ValueError, TypeError):
+                return CustomResponse.errorResponse(
+                    description="Invalid bulletin_id."
+                )
+
+            # =========================================================
+            # GET BANNER
+            # =========================================================
+
+            banner = (
+                BulletinBanner.objects
+                .filter(
+                    bulletin_id=bulletin_uuid,
+                    bulletin__school=school,
+                    bulletin__is_active=True,
+                    is_active=True,
+                )
+                .first()
+            )
+
+            if not banner:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Bulletin banner not found."
+                    )
+                )
+
+            update_fields = []
+
+            # =========================================================
+            # LABEL
+            # =========================================================
+
+            if "label" in request.data:
+
+                label = request.data.get("label")
+
+                banner.label = (
+                    str(label).strip()
+                    if label
+                    else None
+                )
+
+                update_fields.append("label")
+
+            # =========================================================
+            # HEADLINE
+            # =========================================================
+
+            if "headline" in request.data:
+
+                headline = request.data.get(
+                    "headline"
+                )
+
+                if headline is None:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "headline cannot be null."
+                        )
+                    )
+
+                headline = str(
+                    headline
+                ).strip()
+
+                if not headline:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "headline cannot be empty."
+                        )
+                    )
+
+                banner.headline = headline
+
+                update_fields.append(
+                    "headline"
+                )
+
+            # =========================================================
+            # SUB TEXT
+            # =========================================================
+
+            if "sub_text" in request.data:
+
+                sub_text = request.data.get(
+                    "sub_text"
+                )
+
+                banner.sub_text = (
+                    str(sub_text).strip()
+                    if sub_text
+                    else None
+                )
+
+                update_fields.append(
+                    "sub_text"
+                )
+
+            # =========================================================
+            # BANNER COLOR
+            # =========================================================
+
+            if "banner_color" in request.data:
+
+                banner_color = request.data.get(
+                    "banner_color"
+                )
+
+                if not banner_color:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "banner_color cannot be empty."
+                        )
+                    )
+
+                banner_color = str(
+                    banner_color
+                ).upper().strip()
+
+                valid_colors = [
+                    choice[0]
+                    for choice in (
+                        BulletinBanner
+                        .BannerColor
+                        .choices
+                    )
+                ]
+
+                if banner_color not in valid_colors:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Invalid banner_color. "
+                            f"Allowed values: "
+                            f"{', '.join(valid_colors)}."
+                        )
+                    )
+
+                banner.banner_color = (
+                    banner_color
+                )
+
+                update_fields.append(
+                    "banner_color"
+                )
+
+            # =========================================================
+            # SAVE BANNER
+            # =========================================================
+
+            if update_fields:
+
+                banner.updated_by = request.user
+
+                update_fields.extend(
+                    [
+                        "updated_by",
+                        "updated_at",
+                    ]
+                )
+
+                banner.save(
+                    update_fields=update_fields
+                )
+
+            # =========================================================
+            # DELETE ATTACHMENTS
+            # =========================================================
+            #
+            # Send:
+            #
+            # remove_attachment_ids:
+            # [
+            #     "uuid1",
+            #     "uuid2"
+            # ]
+            # =========================================================
+
+            remove_attachment_ids = (
+                request.data.get(
+                    "remove_attachment_ids"
+                )
+            )
+
+            if remove_attachment_ids:
+
+                if isinstance(
+                    remove_attachment_ids,
+                    str,
+                ):
+                    remove_attachment_ids = [
+                        remove_attachment_ids
+                    ]
+
+                for attachment_id in (
+                    remove_attachment_ids
+                ):
+
+                    try:
+                        attachment_uuid = uuid.UUID(
+                            str(attachment_id)
+                        )
+                    except (
+                        ValueError,
+                        TypeError,
+                    ):
+                        return CustomResponse.errorResponse(
+                            description=(
+                                "Invalid attachment_id."
+                            )
+                        )
+
+                    attachment = (
+                        BulletinAttachment.objects
+                        .filter(
+                            id=attachment_uuid,
+                            bulletin=banner,
+                            is_active=True,
+                        )
+                        .first()
+                    )
+
+                    if not attachment:
+                        continue
+
+                    attachment.is_active = False
+                    attachment.updated_by = (
+                        request.user
+                    )
+
+                    attachment.save(
+                        update_fields=[
+                            "is_active",
+                            "updated_by",
+                            "updated_at",
+                        ]
+                    )
+
+            # =========================================================
+            # ADD NEW ATTACHMENTS
+            # =========================================================
+
+            files = request.FILES.getlist(
+                "attachments"
+            )
+
+            for file in files:
+
+                BulletinAttachment.objects.create(
+                    bulletin=banner,
+
+                    pdf=file.name,
+
+                    name=file.name,
+
+                    is_active=True,
+
+                    created_by=request.user,
+                )
+
+            # =========================================================
+            # CHECK WHETHER ANYTHING WAS UPDATED
+            # =========================================================
+
+            if (
+                not update_fields
+                and not remove_attachment_ids
+                and not files
+            ):
+                return CustomResponse.errorResponse(
+                    description=(
+                        "No fields provided for update."
+                    )
+                )
+
+            application_logger.info(
+                "Bulletin banner updated successfully. "
+                "banner_id=%s bulletin_id=%s "
+                "school_id=%s updated_by=%s",
+                banner.id,
+                banner.bulletin_id,
+                school.id,
+                request.user.id,
+            )
+
+            # =========================================================
+            # GET CURRENT ATTACHMENTS
+            # =========================================================
+
+            attachments = (
+                BulletinAttachment.objects
+                .filter(
+                    bulletin=banner,
+                    is_active=True,
+                )
+                .order_by("-created_at")
+            )
+
+            attachment_data = []
+
+            for attachment in attachments:
+
+                attachment_data.append(
+                    {
+                        "id": str(
+                            attachment.id
+                        ),
+
+                        "name": (
+                            attachment.name
+                        ),
+
+                        "pdf": (
+                            attachment.pdf
+                        ),
+
+                        "is_active": (
+                            attachment.is_active
+                        ),
+                    }
+                )
+
+            # =========================================================
+            # RESPONSE
+            # =========================================================
+
+            data = {
+                "id": str(banner.id),
+
+                "bulletin_id": str(
+                    banner.bulletin_id
+                ),
+
+                "label": banner.label,
+
+                "headline": banner.headline,
+
+                "sub_text": banner.sub_text,
+
+                "banner_color": banner.banner_color,
+
+                "is_active": banner.is_active,
+
+                "attachments": attachment_data,
+            }
+
+            return CustomResponse.successResponse(
+                data=data,
+                description=(
+                    "Bulletin banner updated successfully."
+                ),
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "Error updating bulletin banner. "
+                "bulletin_id=%s error=%s",
+                bulletin_id,
+                str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Failed to update bulletin banner."
+                )
+            )
+
+class BulletinBannerDeleteAPIView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "bulletin.update"
+
+    def delete(self, request, bulletin_id):
+        try:
+            school = request.school
+
+            try:
+                bulletin_uuid = uuid.UUID(
+                    str(bulletin_id)
+                )
+            except (ValueError, TypeError):
+                return CustomResponse.errorResponse(
+                    description="Invalid bulletin_id."
+                )
+
+            banner = (
+                BulletinBanner.objects
+                .filter(
+                    bulletin_id=bulletin_uuid,
+                    bulletin__school=school,
+                    bulletin__is_active=True,
+                    is_active=True,
+                )
+                .first()
+            )
+
+            if not banner:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Bulletin banner not found."
+                    )
+                )
+
+            banner.is_active = False
+            banner.updated_by = request.user
+
+            banner.save(
+                update_fields=[
+                    "is_active",
+                    "updated_by",
+                    "updated_at",
+                ]
+            )
+
+            application_logger.info(
+                "Bulletin banner deleted successfully. "
+                "banner_id=%s bulletin_id=%s school_id=%s "
+                "deleted_by=%s",
+                banner.id,
+                banner.bulletin_id,
+                school.id,
+                request.user.id,
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "id": str(banner.id),
+                },
+                description=(
+                    "Bulletin banner deleted successfully."
+                ),
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "Error deleting bulletin banner. "
+                "bulletin_id=%s error=%s",
+                bulletin_id,
+                str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Failed to delete bulletin banner."
                 )
             )
 
