@@ -1199,6 +1199,7 @@ class BulletinListAPIView(APIView):
                     "is_pinned": bulletin.is_pinned,
 
                     "is_active": bulletin.is_active,
+                    "priority": bulletin.priority,
 
                     "created_by": {
                         "id": str(staff.id),
@@ -1349,6 +1350,7 @@ class BulletinUpdateAPIView(APIView):
                     "banner_headline"
                 )
 
+
             # ----------------------------------------------------------
             # banner_sub_text REMOVED
             #
@@ -1387,6 +1389,22 @@ class BulletinUpdateAPIView(APIView):
                     is_pinned = is_pinned.lower() == "true"
 
                 bulletin.is_pinned = is_pinned
+
+            if "priority" in request.data:
+                priority = request.data.get("priority")
+
+                valid_statuses = [
+                    choice[0]
+                    for choice in Bulletin.Priority.choices
+                ]
+
+                if priority not in valid_statuses:
+                    return CustomResponse.errorResponse(
+                        "Invalid Priority. "
+                        f"Allowed values: {', '.join(valid_statuses)}"
+                    )
+
+                bulletin.priority = priority
 
             # ==========================================================
             # STATUS
