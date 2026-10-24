@@ -5,7 +5,8 @@ from django.db.models import Prefetch, Q
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.bulletin.models import Bulletin, BulletinAttachment, BulletinRead
+from apps.bulletin.models import Bulletin, BulletinAttachment, BulletinRead, BulletinAudience
+from apps.school.models.school import Student
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.utils.logger import application_logger
 
@@ -17,9 +18,77 @@ class BulletinLISTAPIView(APIView):
         try:
             school = request.school
 
+
+
+            student_id = request.query_params.get("student_id")
             category_id = request.query_params.get("category_id")
             search = request.query_params.get("search")
             is_pinned = request.query_params.get("is_pinned")
+
+
+
+            if not student_id:
+                return CustomResponse.errorResponse(
+                    "student_id is required."
+                )
+
+            try:
+                student_id = uuid.UUID(str(student_id))
+            except (ValueError, TypeError):
+                return CustomResponse.errorResponse(
+                    "Invalid student_id."
+                )
+
+            # ----------------------------------------------------------
+            # GET STUDENT
+            # ----------------------------------------------------------
+
+            student = (
+                Student.objects
+                .filter(
+                    id=student_id,
+                    school=school,
+                    status=Student.Status.ACTIVE,
+                )
+                .select_related(
+                    "grade",
+                    "section",
+                )
+                .first()
+            )
+
+            if not student:
+                return CustomResponse.errorResponse(
+                    "Student not found."
+                )
+
+
+
+            # parent_mobile = getattr(
+            #     request.user,
+            #     "mobile",
+            #     None,
+            # )
+            #
+            # if parent_mobile:
+            #     is_parent_student = (
+            #         Student.objects
+            #         .filter(
+            #             id=student.id,
+            #             school=school,
+            #         )
+            #         .filter(
+            #             Q(father_mobile=parent_mobile)
+            #             | Q(mother_mobile=parent_mobile)
+            #             | Q(guardian_mobile=parent_mobile)
+            #         )
+            #         .exists()
+            #     )
+            #
+            #     if not is_parent_student:
+            #         return CustomResponse.errorResponse(
+            #             "You do not have access to this student."
+            #         )
 
             # ----------------------------------------------------------
             # GET BULLETINS
@@ -31,17 +100,67 @@ class BulletinLISTAPIView(APIView):
                     school=school,
                     is_active=True,
                     category__is_active=True,
-                    status=Bulletin.Status.PUBLISHED
+                    status=Bulletin.Status.PUBLISHED,
                 )
-                .select_related("category")
+                .filter(
+                    # ----------------------------------------------
+                    # ALL PARENTS
+                    # ----------------------------------------------
+                    Q(
+                        audiences__audience_type=(
+                            BulletinAudience.AudienceType.ALL_PARENTS
+                        ),
+                        audiences__is_active=True,
+                    )
+
+                    |
+
+                    # ----------------------------------------------
+                    # STUDENT'S GRADE
+                    # ----------------------------------------------
+                    Q(
+                        audiences__audience_type=(
+                            BulletinAudience.AudienceType.GRADE
+                        ),
+                        audiences__grade_id=student.grade_id,
+                        audiences__is_active=True,
+                    )
+
+                    |
+
+                    # ----------------------------------------------
+                    # STUDENT'S SECTION
+                    # ----------------------------------------------
+                    Q(
+                        audiences__audience_type=(
+                            BulletinAudience.AudienceType.SECTION
+                        ),
+                        audiences__grade_id=student.grade_id,
+                        audiences__section_id=student.section_id,
+                        audiences__is_active=True,
+                    )
+                )
+                .select_related(
+                    "category",
+                )
                 .prefetch_related(
+                    Prefetch(
+                        "audiences",
+                        queryset=BulletinAudience.objects.filter(
+                            is_active=True
+                        ).select_related(
+                            "grade",
+                            "section",
+                        ),
+                    ),
                     Prefetch(
                         "attachments",
                         queryset=BulletinAttachment.objects.filter(
                             is_active=True
                         ).order_by("-created_at"),
-                    )
+                    ),
                 )
+                .distinct()
                 .order_by(
                     "-is_pinned",
                     "-created_at",
@@ -54,7 +173,9 @@ class BulletinLISTAPIView(APIView):
 
             if category_id:
                 try:
-                    category_id = uuid.UUID(str(category_id))
+                    category_id = uuid.UUID(
+                        str(category_id)
+                    )
                 except (ValueError, TypeError):
                     return CustomResponse.errorResponse(
                         "Invalid category_id."
@@ -80,6 +201,7 @@ class BulletinLISTAPIView(APIView):
             # ----------------------------------------------------------
 
             if is_pinned is not None:
+
                 if str(is_pinned).lower() == "true":
                     bulletins = bulletins.filter(
                         is_pinned=True
@@ -108,6 +230,43 @@ class BulletinLISTAPIView(APIView):
             data = []
 
             for bulletin in page:
+
+                audience_data = []
+
+                for audience in bulletin.audiences.all():
+
+                    audience_data.append({
+                        "id": str(audience.id),
+
+                        "audience_type": (
+                            audience.audience_type
+                        ),
+
+                        "grade_id": (
+                            str(audience.grade_id)
+                            if audience.grade_id
+                            else None
+                        ),
+
+                        "grade_name": (
+                            audience.grade.name
+                            if audience.grade
+                            else None
+                        ),
+
+                        "section_id": (
+                            str(audience.section_id)
+                            if audience.section_id
+                            else None
+                        ),
+
+                        "section_name": (
+                            audience.section.name
+                            if audience.section
+                            else None
+                        ),
+                    })
+
                 data.append({
                     "id": str(bulletin.id),
 
@@ -125,9 +284,10 @@ class BulletinLISTAPIView(APIView):
                     "banner": {
                         "label": bulletin.banner_label,
                         "headline": bulletin.banner_headline,
-                        "sub_text": bulletin.banner_sub_text,
                         "banner_color": bulletin.banner_color,
                     },
+
+                    "audiences": audience_data,
 
                     "is_pinned": bulletin.is_pinned,
 
@@ -141,33 +301,37 @@ class BulletinLISTAPIView(APIView):
                     ],
 
                     "created_at": bulletin.created_at,
+
                     "status": bulletin.status,
                 })
 
+            # ----------------------------------------------------------
+            # LOG
+            # ----------------------------------------------------------
+
             application_logger.info(
-                "Bulletins fetched successfully. "
-                "school_id=%s page=%s",
+                "Student bulletins fetched successfully. "
+                "school_id=%s student_id=%s page=%s",
                 school.id,
+                student.id,
                 request.query_params.get("page", 1),
             )
 
             # ----------------------------------------------------------
-            # PAGINATED RESPONSE
+            # RESPONSE
             # ----------------------------------------------------------
 
             return CustomResponse.successResponse(
                 {
-                    "count": paginator.page.paginator.count,
-                    "next": paginator.get_next_link(),
-                    "previous": paginator.get_previous_link(),
-                    "results": data,
+                    "data": data,
                 },
                 "Bulletins fetched successfully.",
             )
 
         except Exception as exc:
+
             application_logger.exception(
-                "Error fetching bulletins: %s",
+                "Error fetching student bulletins: %s",
                 exc,
             )
 
