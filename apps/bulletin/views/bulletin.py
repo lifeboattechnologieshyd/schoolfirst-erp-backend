@@ -180,9 +180,11 @@ class BulletinReadAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
-    def post(self, request, bulletin_id):
+    def post(self, request):
         try:
             school = request.school
+            bulletin_id = request.data.get("bulletin_id")
+
 
             # ----------------------------------------------------------
             # VALIDATE BULLETIN ID
