@@ -59,6 +59,12 @@ class Bulletin(AuditModel):
         PUBLISHED = "PUBLISHED", "Published"
         SCHEDULED = "SCHEDULED", "Scheduled"
 
+    class Priority(models.TextChoices):
+        LOW = "LOW", "Low"
+        NORMAL = "NORMAL", "Normal"
+        HIGH = "HIGH", "High"
+        URGENT = "URGENT", "Urgent"
+
 
 
     class BannerColor(models.TextChoices):
@@ -144,6 +150,12 @@ class Bulletin(AuditModel):
     is_active = models.BooleanField(
         default=True,
     )
+    priority = models.CharField(
+        max_length=20,
+        choices=Priority.choices,
+        default=Priority.NORMAL,
+    )
+
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
