@@ -1174,7 +1174,7 @@ class HallTicketDetailAPIView(APIView):
                     examination__examination_grades__grade_id=(
                         student.grade_id
                     ),
-                    status=HallTicket.Status.PUBLISHED,
+                    status=HallTicket.Status.GENERATED,
                 )
                 .select_related(
                     "examination",
