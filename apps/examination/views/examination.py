@@ -346,7 +346,7 @@ class ExaminationDetailAPIView(APIView):
                         examination.academic_year.id
                     ),
                     "name": str(
-                        examination.academic_year
+                        examination.academic_year.name
                     ),
                 } if examination.academic_year else None,
 

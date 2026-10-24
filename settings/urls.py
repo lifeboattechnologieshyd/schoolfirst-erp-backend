@@ -104,6 +104,8 @@ if "apps.contactus" in settings.INSTALLED_APPS:
     urlpatterns.append(path("contactus/", include("apps.contactus.urls")))
 if "apps.timetable" in settings.INSTALLED_APPS:
     urlpatterns.append(path("timetable/", include("apps.timetable.urls")))
+if "apps.bulletin" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("bulletin/", include("apps.bulletin.urls")))
 
 
 ####################################

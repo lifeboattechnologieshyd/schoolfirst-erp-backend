@@ -7,6 +7,9 @@ from apps.backoffice.views.attendance import StaffAttendanceListAPIView, BulkMar
     UpdateStudentAttendanceAPIView, BulkMarkStudentAttendanceAPIView, StudentLeaveListAPIView, StaffLeaveListAPIView, \
     StaffLeaveRequestAPIView, StudentLeaveReviewAPIView, StaffLeaveReviewAPIView, StudentAttendanceSummaryAPIView, \
     StudentAttendanceProfileAPIView
+from apps.backoffice.views.bulletin import BulletinCategoryListAPIView, BulletinCategoryCreateAPIView, \
+    BulletinCategoryDeleteAPIView, BulletinCategoryUpdateAPIView, BulletinListAPIView, BulletinCreateAPIView, \
+    BulletinUpdateAPIView, BulletinDeleteAPIView
 from apps.backoffice.views.contactus import AdminSupportTicketsAPIView, AdminSupportTicketDetailAPIView, \
     AdminReplySupportTicketAPIView, AdminUpdateSupportTicketStatusAPIView
 from apps.backoffice.views.events import CreateCalendarEventAPIView, CalendarEventListAPIView, \
@@ -639,6 +642,22 @@ urlpatterns = [
     path("timetable/period/<uuid:period_id>",TimetablePeriodUpdateAPIView.as_view(),),
 
     path("timetable/period/<uuid:period_id>/delete",TimetablePeriodDeleteAPIView.as_view(),),
+
+    path("bulletin/categories",BulletinCategoryListAPIView.as_view(),),
+
+    path("bulletin/categories/create",BulletinCategoryCreateAPIView.as_view(),),
+
+    path("bulletin/categories/<uuid:category_id>",BulletinCategoryUpdateAPIView.as_view(),),
+
+    path("bulletin/categories/<uuid:category_id>/delete",BulletinCategoryDeleteAPIView.as_view(),),
+
+    path("bulletins",BulletinListAPIView.as_view(),),
+
+    path("bulletins/create",BulletinCreateAPIView.as_view(),),
+
+    path("bulletins/<uuid:bulletin_id>",BulletinUpdateAPIView.as_view(),),
+
+    path("bulletins/<uuid:bulletin_id>/delete",BulletinDeleteAPIView.as_view(),),
 
 
 
