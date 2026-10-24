@@ -1252,7 +1252,6 @@ class HallTicketDetailAPIView(APIView):
                     ),
 
                     "instructions": schedule.instructions,
-                    "pdf": schedule.pdf,
                 })
 
             # ------------------------------------------------------
@@ -1287,6 +1286,7 @@ class HallTicketDetailAPIView(APIView):
                         if hall_ticket.published_at
                         else None
                     ),
+                    "pdf": hall_ticket.pdf,
                 },
 
                 "student": {
