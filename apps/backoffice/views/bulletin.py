@@ -2,12 +2,13 @@ import json
 import uuid
 
 from django.db import IntegrityError, transaction
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.bulletin.models import BulletinCategory, Bulletin, BulletinAttachment, BulletinAudience, BulletinRead
-from apps.school.models.school import Section, Grade
+from apps.core.models import UserMaster
+from apps.school.models.school import Section, Grade, Student
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
