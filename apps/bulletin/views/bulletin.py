@@ -279,3 +279,5 @@ class BulletinReadAPIView(APIView):
             return CustomResponse.errorResponse(
                 "Unable to mark bulletin as read."
             )
+
+

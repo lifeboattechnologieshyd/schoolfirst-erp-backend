@@ -157,13 +157,7 @@ class Bulletin(AuditModel):
         related_name="created_bulletins",
     )
 
-    updated_by = models.ForeignKey(
-        UserMaster,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="updated_bulletins",
-    )
+
 
     class Meta:
         db_table = "bulletins"
