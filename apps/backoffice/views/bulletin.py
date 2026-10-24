@@ -1,3 +1,4 @@
+import json
 import uuid
 
 from django.db import IntegrityError, transaction
@@ -470,7 +471,6 @@ class BulletinCategoryDeleteAPIView(APIView):
                 )
             )
 
-
 class BulletinCreateAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "bulletin.create"
@@ -485,7 +485,10 @@ class BulletinCreateAPIView(APIView):
             summary = request.data.get("summary")
             message_body = request.data.get("message_body")
 
-            # Banner
+            # ----------------------------------------------------------
+            # BANNER
+            # ----------------------------------------------------------
+
             banner_label = request.data.get("banner_label")
             banner_headline = request.data.get("banner_headline")
             banner_sub_text = request.data.get("banner_sub_text")
@@ -506,6 +509,7 @@ class BulletinCreateAPIView(APIView):
                     "Title is required."
                 )
 
+            # Category UUID validation
             try:
                 category_id = uuid.UUID(str(category_id))
             except (ValueError, TypeError):
@@ -513,6 +517,7 @@ class BulletinCreateAPIView(APIView):
                     "Invalid category_id."
                 )
 
+            # Category belongs to current school
             category = BulletinCategory.objects.filter(
                 id=category_id,
                 school=school,
@@ -524,7 +529,10 @@ class BulletinCreateAPIView(APIView):
                     "Bulletin category not found."
                 )
 
-            # Validate banner color
+            # ----------------------------------------------------------
+            # BANNER COLOR VALIDATION
+            # ----------------------------------------------------------
+
             if banner_color:
                 valid_colors = [
                     choice[0]
@@ -536,6 +544,25 @@ class BulletinCreateAPIView(APIView):
                         f"Invalid banner_color. "
                         f"Allowed values: {', '.join(valid_colors)}"
                     )
+
+            # ----------------------------------------------------------
+            # ATTACHMENTS
+            # ----------------------------------------------------------
+
+            attachments = request.data.get("attachments", [])
+
+            if isinstance(attachments, str):
+                try:
+                    attachments = json.loads(attachments)
+                except json.JSONDecodeError:
+                    return CustomResponse.errorResponse(
+                        "Invalid attachments format."
+                    )
+
+            if not isinstance(attachments, list):
+                return CustomResponse.errorResponse(
+                    "Attachments must be a list."
+                )
 
             # ----------------------------------------------------------
             # CREATE BULLETIN
@@ -563,22 +590,35 @@ class BulletinCreateAPIView(APIView):
             )
 
             # ----------------------------------------------------------
-            # ATTACHMENTS
+            # CREATE ATTACHMENTS
             # ----------------------------------------------------------
-
-            attachments = request.FILES.getlist("attachments")
 
             attachment_data = []
 
-            for file in attachments:
+            for attachment_item in attachments:
+
+                if not isinstance(attachment_item, dict):
+                    return CustomResponse.errorResponse(
+                        "Each attachment must be an object."
+                    )
+
+                name = attachment_item.get("name")
+                pdf = attachment_item.get("pdf")
+
+                if not name:
+                    return CustomResponse.errorResponse(
+                        "Attachment name is required."
+                    )
+
+                if not pdf:
+                    return CustomResponse.errorResponse(
+                        f"PDF is required for attachment '{name}'."
+                    )
+
                 attachment = BulletinAttachment.objects.create(
                     bulletin=bulletin,
-                    name=file.name,
-
-                    # Replace this with your existing
-                    # S3 / MinIO upload logic.
-                    pdf=file.name,
-
+                    name=name,
+                    pdf=pdf,
                     is_active=True,
                     created_by=request.user,
                 )
@@ -589,6 +629,10 @@ class BulletinCreateAPIView(APIView):
                     "pdf": attachment.pdf,
                 })
 
+            # ----------------------------------------------------------
+            # LOG
+            # ----------------------------------------------------------
+
             application_logger.info(
                 "Bulletin created successfully. "
                 "bulletin_id=%s school_id=%s",
@@ -596,13 +640,19 @@ class BulletinCreateAPIView(APIView):
                 school.id,
             )
 
+            # ----------------------------------------------------------
+            # RESPONSE
+            # ----------------------------------------------------------
+
             return CustomResponse.successResponse(
                 {
                     "id": str(bulletin.id),
+
                     "category": {
                         "id": str(category.id),
                         "name": category.name,
                     },
+
                     "title": bulletin.title,
                     "summary": bulletin.summary,
                     "message_body": bulletin.message_body,
@@ -631,6 +681,7 @@ class BulletinCreateAPIView(APIView):
             return CustomResponse.errorResponse(
                 "Unable to create bulletin."
             )
+
 
 class BulletinListAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
