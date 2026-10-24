@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 
 from apps.bulletin.models import BulletinCategory, Bulletin, BulletinAttachment, BulletinAudience, BulletinRead
 from apps.core.models import UserMaster
-from apps.school.models.school import Section, Grade, Student
+from apps.school.models.school import Section, Grade, Student, Staff
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
@@ -885,7 +885,7 @@ class BulletinListAPIView(APIView):
                     is_active=True,
                     category__is_active=True,
                 )
-                .select_related("category")
+                .select_related("category","created_by",)
                 .prefetch_related(
                     Prefetch(
                         "audiences",
@@ -908,6 +908,7 @@ class BulletinListAPIView(APIView):
                     "-created_at",
                 )
             )
+
 
             # ----------------------------------------------------------
             # CATEGORY FILTER
@@ -958,6 +959,12 @@ class BulletinListAPIView(APIView):
             data = []
 
             for bulletin in bulletins:
+
+                staff = Staff.objects.filter(
+                    user_id=bulletin.created_by_id,
+                    school=school,
+                    status=Staff.Status.ACTIVE,
+                ).first()
 
                 # ======================================================
                 # AUDIENCE
@@ -1151,6 +1158,7 @@ class BulletinListAPIView(APIView):
                         2,
                     )
 
+
                 # ======================================================
                 # RESPONSE
                 # ======================================================
@@ -1188,6 +1196,11 @@ class BulletinListAPIView(APIView):
                     "is_pinned": bulletin.is_pinned,
 
                     "is_active": bulletin.is_active,
+
+                    "created_by": {
+                        "id": str(staff.id),
+                        "name": staff.name,
+                    } if staff else None,
 
                     "attachments": [
                         {
