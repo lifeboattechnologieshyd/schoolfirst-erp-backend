@@ -625,8 +625,11 @@ urlpatterns = [
     path("student/attendance/profile",StudentAttendanceProfileAPIView.as_view(),),
 
     path("support/tickets", AdminSupportTicketsAPIView.as_view()),
+
     path("support/ticket-details", AdminSupportTicketDetailAPIView.as_view()),
+
     path("support/reply", AdminReplySupportTicketAPIView.as_view()),
+
     path("support/ticket/update", AdminUpdateSupportTicketStatusAPIView.as_view()),
 
     path("timetable-term/create",TimetableTermCreateAPIView.as_view(),),
