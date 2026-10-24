@@ -1038,85 +1038,184 @@ class HallTicketDetailAPIView(APIView):
         student_id = request.query_params.get("student_id")
         examination_id = request.query_params.get("examination_id")
 
+        # ----------------------------------------------------------
+        # REQUEST LOG
+        # ----------------------------------------------------------
+
+        application_logger.info(
+            "app_hall_ticket_fetch_requested",
+            school_id=str(school.id) if school else None,
+            student_id=str(student_id) if student_id else None,
+            examination_id=str(examination_id) if examination_id else None,
+            requested_by=str(request.user.id),
+        )
+
+        # ----------------------------------------------------------
+        # SCHOOL VALIDATION
+        # ----------------------------------------------------------
+
         if not school:
+            application_logger.warning(
+                "app_hall_ticket_fetch_failed_school_not_found",
+                student_id=str(student_id) if student_id else None,
+                examination_id=str(examination_id)
+                if examination_id
+                else None,
+                requested_by=str(request.user.id),
+            )
+
             return CustomResponse.errorResponse(
                 description="School not found."
             )
 
+        # ----------------------------------------------------------
+        # REQUEST VALIDATION
+        # ----------------------------------------------------------
+
         if not student_id:
+            application_logger.warning(
+                "app_hall_ticket_fetch_failed_student_id_missing",
+                school_id=str(school.id),
+                requested_by=str(request.user.id),
+            )
+
             return CustomResponse.errorResponse(
                 description="Student ID is required."
             )
 
         if not examination_id:
+            application_logger.warning(
+                "app_hall_ticket_fetch_failed_examination_id_missing",
+                school_id=str(school.id),
+                student_id=str(student_id),
+                requested_by=str(request.user.id),
+            )
+
             return CustomResponse.errorResponse(
                 description="Examination ID is required."
             )
 
+        # ----------------------------------------------------------
+        # UUID VALIDATION
+        # ----------------------------------------------------------
+
         try:
             student_uuid = uuid.UUID(str(student_id))
             examination_uuid = uuid.UUID(str(examination_id))
+
         except (ValueError, TypeError, AttributeError):
+            application_logger.warning(
+                "app_hall_ticket_fetch_failed_invalid_uuid",
+                school_id=str(school.id),
+                student_id=str(student_id),
+                examination_id=str(examination_id),
+                requested_by=str(request.user.id),
+            )
+
             return CustomResponse.errorResponse(
                 description="Invalid student ID or examination ID."
             )
 
         try:
-            # -----------------------------------------
-            # Get student
-            # -----------------------------------------
-            student = Student.objects.filter(
-                id=student_uuid,
-                school=school,
-            ).select_related(
-                "grade",
-                "section",
-                "branch",
-            ).first()
+            # ------------------------------------------------------
+            # GET STUDENT
+            # ------------------------------------------------------
+
+            student = (
+                Student.objects
+                .filter(
+                    id=student_uuid,
+                    school=school,
+                )
+                .select_related(
+                    "grade",
+                    "section",
+                    "branch",
+                )
+                .first()
+            )
 
             if not student:
+                application_logger.warning(
+                    "app_hall_ticket_fetch_failed_student_not_found",
+                    school_id=str(school.id),
+                    student_id=str(student_uuid),
+                    examination_id=str(examination_uuid),
+                    requested_by=str(request.user.id),
+                )
+
                 return CustomResponse.errorResponse(
                     description="Student not found."
                 )
 
             if not student.grade_id:
+                application_logger.warning(
+                    "app_hall_ticket_fetch_failed_student_grade_missing",
+                    school_id=str(school.id),
+                    student_id=str(student.id),
+                    examination_id=str(examination_uuid),
+                    requested_by=str(request.user.id),
+                )
+
                 return CustomResponse.errorResponse(
                     description="Student grade not found."
                 )
 
-            # -----------------------------------------
-            # Get hall ticket
-            # -----------------------------------------
-            hall_ticket = HallTicket.objects.filter(
-                student=student,
-                examination_id=examination_uuid,
-                examination__school=school,
-                examination__examination_grades__grade_id=student.grade_id,
-                status=HallTicket.Status.PUBLISHED,
-            ).select_related(
-                "examination",
-                "examination__school",
-                "examination__examination_type",
-                "examination__academic_year",
-            ).first()
+            # ------------------------------------------------------
+            # GET HALL TICKET
+            # ------------------------------------------------------
+
+            hall_ticket = (
+                HallTicket.objects
+                .filter(
+                    student=student,
+                    examination_id=examination_uuid,
+                    examination__school=school,
+                    examination__examination_grades__grade_id=(
+                        student.grade_id
+                    ),
+                    status=HallTicket.Status.PUBLISHED,
+                )
+                .select_related(
+                    "examination",
+                    "examination__school",
+                    "examination__examination_type",
+                    "examination__academic_year",
+                )
+                .first()
+            )
 
             if not hall_ticket:
+                application_logger.warning(
+                    "app_hall_ticket_fetch_failed_hall_ticket_not_found",
+                    school_id=str(school.id),
+                    student_id=str(student.id),
+                    examination_id=str(examination_uuid),
+                    requested_by=str(request.user.id),
+                )
+
                 return CustomResponse.errorResponse(
                     description="Hall ticket not found."
                 )
 
-            # -----------------------------------------
-            # Get examination schedules
-            # -----------------------------------------
-            schedules = ExaminationSchedule.objects.filter(
-                examination=hall_ticket.examination,
-                grade_id=student.grade_id,
-            ).select_related(
-                "subject",
-                "grade",
-            ).order_by(
-                "exam_date",
-                "start_time",
+            # ------------------------------------------------------
+            # GET EXAMINATION SCHEDULES
+            # ------------------------------------------------------
+
+            schedules = (
+                ExaminationSchedule.objects
+                .filter(
+                    examination=hall_ticket.examination,
+                    grade_id=student.grade_id,
+                )
+                .select_related(
+                    "subject",
+                    "grade",
+                )
+                .order_by(
+                    "exam_date",
+                    "start_time",
+                )
             )
 
             schedule_data = []
@@ -1156,27 +1255,33 @@ class HallTicketDetailAPIView(APIView):
                     "pdf": schedule.pdf,
                 })
 
-            # -----------------------------------------
-            # Response
-            # -----------------------------------------
+            # ------------------------------------------------------
+            # RESPONSE DATA
+            # ------------------------------------------------------
+
             data = {
                 "hall_ticket": {
                     "id": str(hall_ticket.id),
+
                     "hall_ticket_number": (
                         hall_ticket.hall_ticket_number
                     ),
+
                     "school": {
                         "id": str(school.id),
                         "name": school.name,
                         "address": school.address,
                         "board": school.board,
                     },
+
                     "status": hall_ticket.status,
+
                     "generated_at": (
                         hall_ticket.generated_at.isoformat()
                         if hall_ticket.generated_at
                         else None
                     ),
+
                     "published_at": (
                         hall_ticket.published_at.isoformat()
                         if hall_ticket.published_at
@@ -1187,7 +1292,9 @@ class HallTicketDetailAPIView(APIView):
                 "student": {
                     "id": str(student.id),
                     "name": student.name,
-                    "admission_number": student.admission_number,
+                    "admission_number": (
+                        student.admission_number
+                    ),
 
                     "grade": {
                         "id": str(student.grade_id),
@@ -1197,17 +1304,26 @@ class HallTicketDetailAPIView(APIView):
                     "section": {
                         "id": str(student.section_id),
                         "name": student.section.name,
-                    } if student.section_id else None,
+                    }
+                    if student.section_id
+                    else None,
 
                     "branch": {
                         "id": str(student.branch_id),
                         "name": student.branch.name,
-                    } if student.branch_id else None,
+                    }
+                    if student.branch_id
+                    else None,
                 },
 
                 "examination": {
-                    "id": str(hall_ticket.examination_id),
-                    "name": hall_ticket.examination.name,
+                    "id": str(
+                        hall_ticket.examination_id
+                    ),
+
+                    "name": (
+                        hall_ticket.examination.name
+                    ),
 
                     "examination_type": {
                         "id": str(
@@ -1215,13 +1331,15 @@ class HallTicketDetailAPIView(APIView):
                             .examination
                             .examination_type_id
                         ),
+
                         "name": (
                             hall_ticket
                             .examination
                             .examination_type
                             .name
                         ),
-                    } if hall_ticket.examination.examination_type
+                    }
+                    if hall_ticket.examination.examination_type
                     else None,
 
                     "academic_year": {
@@ -1230,12 +1348,14 @@ class HallTicketDetailAPIView(APIView):
                             .examination
                             .academic_year_id
                         ),
+
                         "name": str(
                             hall_ticket
                             .examination
                             .academic_year
                         ),
-                    } if hall_ticket.examination.academic_year
+                    }
+                    if hall_ticket.examination.academic_year
                     else None,
 
                     "start_date": str(
@@ -1256,13 +1376,19 @@ class HallTicketDetailAPIView(APIView):
                             .examination
                             .reporting_date
                         )
-                        if hall_ticket.examination.reporting_date
+                        if hall_ticket
+                        .examination
+                        .reporting_date
                         else None
                     ),
                 },
 
                 "schedules": schedule_data,
             }
+
+            # ------------------------------------------------------
+            # SUCCESS LOG
+            # ------------------------------------------------------
 
             application_logger.info(
                 "app_hall_ticket_fetched",
@@ -1271,6 +1397,8 @@ class HallTicketDetailAPIView(APIView):
                 examination_id=str(
                     hall_ticket.examination_id
                 ),
+                hall_ticket_id=str(hall_ticket.id),
+                schedule_count=len(schedule_data),
                 requested_by=str(request.user.id),
             )
 
@@ -1280,16 +1408,22 @@ class HallTicketDetailAPIView(APIView):
             )
 
         except Exception:
+            # ------------------------------------------------------
+            # EXCEPTION LOG
+            # ------------------------------------------------------
+
             application_logger.exception(
                 "app_hall_ticket_fetch_failed",
                 school_id=str(school.id),
                 student_id=str(student_id),
                 examination_id=str(examination_id),
+                requested_by=str(request.user.id),
             )
 
             return CustomResponse.errorResponse(
                 description="Unable to fetch hall ticket."
             )
+
 
 class ExaminationAttendanceAPIView(APIView):
     permission_classes = [IsAuthenticated]
