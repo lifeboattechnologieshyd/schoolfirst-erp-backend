@@ -65,6 +65,13 @@ class Bulletin(AuditModel):
         on_delete=models.CASCADE,
         related_name="bulletins",
     )
+    category = models.ForeignKey(
+        BulletinCategory,
+        on_delete=models.CASCADE,
+        related_name="bulletins",
+        null=True,
+        blank=True,
+    )
 
     name = models.CharField(
         max_length=100,
