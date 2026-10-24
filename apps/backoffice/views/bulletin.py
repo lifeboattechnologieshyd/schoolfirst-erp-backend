@@ -587,6 +587,7 @@ class BulletinCreateAPIView(APIView):
                 is_active=True,
 
                 created_by=request.user,
+                status=Bulletin.Status.DRAFT,
             )
 
             # ----------------------------------------------------------
@@ -792,6 +793,7 @@ class BulletinListAPIView(APIView):
                     ],
 
                     "created_at": bulletin.created_at,
+                    "status": bulletin.status,
                 })
 
             application_logger.info(
@@ -940,6 +942,10 @@ class BulletinUpdateAPIView(APIView):
                 )
 
             bulletin.updated_by = request.user
+            if "status" in request.data:
+                bulletin.status = request.data.get("status")
+
+
 
             bulletin.save()
 

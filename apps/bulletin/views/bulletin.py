@@ -30,6 +30,7 @@ class BulletinLISTAPIView(APIView):
                     school=school,
                     is_active=True,
                     category__is_active=True,
+                    status=Bulletin.Status.PUBLISHED
                 )
                 .select_related("category")
                 .prefetch_related(

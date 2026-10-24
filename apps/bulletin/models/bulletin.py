@@ -53,6 +53,10 @@ class Bulletin(AuditModel):
     objects = SoftDeleteManager()
     all_objects = models.Manager()
 
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "Draft"
+        PUBLISHED = "PUBLISHED", "Published"
+
 
 
     class BannerColor(models.TextChoices):
@@ -137,6 +141,11 @@ class Bulletin(AuditModel):
 
     is_active = models.BooleanField(
         default=True,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRAFT,
     )
 
     class Meta:
