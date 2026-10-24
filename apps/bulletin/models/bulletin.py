@@ -147,7 +147,6 @@ class Bulletin(AuditModel):
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
-        default=Status.DRAFT,
     )
     created_by = models.ForeignKey(
         UserMaster,

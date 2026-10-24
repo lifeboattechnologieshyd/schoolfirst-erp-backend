@@ -492,6 +492,7 @@ class BulletinCreateAPIView(APIView):
             banner_headline = request.data.get("banner_headline")
             banner_color = request.data.get("banner_color")
             is_pinned = request.data.get("is_pinned", False)
+            status = request.data.get("status")
 
             # Audience
             audiences = request.data.get("audiences", [])
@@ -586,8 +587,9 @@ class BulletinCreateAPIView(APIView):
 
                 is_pinned=is_pinned,
                 is_active=True,
+                status=status,
 
-                created_by=str(request.user.id),
+                created_by=request.user,
 
             )
 
