@@ -587,7 +587,8 @@ class BulletinCreateAPIView(APIView):
                 is_pinned=is_pinned,
                 is_active=True,
 
-                created_by=request.user,
+                created_by=str(request.user.id),
+
             )
 
             # ----------------------------------------------------------
