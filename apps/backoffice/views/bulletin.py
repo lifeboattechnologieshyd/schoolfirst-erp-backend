@@ -6,7 +6,8 @@ from django.db.models import Prefetch
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.bulletin.models import BulletinCategory, Bulletin, BulletinAttachment
+from apps.bulletin.models import BulletinCategory, Bulletin, BulletinAttachment, BulletinAudience, BulletinRead
+from apps.school.models.school import Section, Grade
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
@@ -485,18 +486,17 @@ class BulletinCreateAPIView(APIView):
             summary = request.data.get("summary")
             message_body = request.data.get("message_body")
 
-            # ----------------------------------------------------------
-            # BANNER
-            # ----------------------------------------------------------
-
+            # Banner
             banner_label = request.data.get("banner_label")
             banner_headline = request.data.get("banner_headline")
-            banner_sub_text = request.data.get("banner_sub_text")
             banner_color = request.data.get("banner_color")
             is_pinned = request.data.get("is_pinned", False)
 
+            # Audience
+            audiences = request.data.get("audiences", [])
+
             # ----------------------------------------------------------
-            # VALIDATION
+            # BASIC VALIDATION
             # ----------------------------------------------------------
 
             if not category_id:
@@ -509,7 +509,6 @@ class BulletinCreateAPIView(APIView):
                     "Title is required."
                 )
 
-            # Category UUID validation
             try:
                 category_id = uuid.UUID(str(category_id))
             except (ValueError, TypeError):
@@ -517,7 +516,6 @@ class BulletinCreateAPIView(APIView):
                     "Invalid category_id."
                 )
 
-            # Category belongs to current school
             category = BulletinCategory.objects.filter(
                 id=category_id,
                 school=school,
@@ -530,7 +528,7 @@ class BulletinCreateAPIView(APIView):
                 )
 
             # ----------------------------------------------------------
-            # BANNER COLOR VALIDATION
+            # BANNER COLOR
             # ----------------------------------------------------------
 
             if banner_color:
@@ -544,6 +542,214 @@ class BulletinCreateAPIView(APIView):
                         f"Invalid banner_color. "
                         f"Allowed values: {', '.join(valid_colors)}"
                     )
+
+            # ----------------------------------------------------------
+            # PARSE AUDIENCES
+            # ----------------------------------------------------------
+
+            if isinstance(audiences, str):
+                try:
+                    audiences = json.loads(audiences)
+                except json.JSONDecodeError:
+                    return CustomResponse.errorResponse(
+                        "Invalid audiences format."
+                    )
+
+            if not isinstance(audiences, list):
+                return CustomResponse.errorResponse(
+                    "Audiences must be a list."
+                )
+
+            if not audiences:
+                return CustomResponse.errorResponse(
+                    "At least one audience is required."
+                )
+
+            # ----------------------------------------------------------
+            # CREATE BULLETIN
+            # ----------------------------------------------------------
+
+            bulletin = Bulletin.objects.create(
+                school=school,
+                category=category,
+                title=title,
+                summary=summary,
+                message_body=message_body,
+
+                banner_label=banner_label,
+                banner_headline=banner_headline,
+                banner_color=(
+                    banner_color
+                    or Bulletin.BannerColor.INDIGO
+                ),
+
+                is_pinned=is_pinned,
+                is_active=True,
+
+                created_by=request.user,
+            )
+
+            # ----------------------------------------------------------
+            # CREATE AUDIENCES
+            # ----------------------------------------------------------
+
+            audience_data = []
+
+            for audience_item in audiences:
+
+                if not isinstance(audience_item, dict):
+                    return CustomResponse.errorResponse(
+                        "Each audience must be an object."
+                    )
+
+                audience_type = audience_item.get(
+                    "audience_type"
+                )
+
+                grade_id = audience_item.get("grade_id")
+                section_id = audience_item.get("section_id")
+
+                valid_audience_types = [
+                    choice[0]
+                    for choice in BulletinAudience.AudienceType.choices
+                ]
+
+                if audience_type not in valid_audience_types:
+                    return CustomResponse.errorResponse(
+                        f"Invalid audience_type. "
+                        f"Allowed values: "
+                        f"{', '.join(valid_audience_types)}"
+                    )
+
+                # ------------------------------------------------------
+                # ALL PARENTS
+                # ------------------------------------------------------
+
+                if audience_type == (
+                    BulletinAudience.AudienceType.ALL_PARENTS
+                ):
+                    if grade_id or section_id:
+                        return CustomResponse.errorResponse(
+                            "Grade or section is not allowed "
+                            "for ALL_PARENTS."
+                        )
+
+                    audience = BulletinAudience.objects.create(
+                        bulletin=bulletin,
+                        audience_type=audience_type,
+                        is_active=True,
+                        created_by=request.user,
+                    )
+
+                # ------------------------------------------------------
+                # GRADE
+                # ------------------------------------------------------
+
+                elif audience_type == (
+                    BulletinAudience.AudienceType.GRADE
+                ):
+                    if not grade_id:
+                        return CustomResponse.errorResponse(
+                            "grade_id is required for GRADE audience."
+                        )
+
+                    if section_id:
+                        return CustomResponse.errorResponse(
+                            "section_id is not allowed for GRADE audience."
+                        )
+
+                    try:
+                        grade_id = uuid.UUID(str(grade_id))
+                    except (ValueError, TypeError):
+                        return CustomResponse.errorResponse(
+                            "Invalid grade_id."
+                        )
+
+                    # Replace Grade with your actual model import.
+                    grade = Grade.objects.filter(
+                        id=grade_id,
+                        school=school,
+                    ).first()
+
+                    if not grade:
+                        return CustomResponse.errorResponse(
+                            "Grade not found."
+                        )
+
+                    audience = BulletinAudience.objects.create(
+                        bulletin=bulletin,
+                        audience_type=audience_type,
+                        grade=grade,
+                        is_active=True,
+                        created_by=request.user,
+                    )
+
+                # ------------------------------------------------------
+                # SECTION
+                # ------------------------------------------------------
+
+                else:
+                    if not grade_id:
+                        return CustomResponse.errorResponse(
+                            "grade_id is required for SECTION audience."
+                        )
+
+                    if not section_id:
+                        return CustomResponse.errorResponse(
+                            "section_id is required for SECTION audience."
+                        )
+
+                    try:
+                        grade_id = uuid.UUID(str(grade_id))
+                        section_id = uuid.UUID(str(section_id))
+                    except (ValueError, TypeError):
+                        return CustomResponse.errorResponse(
+                            "Invalid grade_id or section_id."
+                        )
+
+                    grade = Grade.objects.filter(
+                        id=grade_id,
+                        school=school,
+                    ).first()
+
+                    if not grade:
+                        return CustomResponse.errorResponse(
+                            "Grade not found."
+                        )
+
+                    section = Section.objects.filter(
+                        id=section_id,
+                        grade=grade,
+                    ).first()
+
+                    if not section:
+                        return CustomResponse.errorResponse(
+                            "Section not found for the selected grade."
+                        )
+
+                    audience = BulletinAudience.objects.create(
+                        bulletin=bulletin,
+                        audience_type=audience_type,
+                        grade=grade,
+                        section=section,
+                        is_active=True,
+                        created_by=request.user,
+                    )
+
+                audience_data.append({
+                    "id": str(audience.id),
+                    "audience_type": audience.audience_type,
+                    "grade_id": (
+                        str(audience.grade_id)
+                        if audience.grade_id
+                        else None
+                    ),
+                    "section_id": (
+                        str(audience.section_id)
+                        if audience.section_id
+                        else None
+                    ),
+                })
 
             # ----------------------------------------------------------
             # ATTACHMENTS
@@ -563,36 +769,6 @@ class BulletinCreateAPIView(APIView):
                 return CustomResponse.errorResponse(
                     "Attachments must be a list."
                 )
-
-            # ----------------------------------------------------------
-            # CREATE BULLETIN
-            # ----------------------------------------------------------
-
-            bulletin = Bulletin.objects.create(
-                school=school,
-                category=category,
-                title=title,
-                summary=summary,
-                message_body=message_body,
-
-                banner_label=banner_label,
-                banner_headline=banner_headline,
-                banner_sub_text=banner_sub_text,
-                banner_color=(
-                    banner_color
-                    or Bulletin.BannerColor.INDIGO
-                ),
-
-                is_pinned=is_pinned,
-                is_active=True,
-
-                created_by=request.user,
-                status=Bulletin.Status.DRAFT,
-            )
-
-            # ----------------------------------------------------------
-            # CREATE ATTACHMENTS
-            # ----------------------------------------------------------
 
             attachment_data = []
 
@@ -661,9 +837,10 @@ class BulletinCreateAPIView(APIView):
                     "banner": {
                         "label": bulletin.banner_label,
                         "headline": bulletin.banner_headline,
-                        "sub_text": bulletin.banner_sub_text,
-                        "banner_color": bulletin.banner_color,
+                        "color": bulletin.banner_color,
                     },
+
+                    "audiences": audience_data,
 
                     "is_pinned": bulletin.is_pinned,
                     "is_active": bulletin.is_active,
@@ -696,6 +873,10 @@ class BulletinListAPIView(APIView):
             search = request.query_params.get("search")
             is_pinned = request.query_params.get("is_pinned")
 
+            # ----------------------------------------------------------
+            # GET BULLETINS
+            # ----------------------------------------------------------
+
             bulletins = (
                 Bulletin.objects
                 .filter(
@@ -706,11 +887,24 @@ class BulletinListAPIView(APIView):
                 .select_related("category")
                 .prefetch_related(
                     Prefetch(
+                        "audiences",
+                        queryset=BulletinAudience.objects.filter(
+                            is_active=True
+                        ).select_related(
+                            "grade",
+                            "section",
+                        ),
+                    ),
+                    Prefetch(
                         "attachments",
                         queryset=BulletinAttachment.objects.filter(
                             is_active=True
                         ).order_by("-created_at"),
-                    )
+                    ),
+                )
+                .order_by(
+                    "-is_pinned",
+                    "-created_at",
                 )
             )
 
@@ -736,7 +930,9 @@ class BulletinListAPIView(APIView):
 
             if search:
                 bulletins = bulletins.filter(
-                    title__icontains=search
+                    Q(title__icontains=search)
+                    | Q(summary__icontains=search)
+                    | Q(message_body__icontains=search)
                 )
 
             # ----------------------------------------------------------
@@ -748,19 +944,216 @@ class BulletinListAPIView(APIView):
                     bulletins = bulletins.filter(
                         is_pinned=True
                     )
+
                 elif str(is_pinned).lower() == "false":
                     bulletins = bulletins.filter(
                         is_pinned=False
                     )
 
-            bulletins = bulletins.order_by(
-                "-is_pinned",
-                "-created_at",
-            )
+            # ----------------------------------------------------------
+            # RESPONSE DATA
+            # ----------------------------------------------------------
 
             data = []
 
             for bulletin in bulletins:
+
+                # ======================================================
+                # AUDIENCE
+                # ======================================================
+
+                audience_data = []
+
+                # UserMaster IDs targeted by this bulletin
+                targeted_parent_ids = set()
+
+                for audience in bulletin.audiences.all():
+
+                    # --------------------------------------------------
+                    # ALL PARENTS
+                    # --------------------------------------------------
+
+                    if (
+                        audience.audience_type
+                        == BulletinAudience.AudienceType.ALL_PARENTS
+                    ):
+                        audience_name = "All Parents"
+
+                        students = Student.objects.filter(
+                            school=school,
+                            status=Student.Status.ACTIVE,
+                        ).filter(
+                            Q(father_mobile__isnull=False)
+                            | Q(mother_mobile__isnull=False)
+                            | Q(guardian_mobile__isnull=False)
+                        )
+
+                    # --------------------------------------------------
+                    # GRADE
+                    # --------------------------------------------------
+
+                    elif (
+                        audience.audience_type
+                        == BulletinAudience.AudienceType.GRADE
+                    ):
+                        audience_name = (
+                            f"Grade {audience.grade.name}"
+                        )
+
+                        students = Student.objects.filter(
+                            school=school,
+                            grade_id=audience.grade_id,
+                            status=Student.Status.ACTIVE,
+                        ).filter(
+                            Q(father_mobile__isnull=False)
+                            | Q(mother_mobile__isnull=False)
+                            | Q(guardian_mobile__isnull=False)
+                        )
+
+                    # --------------------------------------------------
+                    # SECTION
+                    # --------------------------------------------------
+
+                    else:
+                        audience_name = (
+                            f"Grade {audience.grade.name} · "
+                            f"Sec {audience.section.name}"
+                        )
+
+                        students = Student.objects.filter(
+                            school=school,
+                            grade_id=audience.grade_id,
+                            section_id=audience.section_id,
+                            status=Student.Status.ACTIVE,
+                        ).filter(
+                            Q(father_mobile__isnull=False)
+                            | Q(mother_mobile__isnull=False)
+                            | Q(guardian_mobile__isnull=False)
+                        )
+
+                    # --------------------------------------------------
+                    # GET PARENT MOBILE NUMBERS
+                    # --------------------------------------------------
+
+                    parent_mobiles = set()
+
+                    for student in students.only(
+                        "father_mobile",
+                        "mother_mobile",
+                        "guardian_mobile",
+                    ):
+                        if student.father_mobile:
+                            parent_mobiles.add(
+                                student.father_mobile
+                            )
+
+                        if student.mother_mobile:
+                            parent_mobiles.add(
+                                student.mother_mobile
+                            )
+
+                        if student.guardian_mobile:
+                            parent_mobiles.add(
+                                student.guardian_mobile
+                            )
+
+                    # --------------------------------------------------
+                    # RESOLVE USERMASTER IDS
+                    # --------------------------------------------------
+
+                    if parent_mobiles:
+                        parent_ids = (
+                            UserMaster.objects
+                            .filter(
+                                mobile__in=parent_mobiles,
+                            )
+                            .values_list(
+                                "id",
+                                flat=True,
+                            )
+                        )
+
+                        targeted_parent_ids.update(
+                            parent_ids
+                        )
+
+                    audience_data.append({
+                        "id": str(audience.id),
+
+                        "audience_type": (
+                            audience.audience_type
+                        ),
+
+                        "grade_id": (
+                            str(audience.grade_id)
+                            if audience.grade_id
+                            else None
+                        ),
+
+                        "grade_name": (
+                            audience.grade.name
+                            if audience.grade
+                            else None
+                        ),
+
+                        "section_id": (
+                            str(audience.section_id)
+                            if audience.section_id
+                            else None
+                        ),
+
+                        "section_name": (
+                            audience.section.name
+                            if audience.section
+                            else None
+                        ),
+
+                        "name": audience_name,
+                    })
+
+                # ======================================================
+                # READ COUNT
+                # ======================================================
+
+                targeted_parent_ids = set(
+                    targeted_parent_ids
+                )
+
+                targeted_parent_count = len(
+                    targeted_parent_ids
+                )
+
+                read_parent_ids = set(
+                    BulletinRead.objects.filter(
+                        bulletin=bulletin,
+                        parent_id__in=targeted_parent_ids,
+                    ).values_list(
+                        "parent_id",
+                        flat=True,
+                    )
+                )
+
+                read_count = len(read_parent_ids)
+
+                # ======================================================
+                # READ PERCENTAGE
+                # ======================================================
+
+                read_percentage = 0
+
+                if targeted_parent_count:
+                    read_percentage = round(
+                        (
+                            read_count
+                            / targeted_parent_count
+                        ) * 100,
+                        2,
+                    )
+
+                # ======================================================
+                # RESPONSE
+                # ======================================================
+
                 data.append({
                     "id": str(bulletin.id),
 
@@ -770,17 +1163,29 @@ class BulletinListAPIView(APIView):
                     },
 
                     "title": bulletin.title,
+
                     "summary": bulletin.summary,
+
                     "message_body": bulletin.message_body,
 
                     "banner": {
                         "label": bulletin.banner_label,
                         "headline": bulletin.banner_headline,
-                        "sub_text": bulletin.banner_sub_text,
                         "banner_color": bulletin.banner_color,
                     },
 
+                    "audiences": audience_data,
+
+                    "targeted_parent_count": (
+                        targeted_parent_count
+                    ),
+
+                    "read_count": read_count,
+
+                    "read_percentage": read_percentage,
+
                     "is_pinned": bulletin.is_pinned,
+
                     "is_active": bulletin.is_active,
 
                     "attachments": [
@@ -793,8 +1198,15 @@ class BulletinListAPIView(APIView):
                     ],
 
                     "created_at": bulletin.created_at,
+
+                    "updated_at": bulletin.updated_at,
+
                     "status": bulletin.status,
                 })
+
+            # ----------------------------------------------------------
+            # LOG
+            # ----------------------------------------------------------
 
             application_logger.info(
                 "Bulletins fetched successfully. "
@@ -825,8 +1237,13 @@ class BulletinUpdateAPIView(APIView):
 
     @transaction.atomic
     def put(self, request, bulletin_id):
+
         try:
             school = request.school
+
+            # ==========================================================
+            # BULLETIN ID
+            # ==========================================================
 
             try:
                 bulletin_id = uuid.UUID(str(bulletin_id))
@@ -834,6 +1251,10 @@ class BulletinUpdateAPIView(APIView):
                 return CustomResponse.errorResponse(
                     "Invalid bulletin_id."
                 )
+
+            # ==========================================================
+            # GET BULLETIN
+            # ==========================================================
 
             bulletin = Bulletin.objects.filter(
                 id=bulletin_id,
@@ -846,13 +1267,14 @@ class BulletinUpdateAPIView(APIView):
                     "Bulletin not found."
                 )
 
-            # ----------------------------------------------------------
+            # ==========================================================
             # CATEGORY
-            # ----------------------------------------------------------
+            # ==========================================================
 
-            category_id = request.data.get("category_id")
+            if "category_id" in request.data:
 
-            if category_id:
+                category_id = request.data.get("category_id")
+
                 try:
                     category_id = uuid.UUID(str(category_id))
                 except (ValueError, TypeError):
@@ -873,11 +1295,12 @@ class BulletinUpdateAPIView(APIView):
 
                 bulletin.category = category
 
-            # ----------------------------------------------------------
+            # ==========================================================
             # CONTENT
-            # ----------------------------------------------------------
+            # ==========================================================
 
             if "title" in request.data:
+
                 title = request.data.get("title")
 
                 if not title:
@@ -895,9 +1318,9 @@ class BulletinUpdateAPIView(APIView):
                     "message_body"
                 )
 
-            # ----------------------------------------------------------
+            # ==========================================================
             # BANNER
-            # ----------------------------------------------------------
+            # ==========================================================
 
             if "banner_label" in request.data:
                 bulletin.banner_label = request.data.get(
@@ -909,12 +1332,15 @@ class BulletinUpdateAPIView(APIView):
                     "banner_headline"
                 )
 
-            if "banner_sub_text" in request.data:
-                bulletin.banner_sub_text = request.data.get(
-                    "banner_sub_text"
-                )
+            # ----------------------------------------------------------
+            # banner_sub_text REMOVED
+            #
+            # In the new design, SUB-TEXT represents Audience.
+            # Audience is stored in BulletinAudience.
+            # ----------------------------------------------------------
 
             if "banner_color" in request.data:
+
                 banner_color = request.data.get(
                     "banner_color"
                 )
@@ -926,44 +1352,295 @@ class BulletinUpdateAPIView(APIView):
 
                 if banner_color not in valid_colors:
                     return CustomResponse.errorResponse(
-                        f"Invalid banner_color. "
+                        "Invalid banner_color. "
                         f"Allowed values: {', '.join(valid_colors)}"
                     )
 
                 bulletin.banner_color = banner_color
 
-            # ----------------------------------------------------------
+            # ==========================================================
             # PINNED
-            # ----------------------------------------------------------
+            # ==========================================================
 
             if "is_pinned" in request.data:
-                bulletin.is_pinned = request.data.get(
-                    "is_pinned"
-                )
+
+                is_pinned = request.data.get("is_pinned")
+
+                if isinstance(is_pinned, str):
+                    is_pinned = is_pinned.lower() == "true"
+
+                bulletin.is_pinned = is_pinned
+
+            # ==========================================================
+            # STATUS
+            # ==========================================================
+
+            if "status" in request.data:
+
+                status = request.data.get("status")
+
+                valid_statuses = [
+                    choice[0]
+                    for choice in Bulletin.Status.choices
+                ]
+
+                if status not in valid_statuses:
+                    return CustomResponse.errorResponse(
+                        "Invalid status. "
+                        f"Allowed values: {', '.join(valid_statuses)}"
+                    )
+
+                bulletin.status = status
+
+            # ==========================================================
+            # UPDATED BY
+            # ==========================================================
 
             bulletin.updated_by = request.user
-            if "status" in request.data:
-                bulletin.status = request.data.get("status")
-
-
 
             bulletin.save()
 
-            # ----------------------------------------------------------
+            # ==========================================================
+            # AUDIENCE
+            # ==========================================================
+
+            if "audiences" in request.data:
+
+                audiences = request.data.get("audiences")
+
+                # Multipart/form-data may send JSON as string
+                if isinstance(audiences, str):
+                    try:
+                        audiences = json.loads(audiences)
+                    except json.JSONDecodeError:
+                        return CustomResponse.errorResponse(
+                            "Invalid audiences format."
+                        )
+
+                if not isinstance(audiences, list):
+                    return CustomResponse.errorResponse(
+                        "Audiences must be a list."
+                    )
+
+                # ------------------------------------------------------
+                # Validate everything BEFORE deleting existing audiences
+                # ------------------------------------------------------
+
+                validated_audiences = []
+
+                for audience_item in audiences:
+
+                    if not isinstance(audience_item, dict):
+                        return CustomResponse.errorResponse(
+                            "Each audience must be an object."
+                        )
+
+                    audience_type = audience_item.get(
+                        "audience_type"
+                    )
+
+                    valid_audience_types = [
+                        choice[0]
+                        for choice in BulletinAudience.AudienceType.choices
+                    ]
+
+                    if audience_type not in valid_audience_types:
+                        return CustomResponse.errorResponse(
+                            "Invalid audience_type. "
+                            f"Allowed values: "
+                            f"{', '.join(valid_audience_types)}"
+                        )
+
+                    grade_id = audience_item.get("grade_id")
+                    section_id = audience_item.get("section_id")
+
+                    # --------------------------------------------------
+                    # ALL PARENTS
+                    # --------------------------------------------------
+
+                    if (
+                        audience_type
+                        == BulletinAudience.AudienceType.ALL_PARENTS
+                    ):
+
+                        if grade_id or section_id:
+                            return CustomResponse.errorResponse(
+                                "grade_id and section_id must be empty "
+                                "for ALL_PARENTS."
+                            )
+
+                        validated_audiences.append({
+                            "audience_type": audience_type,
+                            "grade_id": None,
+                            "section_id": None,
+                        })
+
+                    # --------------------------------------------------
+                    # GRADE
+                    # --------------------------------------------------
+
+                    elif (
+                        audience_type
+                        == BulletinAudience.AudienceType.GRADE
+                    ):
+
+                        if not grade_id:
+                            return CustomResponse.errorResponse(
+                                "grade_id is required for GRADE audience."
+                            )
+
+                        try:
+                            grade_id = uuid.UUID(
+                                str(grade_id)
+                            )
+                        except (ValueError, TypeError):
+                            return CustomResponse.errorResponse(
+                                "Invalid grade_id."
+                            )
+
+                        grade_exists = Grade.objects.filter(
+                            id=grade_id,
+                            school=school,
+                            is_active=True,
+                        ).exists()
+
+                        if not grade_exists:
+                            return CustomResponse.errorResponse(
+                                "Grade not found."
+                            )
+
+                        if section_id:
+                            return CustomResponse.errorResponse(
+                                "section_id must be empty "
+                                "for GRADE audience."
+                            )
+
+                        validated_audiences.append({
+                            "audience_type": audience_type,
+                            "grade_id": grade_id,
+                            "section_id": None,
+                        })
+
+                    # --------------------------------------------------
+                    # SECTION
+                    # --------------------------------------------------
+
+                    elif (
+                        audience_type
+                        == BulletinAudience.AudienceType.SECTION
+                    ):
+
+                        if not grade_id:
+                            return CustomResponse.errorResponse(
+                                "grade_id is required for SECTION audience."
+                            )
+
+                        if not section_id:
+                            return CustomResponse.errorResponse(
+                                "section_id is required for SECTION audience."
+                            )
+
+                        try:
+                            grade_id = uuid.UUID(
+                                str(grade_id)
+                            )
+
+                            section_id = uuid.UUID(
+                                str(section_id)
+                            )
+
+                        except (ValueError, TypeError):
+                            return CustomResponse.errorResponse(
+                                "Invalid grade_id or section_id."
+                            )
+
+                        grade_exists = Grade.objects.filter(
+                            id=grade_id,
+                            school=school,
+                            is_active=True,
+                        ).exists()
+
+                        if not grade_exists:
+                            return CustomResponse.errorResponse(
+                                "Grade not found."
+                            )
+
+                        section_exists = Section.objects.filter(
+                            id=section_id,
+                            grade_id=grade_id,
+                            is_active=True,
+                        ).exists()
+
+                        if not section_exists:
+                            return CustomResponse.errorResponse(
+                                "Section not found for the selected grade."
+                            )
+
+                        validated_audiences.append({
+                            "audience_type": audience_type,
+                            "grade_id": grade_id,
+                            "section_id": section_id,
+                        })
+
+                # ------------------------------------------------------
+                # REMOVE OLD AUDIENCES
+                # ------------------------------------------------------
+
+                BulletinAudience.objects.filter(
+                    bulletin=bulletin,
+                    is_active=True,
+                ).update(
+                    is_active=False,
+                    updated_by=request.user,
+                )
+
+                # ------------------------------------------------------
+                # CREATE NEW AUDIENCES
+                # ------------------------------------------------------
+
+                for audience in validated_audiences:
+
+                    BulletinAudience.objects.create(
+                        bulletin=bulletin,
+                        audience_type=audience["audience_type"],
+                        grade_id=audience["grade_id"],
+                        section_id=audience["section_id"],
+                        is_active=True,
+                        created_by=request.user,
+                    )
+
+            # ==========================================================
             # REMOVE ATTACHMENTS
-            # ----------------------------------------------------------
+            # ==========================================================
 
             remove_attachment_ids = request.data.get(
                 "remove_attachment_ids"
             )
 
             if remove_attachment_ids:
+
                 if isinstance(remove_attachment_ids, str):
-                    remove_attachment_ids = [
-                        item.strip()
-                        for item in remove_attachment_ids.split(",")
-                        if item.strip()
-                    ]
+
+                    try:
+                        remove_attachment_ids = json.loads(
+                            remove_attachment_ids
+                        )
+
+                    except json.JSONDecodeError:
+
+                        remove_attachment_ids = [
+                            item.strip()
+                            for item in remove_attachment_ids.split(",")
+                            if item.strip()
+                        ]
+
+                if not isinstance(
+                    remove_attachment_ids,
+                    list,
+                ):
+                    return CustomResponse.errorResponse(
+                        "remove_attachment_ids must be a list."
+                    )
 
                 BulletinAttachment.objects.filter(
                     id__in=remove_attachment_ids,
@@ -974,25 +1651,30 @@ class BulletinUpdateAPIView(APIView):
                     updated_by=request.user,
                 )
 
-            # ----------------------------------------------------------
+            # ==========================================================
             # ADD NEW ATTACHMENTS
-            # ----------------------------------------------------------
+            # ==========================================================
 
             attachments = request.FILES.getlist(
                 "attachments"
             )
 
             for file in attachments:
+
                 BulletinAttachment.objects.create(
                     bulletin=bulletin,
                     name=file.name,
 
-                    # Replace with actual S3 / MinIO URL.
+                    # Replace with actual uploaded URL
                     pdf=file.name,
 
                     is_active=True,
                     created_by=request.user,
                 )
+
+            # ==========================================================
+            # LOG
+            # ==========================================================
 
             application_logger.info(
                 "Bulletin updated successfully. "
@@ -1000,6 +1682,10 @@ class BulletinUpdateAPIView(APIView):
                 bulletin.id,
                 school.id,
             )
+
+            # ==========================================================
+            # RESPONSE
+            # ==========================================================
 
             return CustomResponse.successResponse(
                 {
@@ -1009,6 +1695,7 @@ class BulletinUpdateAPIView(APIView):
             )
 
         except Exception as exc:
+
             application_logger.exception(
                 "Error updating bulletin: %s",
                 exc,
@@ -1017,6 +1704,7 @@ class BulletinUpdateAPIView(APIView):
             return CustomResponse.errorResponse(
                 "Unable to update bulletin."
             )
+
 
 class BulletinDeleteAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]

@@ -1,10 +1,11 @@
 import uuid
 
+from django.db import IntegrityError, transaction
 from django.db.models import Prefetch, Q
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.bulletin.models import Bulletin, BulletinAttachment
+from apps.bulletin.models import Bulletin, BulletinAttachment, BulletinRead
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.utils.logger import application_logger
 
@@ -172,4 +173,107 @@ class BulletinLISTAPIView(APIView):
 
             return CustomResponse.errorResponse(
                 "Unable to fetch bulletins."
+            )
+
+
+class BulletinReadAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, bulletin_id):
+        try:
+            school = request.school
+
+            # ----------------------------------------------------------
+            # VALIDATE BULLETIN ID
+            # ----------------------------------------------------------
+
+            try:
+                bulletin_id = uuid.UUID(str(bulletin_id))
+            except (ValueError, TypeError):
+                return CustomResponse.errorResponse(
+                    "Invalid bulletin_id."
+                )
+
+            # ----------------------------------------------------------
+            # GET BULLETIN
+            # ----------------------------------------------------------
+
+            bulletin = Bulletin.objects.filter(
+                id=bulletin_id,
+                school=school,
+                is_active=True,
+            ).first()
+
+            if not bulletin:
+                return CustomResponse.errorResponse(
+                    "Bulletin not found."
+                )
+
+            # ----------------------------------------------------------
+            # CREATE READ RECORD
+            # ----------------------------------------------------------
+
+            bulletin_read, created = BulletinRead.objects.get_or_create(
+                bulletin=bulletin,
+                parent=request.user,
+            )
+
+            application_logger.info(
+                "Bulletin read successfully. "
+                "bulletin_id=%s parent_id=%s created=%s",
+                bulletin.id,
+                request.user.id,
+                created,
+            )
+
+            # ----------------------------------------------------------
+            # RESPONSE
+            # ----------------------------------------------------------
+
+            return CustomResponse.successResponse(
+                {
+                    "bulletin_id": str(bulletin.id),
+                    "is_read": True,
+                    "read_at": bulletin_read.read_at,
+                },
+                "Bulletin marked as read.",
+            )
+
+        except IntegrityError:
+            # Handles concurrent requests safely
+            bulletin_read = BulletinRead.objects.filter(
+                bulletin_id=bulletin_id,
+                parent=request.user,
+            ).first()
+
+            if bulletin_read:
+                return CustomResponse.successResponse(
+                    {
+                        "bulletin_id": str(bulletin_id),
+                        "is_read": True,
+                        "read_at": bulletin_read.read_at,
+                    },
+                    "Bulletin already marked as read.",
+                )
+
+            application_logger.exception(
+                "Integrity error while marking bulletin as read. "
+                "bulletin_id=%s parent_id=%s",
+                bulletin_id,
+                request.user.id,
+            )
+
+            return CustomResponse.errorResponse(
+                "Unable to mark bulletin as read."
+            )
+
+        except Exception as exc:
+            application_logger.exception(
+                "Error marking bulletin as read: %s",
+                exc,
+            )
+
+            return CustomResponse.errorResponse(
+                "Unable to mark bulletin as read."
             )
