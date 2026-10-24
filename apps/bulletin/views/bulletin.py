@@ -5,11 +5,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.bulletin.models import Bulletin, BulletinAttachment
-from shared.mixins import CustomResponse
+from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.utils.logger import application_logger
 
 
-class BulletinLISTAPIView(APIView):
+class BulletinListAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -21,7 +21,7 @@ class BulletinLISTAPIView(APIView):
             is_pinned = request.query_params.get("is_pinned")
 
             # ----------------------------------------------------------
-            # GET ACTIVE BULLETINS
+            # GET BULLETINS
             # ----------------------------------------------------------
 
             bulletins = (
@@ -89,12 +89,23 @@ class BulletinLISTAPIView(APIView):
                     )
 
             # ----------------------------------------------------------
-            # RESPONSE
+            # PAGINATION
+            # ----------------------------------------------------------
+
+            paginator = CustomPageNumberPagination()
+
+            page = paginator.paginate_queryset(
+                bulletins,
+                request,
+            )
+
+            # ----------------------------------------------------------
+            # RESPONSE DATA
             # ----------------------------------------------------------
 
             data = []
 
-            for bulletin in bulletins:
+            for bulletin in page:
                 data.append({
                     "id": str(bulletin.id),
 
@@ -132,13 +143,22 @@ class BulletinLISTAPIView(APIView):
 
             application_logger.info(
                 "Bulletins fetched successfully. "
-                "school_id=%s count=%s",
+                "school_id=%s page=%s",
                 school.id,
-                len(data),
+                request.query_params.get("page", 1),
             )
 
+            # ----------------------------------------------------------
+            # PAGINATED RESPONSE
+            # ----------------------------------------------------------
+
             return CustomResponse.successResponse(
-                data,
+                {
+                    "count": paginator.page.paginator.count,
+                    "next": paginator.get_next_link(),
+                    "previous": paginator.get_previous_link(),
+                    "results": data,
+                },
                 "Bulletins fetched successfully.",
             )
 
