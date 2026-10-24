@@ -49,64 +49,11 @@ class BulletinCategory(AuditModel):
     def __str__(self):
         return self.name
 
-
 class Bulletin(AuditModel):
     objects = SoftDeleteManager()
     all_objects = models.Manager()
 
-    id = models.UUIDField(
-        primary_key=True,
-        default=uuid.uuid4,
-        editable=False,
-    )
 
-    school = models.ForeignKey(
-        School,
-        on_delete=models.CASCADE,
-        related_name="bulletins",
-    )
-    category = models.ForeignKey(
-        BulletinCategory,
-        on_delete=models.CASCADE,
-        related_name="bulletins",
-        null=True,
-        blank=True,
-    )
-
-    name = models.CharField(
-        max_length=100,
-    )
-
-    summary = models.TextField(
-        null=True,
-        blank=True,
-    )
-
-    description = models.TextField(
-        null=True,
-        blank=True,
-    )
-
-    is_active = models.BooleanField(
-        default=True,
-    )
-
-    class Meta:
-        db_table = "bulletins"
-
-        indexes = [
-            models.Index(
-                fields=["school", "is_active"]
-            ),
-        ]
-
-    def __str__(self):
-        return self.name
-
-
-class BulletinBanner(AuditModel):
-    objects = SoftDeleteManager()
-    all_objects = models.Manager()
 
     class BannerColor(models.TextChoices):
         INDIGO = "INDIGO", "Indigo"
@@ -120,25 +67,58 @@ class BulletinBanner(AuditModel):
         editable=False,
     )
 
-    bulletin = models.OneToOneField(
-        "Bulletin",
+    school = models.ForeignKey(
+        School,
         on_delete=models.CASCADE,
-        related_name="banner",
+        related_name="bulletins",
     )
 
-    label = models.CharField(
+    # Category
+    category = models.ForeignKey(
+        "BulletinCategory",
+        on_delete=models.PROTECT,
+        related_name="bulletins",
+        null=True,
+        blank=True,
+    )
+
+    # ------------------------------------------------------------------
+    # CONTENT
+    # ------------------------------------------------------------------
+
+    title = models.CharField(
+        max_length=200,null=True,
+        blank=True,
+    )
+
+    summary = models.CharField(
+        max_length=90,
+        null=True,
+        blank=True,
+    )
+
+    message_body = models.TextField(
+        null=True,
+        blank=True,
+    )
+
+    # ------------------------------------------------------------------
+    # BANNER
+    # ------------------------------------------------------------------
+
+    banner_label = models.CharField(
         max_length=100,
         null=True,
         blank=True,
     )
 
-    headline = models.CharField(
+    banner_headline = models.CharField(
         max_length=200,
         null=True,
         blank=True,
     )
 
-    sub_text = models.CharField(
+    banner_sub_text = models.CharField(
         max_length=300,
         null=True,
         blank=True,
@@ -150,21 +130,37 @@ class BulletinBanner(AuditModel):
         default=BannerColor.INDIGO,
     )
 
+
+    is_pinned = models.BooleanField(
+        default=False,
+    )
+
     is_active = models.BooleanField(
         default=True,
     )
 
     class Meta:
-        db_table = "bulletin_banners"
+        db_table = "bulletins"
 
         indexes = [
             models.Index(
-                fields=["bulletin", "is_active"]
+                fields=["school", "is_active"],
             ),
+            models.Index(
+                fields=["school", "category", "is_active"],
+            ),
+            models.Index(
+                fields=["school", "is_pinned", "is_active"],
+            ),
+
         ]
 
+        ordering = ["-created_at"]
+
     def __str__(self):
-        return self.headline or self.label or str(self.id)
+        return self.title
+
+
 
 class BulletinAttachment(AuditModel):
     objects = SoftDeleteManager()
@@ -177,12 +173,16 @@ class BulletinAttachment(AuditModel):
     )
 
     bulletin = models.ForeignKey(
-        "BulletinBanner",
+        "Bulletin",
         on_delete=models.CASCADE,
         related_name="attachments",
     )
 
-    pdf = models.CharField(max_length=500, null=True, blank=True)
+    pdf = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+    )
 
     name = models.CharField(
         max_length=255,
@@ -197,17 +197,11 @@ class BulletinAttachment(AuditModel):
 
         indexes = [
             models.Index(
-                fields=[
-                    "bulletin",
-                    "is_active",
-                ]
+                fields=["bulletin", "is_active"],
             ),
-
         ]
 
-        ordering = [
-            "-created_at",
-        ]
+        ordering = ["-created_at"]
 
     def __str__(self):
         return self.name
