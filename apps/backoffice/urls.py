@@ -644,19 +644,19 @@ urlpatterns = [
 
     path("timetable/period/<uuid:period_id>/delete",TimetablePeriodDeleteAPIView.as_view(),),
 
-    path("bulletin/categories",BulletinCategoryListAPIView.as_view(),),
-
     path("bulletin/categories/create",BulletinCategoryCreateAPIView.as_view(),),
+
+    path("bulletin/categories",BulletinCategoryListAPIView.as_view(),),
 
     path("bulletin/categories/<uuid:category_id>",BulletinCategoryUpdateAPIView.as_view(),),
 
     path("bulletin/categories/<uuid:category_id>/delete",BulletinCategoryDeleteAPIView.as_view(),),
 
-    path("bulletins",BulletinListAPIView.as_view(),),
+    path("bulletin",BulletinListAPIView.as_view(),),
 
-    path("bulletins/create",BulletinCreateAPIView.as_view(),),
+    path("bulletin/create",BulletinCreateAPIView.as_view(),),
 
-    path("bulletins/<uuid:bulletin_id>",BulletinUpdateAPIView.as_view(),),
+    path("bulletin/<uuid:bulletin_id>",BulletinUpdateAPIView.as_view(),),
 
     path("bulletins/<uuid:bulletin_id>/delete",BulletinDeleteAPIView.as_view(),),
 
