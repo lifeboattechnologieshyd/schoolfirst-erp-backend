@@ -140,6 +140,7 @@ class BulletinLISTAPIView(APIView):
                     ],
 
                     "created_at": bulletin.created_at,
+                    "status": bulletin.status,
                 })
 
             application_logger.info(
