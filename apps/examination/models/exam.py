@@ -170,6 +170,10 @@ class Examination(AuditModel):
         null=True,
         blank=True,
     )
+    instructions = models.TextField(
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         db_table = "examinations"

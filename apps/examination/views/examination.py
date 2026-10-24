@@ -1251,7 +1251,7 @@ class HallTicketDetailAPIView(APIView):
                         schedule.passing_marks
                     ),
 
-                    "instructions": schedule.instructions,
+                    # "instructions": schedule.instructions,
                 })
 
             # ------------------------------------------------------
@@ -1369,6 +1369,7 @@ class HallTicketDetailAPIView(APIView):
                     "result_date": str(
                         hall_ticket.examination.result_date
                     ),
+                    "instructions": hall_ticket.examination.instructions,
 
                     "reporting_date": (
                         str(

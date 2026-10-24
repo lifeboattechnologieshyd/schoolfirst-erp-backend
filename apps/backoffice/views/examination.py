@@ -490,6 +490,7 @@ class ExaminationCreateAPIView(APIView):
 
         description = request.data.get("description")
         grades_data = request.data.get("grades", [])
+        instructions = request.data.get("instructions")
 
         # ---------------------------------
         # Required validations
@@ -617,6 +618,7 @@ class ExaminationCreateAPIView(APIView):
                     reporting_date = reporting_date,
                     status=Examination.Status.DRAFT,
                     description=description,
+                    instructions=instructions,
                 )
 
                 created_grades = []
@@ -1144,6 +1146,7 @@ class ExaminationListAPIView(APIView):
 
                     "description": examination.description,
                     "status": examination.status,
+                    "instructions": examination.instructions,
 
                     "grades": grades,
                 })
@@ -1219,6 +1222,7 @@ class ExaminationUpdateAPIView(APIView):
                 reporting_date = request.data.get("reporting_date")
                 description = request.data.get("description")
                 status = request.data.get("status")
+                instructions = request.data.get("instructions")
 
                 # --------------------------------
                 # Name
@@ -1335,6 +1339,8 @@ class ExaminationUpdateAPIView(APIView):
 
                 if status is not None:
                     examination.status = status
+                if instructions is not None:
+                    examination.instructions = instructions
 
                 # --------------------------------
                 # Description
