@@ -9,7 +9,7 @@ from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.utils.logger import application_logger
 
 
-class BulletinListAPIView(APIView):
+class BulletinLISTAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
