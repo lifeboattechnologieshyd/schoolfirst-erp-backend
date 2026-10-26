@@ -6484,7 +6484,7 @@ class ReportCardPreviewAPIView(APIView):
 
                     "grade": result.grade,
                     "grade_point": result.grade_point,
-                    "grade_color": result.grade_configuration.color,
+                    "grade_color": result.grade_configuration.color if result.grade_configuration else None,
 
                     "status": result.status,
 
