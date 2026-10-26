@@ -16,16 +16,29 @@ class BulletinLISTAPIView(APIView):
 
     def get(self, request):
         try:
+            # ----------------------------------------------------------
+            # SCHOOL
+            # ----------------------------------------------------------
+
             school = request.school
 
+            if not school:
+                return CustomResponse.errorResponse(
+                    "School not found."
+                )
 
+            # ----------------------------------------------------------
+            # QUERY PARAMETERS
+            # ----------------------------------------------------------
 
             student_id = request.query_params.get("student_id")
             category_id = request.query_params.get("category_id")
             search = request.query_params.get("search")
             is_pinned = request.query_params.get("is_pinned")
 
-
+            # ----------------------------------------------------------
+            # VALIDATE STUDENT ID
+            # ----------------------------------------------------------
 
             if not student_id:
                 return CustomResponse.errorResponse(
@@ -62,34 +75,6 @@ class BulletinLISTAPIView(APIView):
                     "Student not found."
                 )
 
-
-
-            # parent_mobile = getattr(
-            #     request.user,
-            #     "mobile",
-            #     None,
-            # )
-            #
-            # if parent_mobile:
-            #     is_parent_student = (
-            #         Student.objects
-            #         .filter(
-            #             id=student.id,
-            #             school=school,
-            #         )
-            #         .filter(
-            #             Q(father_mobile=parent_mobile)
-            #             | Q(mother_mobile=parent_mobile)
-            #             | Q(guardian_mobile=parent_mobile)
-            #         )
-            #         .exists()
-            #     )
-            #
-            #     if not is_parent_student:
-            #         return CustomResponse.errorResponse(
-            #             "You do not have access to this student."
-            #         )
-
             # ----------------------------------------------------------
             # GET BULLETINS
             # ----------------------------------------------------------
@@ -103,9 +88,9 @@ class BulletinLISTAPIView(APIView):
                     status=Bulletin.Status.PUBLISHED,
                 )
                 .filter(
-                    # ----------------------------------------------
+                    # --------------------------------------------------
                     # ALL PARENTS
-                    # ----------------------------------------------
+                    # --------------------------------------------------
                     Q(
                         audiences__audience_type=(
                             BulletinAudience.AudienceType.ALL_PARENTS
@@ -115,9 +100,9 @@ class BulletinLISTAPIView(APIView):
 
                     |
 
-                    # ----------------------------------------------
+                    # --------------------------------------------------
                     # STUDENT'S GRADE
-                    # ----------------------------------------------
+                    # --------------------------------------------------
                     Q(
                         audiences__audience_type=(
                             BulletinAudience.AudienceType.GRADE
@@ -128,9 +113,9 @@ class BulletinLISTAPIView(APIView):
 
                     |
 
-                    # ----------------------------------------------
+                    # --------------------------------------------------
                     # STUDENT'S SECTION
-                    # ----------------------------------------------
+                    # --------------------------------------------------
                     Q(
                         audiences__audience_type=(
                             BulletinAudience.AudienceType.SECTION
@@ -146,18 +131,22 @@ class BulletinLISTAPIView(APIView):
                 .prefetch_related(
                     Prefetch(
                         "audiences",
-                        queryset=BulletinAudience.objects.filter(
-                            is_active=True
-                        ).select_related(
-                            "grade",
-                            "section",
+                        queryset=(
+                            BulletinAudience.objects
+                            .filter(is_active=True)
+                            .select_related(
+                                "grade",
+                                "section",
+                            )
                         ),
                     ),
                     Prefetch(
                         "attachments",
-                        queryset=BulletinAttachment.objects.filter(
-                            is_active=True
-                        ).order_by("-created_at"),
+                        queryset=(
+                            BulletinAttachment.objects
+                            .filter(is_active=True)
+                            .order_by("-created_at")
+                        ),
                     ),
                 )
                 .distinct()
@@ -224,12 +213,39 @@ class BulletinLISTAPIView(APIView):
             )
 
             # ----------------------------------------------------------
+            # GET READ STATUS
+            # ----------------------------------------------------------
+            # Fetch all bulletins read by the current parent in one query.
+            # Avoids N+1 queries inside the response loop.
+
+            bulletin_ids = [
+                bulletin.id
+                for bulletin in page
+            ]
+
+            read_bulletin_ids = set(
+                BulletinRead.objects
+                .filter(
+                    bulletin_id__in=bulletin_ids,
+                    parent=request.user,
+                )
+                .values_list(
+                    "bulletin_id",
+                    flat=True,
+                )
+            )
+
+            # ----------------------------------------------------------
             # RESPONSE DATA
             # ----------------------------------------------------------
 
             data = []
 
             for bulletin in page:
+
+                # ------------------------------------------------------
+                # AUDIENCE DATA
+                # ------------------------------------------------------
 
                 audience_data = []
 
@@ -267,6 +283,10 @@ class BulletinLISTAPIView(APIView):
                         ),
                     })
 
+                # ------------------------------------------------------
+                # BULLETIN DATA
+                # ------------------------------------------------------
+
                 data.append({
                     "id": str(bulletin.id),
 
@@ -291,6 +311,10 @@ class BulletinLISTAPIView(APIView):
 
                     "is_pinned": bulletin.is_pinned,
 
+                    "is_read": (
+                        bulletin.id in read_bulletin_ids
+                    ),
+
                     "attachments": [
                         {
                             "id": str(attachment.id),
@@ -310,11 +334,14 @@ class BulletinLISTAPIView(APIView):
             # ----------------------------------------------------------
 
             application_logger.info(
-                "Student bulletins fetched successfully. "
-                "school_id=%s student_id=%s page=%s",
-                school.id,
-                student.id,
-                request.query_params.get("page", 1),
+                "Student bulletins fetched successfully.",
+                extra={
+                    "school_id": str(school.id),
+                    "student_id": str(student.id),
+                    "parent_id": str(request.user.id),
+                    "page": request.query_params.get("page", 1),
+                    "bulletin_count": len(data),
+                },
             )
 
             # ----------------------------------------------------------
@@ -331,8 +358,19 @@ class BulletinLISTAPIView(APIView):
         except Exception as exc:
 
             application_logger.exception(
-                "Error fetching student bulletins: %s",
-                exc,
+                "Error fetching student bulletins.",
+                extra={
+                    "school_id": (
+                        str(request.school.id)
+                        if getattr(request, "school", None)
+                        else None
+                    ),
+                    "student_id": request.query_params.get(
+                        "student_id"
+                    ),
+                    "parent_id": str(request.user.id),
+                    "error": str(exc),
+                },
             )
 
             return CustomResponse.errorResponse(
