@@ -1,6 +1,7 @@
 import uuid
+from datetime import date
 
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.http import HttpResponse
 from io import BytesIO
 from openpyxl import load_workbook, Workbook
@@ -11,9 +12,27 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.school.models.school import Branch, AcademicYear, Grade, Subject, Staff
-from apps.timetable.models import TimetableTerm, TimetablePeriod, Room, Timetable, TimetableEntry
+from apps.school.models.school import Branch, AcademicYear, Grade, Subject, Staff, Section
+from apps.timetable.models import TimetableTerm, TimetablePeriod, Room, Timetable, TimetableEntry, TimetableSubstitution
 from shared.mixins import CustomResponse, CustomPageNumberPagination
+from shared.permissions import HasPermission
+from shared.utils.logger import application_logger
+
+from openpyxl import load_workbook
+
+from django.db import transaction, IntegrityError
+
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser
+
+
+from apps.timetable.models import (
+    Timetable,
+    TimetableEntry,
+    TimetablePeriod,
+)
+
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
 
@@ -2832,23 +2851,8 @@ class TimetableDeleteAPIView(APIView):
                 description="Unable to delete timetable."
             )
 
-from openpyxl import load_workbook
-
-from django.db import transaction, IntegrityError
-
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.parsers import MultiPartParser
 
 
-from apps.timetable.models import (
-    Timetable,
-    TimetableEntry,
-    TimetablePeriod,
-)
-
-from shared.permissions import HasPermission
-from shared.utils.logger import application_logger
 
 
 class BulkUploadTimetableAPIView(APIView):
@@ -2884,6 +2888,134 @@ class BulkUploadTimetableAPIView(APIView):
 
             return CustomResponse.errorResponse(
                 description="School not found."
+            )
+
+        # ----------------------------------------------------------
+        # GET PARAMETERS
+        # ----------------------------------------------------------
+
+        academic_year_id = request.query_params.get("academic_year_id")
+        grade_id = request.query_params.get("grade_id")
+        section_id = request.query_params.get("section_id")
+
+        # ----------------------------------------------------------
+        # PARAMETER VALIDATION
+        # ----------------------------------------------------------
+
+        if not academic_year_id:
+            return CustomResponse.errorResponse(
+                description="academic_year_id is required."
+            )
+
+        if not grade_id:
+            return CustomResponse.errorResponse(
+                description="grade_id is required."
+            )
+
+        if not section_id:
+            return CustomResponse.errorResponse(
+                description="section_id is required."
+            )
+
+        # ----------------------------------------------------------
+        # UUID VALIDATION
+        # ----------------------------------------------------------
+
+        try:
+            academic_year_uuid = uuid.UUID(str(academic_year_id))
+        except (ValueError, TypeError, AttributeError):
+
+            return CustomResponse.errorResponse(
+                description="Invalid academic_year_id."
+            )
+
+        try:
+            grade_uuid = uuid.UUID(str(grade_id))
+        except (ValueError, TypeError, AttributeError):
+
+            return CustomResponse.errorResponse(
+                description="Invalid grade_id."
+            )
+
+        try:
+            section_uuid = uuid.UUID(str(section_id))
+        except (ValueError, TypeError, AttributeError):
+
+            return CustomResponse.errorResponse(
+                description="Invalid section_id."
+            )
+
+        # ----------------------------------------------------------
+        # ACADEMIC YEAR VALIDATION
+        # ----------------------------------------------------------
+
+        academic_year = AcademicYear.objects.filter(
+            id=academic_year_uuid,
+            school=school,
+        ).first()
+
+        if not academic_year:
+            application_logger.warning(
+                "timetable_bulk_upload_failed",
+                extra={
+                    "performed_by": str(request.user.id),
+                    "school_id": str(school.id),
+                    "academic_year_id": academic_year_id,
+                    "reason": "academic_year_not_found",
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="Academic year not found."
+            )
+
+        # ----------------------------------------------------------
+        # GRADE VALIDATION
+        # ----------------------------------------------------------
+
+        grade = Grade.objects.filter(
+            id=grade_uuid,
+            school=school,
+        ).first()
+
+        if not grade:
+            application_logger.warning(
+                "timetable_bulk_upload_failed",
+                extra={
+                    "performed_by": str(request.user.id),
+                    "school_id": str(school.id),
+                    "grade_id": grade_id,
+                    "reason": "grade_not_found",
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="Grade not found."
+            )
+
+        # ----------------------------------------------------------
+        # SECTION VALIDATION
+        # ----------------------------------------------------------
+
+        section = Section.objects.filter(
+            id=section_uuid,
+            grade=grade,
+        ).first()
+
+        if not section:
+            application_logger.warning(
+                "timetable_bulk_upload_failed",
+                extra={
+                    "performed_by": str(request.user.id),
+                    "school_id": str(school.id),
+                    "grade_id": grade_id,
+                    "section_id": section_id,
+                    "reason": "section_not_found",
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="Section not found for the selected grade."
             )
 
         # ----------------------------------------------------------
@@ -2936,7 +3068,7 @@ class BulkUploadTimetableAPIView(APIView):
             )
 
         # ----------------------------------------------------------
-        # HEADERS
+        # EXCEL HEADERS
         # ----------------------------------------------------------
 
         headers = [
@@ -2947,9 +3079,6 @@ class BulkUploadTimetableAPIView(APIView):
         ]
 
         required_headers = [
-            "Academic Year",
-            "Grade",
-            "Section",
             "Day",
             "Period",
             "Subject",
@@ -2985,7 +3114,7 @@ class BulkUploadTimetableAPIView(APIView):
         errors = []
 
         # ----------------------------------------------------------
-        # PROCESS ROWS
+        # PROCESS EXCEL ROWS
         # ----------------------------------------------------------
 
         for row_number, row in enumerate(
@@ -3011,18 +3140,6 @@ class BulkUploadTimetableAPIView(APIView):
                 # GET VALUES
                 # --------------------------------------------------
 
-                academic_year_name = str(
-                    data.get("Academic Year") or ""
-                ).strip()
-
-                grade_name = str(
-                    data.get("Grade") or ""
-                ).strip()
-
-                section_name = str(
-                    data.get("Section") or ""
-                ).strip()
-
                 day_of_week = str(
                     data.get("Day") or ""
                 ).strip().upper()
@@ -3044,9 +3161,6 @@ class BulkUploadTimetableAPIView(APIView):
                 # --------------------------------------------------
 
                 required_values = {
-                    "Academic Year": academic_year_name,
-                    "Grade": grade_name,
-                    "Section": section_name,
                     "Day": day_of_week,
                     "Period": period_value,
                     "Subject": subject_name,
@@ -3060,48 +3174,6 @@ class BulkUploadTimetableAPIView(APIView):
                         raise ValueError(
                             f"{field} is required."
                         )
-
-                # --------------------------------------------------
-                # ACADEMIC YEAR
-                # --------------------------------------------------
-
-                academic_year = AcademicYear.objects.filter(
-                    school=school,
-                    name__iexact=academic_year_name,
-                ).first()
-
-                if not academic_year:
-                    raise ValueError(
-                        f"Academic year '{academic_year_name}' not found."
-                    )
-
-                # --------------------------------------------------
-                # GRADE
-                # --------------------------------------------------
-
-                grade = Grade.objects.filter(
-                    school=school,
-                    name__iexact=grade_name,
-                ).first()
-
-                if not grade:
-                    raise ValueError(
-                        f"Grade '{grade_name}' not found."
-                    )
-
-                # --------------------------------------------------
-                # SECTION
-                # --------------------------------------------------
-
-                section = Section.objects.filter(
-                    grade=grade,
-                    name__iexact=section_name,
-                ).first()
-
-                if not section:
-                    raise ValueError(
-                        f"Section '{section_name}' not found."
-                    )
 
                 # --------------------------------------------------
                 # DAY VALIDATION
@@ -3122,7 +3194,9 @@ class BulkUploadTimetableAPIView(APIView):
                     period_number = int(
                         float(period_value)
                     )
+
                 except (ValueError, TypeError):
+
                     raise ValueError(
                         f"Invalid period '{period_value}'."
                     )
@@ -3132,6 +3206,7 @@ class BulkUploadTimetableAPIView(APIView):
                 ).first()
 
                 if not period:
+
                     raise ValueError(
                         f"Period '{period_number}' not found."
                     )
@@ -3146,6 +3221,7 @@ class BulkUploadTimetableAPIView(APIView):
                 ).first()
 
                 if not subject:
+
                     raise ValueError(
                         f"Subject '{subject_name}' not found."
                     )
@@ -3161,6 +3237,7 @@ class BulkUploadTimetableAPIView(APIView):
                 ).first()
 
                 if not teacher:
+
                     raise ValueError(
                         f"Teacher '{teacher_name}' not found."
                     )
@@ -3207,7 +3284,7 @@ class BulkUploadTimetableAPIView(APIView):
                         )
 
                     # --------------------------------------------------
-                    # CREATE ENTRY
+                    # CREATE TIMETABLE ENTRY
                     # --------------------------------------------------
 
                     TimetableEntry.objects.create(
@@ -3223,6 +3300,10 @@ class BulkUploadTimetableAPIView(APIView):
                     )
 
                 success_count += 1
+
+            # ------------------------------------------------------
+            # INTEGRITY ERROR
+            # ------------------------------------------------------
 
             except IntegrityError as exc:
 
@@ -3247,6 +3328,10 @@ class BulkUploadTimetableAPIView(APIView):
                     },
                 )
 
+            # ------------------------------------------------------
+            # OTHER ROW ERRORS
+            # ------------------------------------------------------
+
             except Exception as exc:
 
                 failed_count += 1
@@ -3263,11 +3348,6 @@ class BulkUploadTimetableAPIView(APIView):
                         "school_id": str(school.id),
                         "file_name": file.name,
                         "row_number": row_number,
-                        "academic_year": data.get(
-                            "Academic Year"
-                        ),
-                        "grade": data.get("Grade"),
-                        "section": data.get("Section"),
                         "day": data.get("Day"),
                         "period": data.get("Period"),
                         "subject": data.get("Subject"),
@@ -3286,6 +3366,9 @@ class BulkUploadTimetableAPIView(APIView):
                 "performed_by": str(request.user.id),
                 "school_id": str(school.id),
                 "file_name": file.name,
+                "academic_year_id": str(academic_year.id),
+                "grade_id": str(grade.id),
+                "section_id": str(section.id),
                 "total_records": (
                     success_count + failed_count
                 ),
@@ -3301,6 +3384,18 @@ class BulkUploadTimetableAPIView(APIView):
         return CustomResponse.successResponse(
             description="Timetable bulk upload completed.",
             data={
+                "academic_year": {
+                    "id": academic_year.id,
+                    "name": academic_year.name,
+                },
+                "grade": {
+                    "id": grade.id,
+                    "name": grade.name,
+                },
+                "section": {
+                    "id": section.id,
+                    "name": section.name,
+                },
                 "total_records": (
                     success_count + failed_count
                 ),
@@ -3308,4 +3403,1695 @@ class BulkUploadTimetableAPIView(APIView):
                 "failed_count": failed_count,
                 "errors": errors,
             },
+        )
+
+
+
+
+
+
+class DownloadTimetableSampleExcelAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "timetable.bulk_upload"
+
+    def get(self, request):
+
+        school = request.school
+
+        # ----------------------------------------------------------
+        # SCHOOL VALIDATION
+        # ----------------------------------------------------------
+
+        if not school:
+            application_logger.warning(
+                "timetable_sample_download_failed",
+                extra={
+                    "performed_by": str(request.user.id),
+                    "reason": "school_not_found",
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        application_logger.info(
+            "timetable_sample_download_started",
+            extra={
+                "performed_by": str(request.user.id),
+                "school_id": str(school.id),
+            },
+        )
+
+        # ----------------------------------------------------------
+        # CREATE WORKBOOK
+        # ----------------------------------------------------------
+
+        workbook = Workbook()
+        worksheet = workbook.active
+        worksheet.title = "Timetable"
+
+        # ----------------------------------------------------------
+        # HEADERS
+        # ----------------------------------------------------------
+
+        headers = [
+            "Day",
+            "Period",
+            "Subject",
+            "Teacher",
+            "Notes",
+        ]
+
+        worksheet.append(headers)
+
+        # ----------------------------------------------------------
+        # SAMPLE DATA
+        # ----------------------------------------------------------
+
+        sample_rows = [
+            [
+                "MONDAY",
+                1,
+                "Mathematics",
+                "John",
+                "Regular class",
+            ],
+            [
+                "MONDAY",
+                2,
+                "English",
+                "David",
+                "",
+            ],
+            [
+                "TUESDAY",
+                1,
+                "Science",
+                "John",
+                "",
+            ],
+            [
+                "TUESDAY",
+                2,
+                "Mathematics",
+                "David",
+                "Revision class",
+            ],
+        ]
+
+        for row in sample_rows:
+            worksheet.append(row)
+
+        # ----------------------------------------------------------
+        # HEADER STYLE
+        # ----------------------------------------------------------
+
+        header_fill = PatternFill(
+            fill_type="solid",
+            fgColor="1F4E78",
+        )
+
+        for cell in worksheet[1]:
+            cell.font = Font(
+                bold=True,
+                color="FFFFFF",
+            )
+            cell.fill = header_fill
+            cell.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+            )
+
+        # ----------------------------------------------------------
+        # COLUMN WIDTHS
+        # ----------------------------------------------------------
+
+        column_widths = {
+            "A": 18,  # Day
+            "B": 12,  # Period
+            "C": 25,  # Subject
+            "D": 25,  # Teacher
+            "E": 35,  # Notes
+        }
+
+        for column, width in column_widths.items():
+            worksheet.column_dimensions[column].width = width
+
+        # ----------------------------------------------------------
+        # ALIGNMENT
+        # ----------------------------------------------------------
+
+        for row in worksheet.iter_rows(
+            min_row=2,
+            max_row=worksheet.max_row,
+        ):
+            for cell in row:
+                cell.alignment = Alignment(
+                    vertical="center",
+                )
+
+        # ----------------------------------------------------------
+        # FREEZE HEADER
+        # ----------------------------------------------------------
+
+        worksheet.freeze_panes = "A2"
+
+        # ----------------------------------------------------------
+        # AUTO FILTER
+        # ----------------------------------------------------------
+
+        worksheet.auto_filter.ref = (
+            f"A1:E{worksheet.max_row}"
+        )
+
+        # ----------------------------------------------------------
+        # RESPONSE
+        # ----------------------------------------------------------
+
+        response = HttpResponse(
+            content_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            )
+        )
+
+        response[
+            "Content-Disposition"
+        ] = 'attachment; filename="timetable_sample.xlsx"'
+
+        workbook.save(response)
+
+        application_logger.info(
+            "timetable_sample_download_completed",
+            extra={
+                "performed_by": str(request.user.id),
+                "school_id": str(school.id),
+            },
+        )
+
+        return response
+
+
+
+class TeacherScheduleListAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "teacher_schedule.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        application_logger.info(
+            "teacher_schedule_list_started",
+            extra={
+                "performed_by": str(request.user.id),
+                "school_id": str(school.id) if school else None,
+            },
+        )
+
+        # ----------------------------------------------------------
+        # SCHOOL VALIDATION
+        # ----------------------------------------------------------
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        # ----------------------------------------------------------
+        # QUERY PARAMETERS
+        # ----------------------------------------------------------
+
+        search = request.GET.get("search")
+        department_id = request.GET.get("department_id")
+        status = request.GET.get("status")
+
+        academic_year_id = request.GET.get("academic_year_id")
+        grade_id = request.GET.get("grade_id")
+        section_id = request.GET.get("section_id")
+
+        # ----------------------------------------------------------
+        # BASE TEACHER QUERY
+        # ----------------------------------------------------------
+
+        teachers = Staff.objects.filter(
+            school=school,
+        )
+
+        # ----------------------------------------------------------
+        # SEARCH
+        # ----------------------------------------------------------
+
+        if search:
+
+            teachers = teachers.filter(
+                Q(name__icontains=search)
+                | Q(employee_id__icontains=search)
+            )
+
+        # ----------------------------------------------------------
+        # DEPARTMENT FILTER
+        # ----------------------------------------------------------
+
+        if department_id:
+            teachers = teachers.filter(
+                department_id=department_id
+            )
+
+        # ----------------------------------------------------------
+        # TEACHER STATUS FILTER
+        # ----------------------------------------------------------
+
+        if status:
+            teachers = teachers.filter(
+                status=status
+            )
+
+        # ----------------------------------------------------------
+        # TIMETABLE ENTRY FILTERS
+        # ----------------------------------------------------------
+
+        entry_filters = {
+            "status": TimetableEntry.Status.ACTIVE,
+        }
+
+        if academic_year_id:
+            entry_filters[
+                "timetable__academic_year_id"
+            ] = academic_year_id
+
+        if grade_id:
+            entry_filters[
+                "grade_id"
+            ] = grade_id
+
+        if section_id:
+            entry_filters[
+                "section_id"
+            ] = section_id
+
+        # ----------------------------------------------------------
+        # PREFETCH TEACHER ENTRIES
+        # ----------------------------------------------------------
+
+        timetable_entries = (
+            TimetableEntry.objects
+            .filter(**entry_filters)
+            .select_related(
+                "timetable",
+                "timetable__academic_year",
+                "grade",
+                "section",
+                "subject",
+                "period",
+            )
+            .order_by(
+                "day_of_week",
+                "period__period_number",
+            )
+        )
+
+        teachers = teachers.prefetch_related(
+            Prefetch(
+                "timetable_entries",
+                queryset=timetable_entries,
+                to_attr="active_schedule_entries",
+            )
+        ).order_by("name")
+
+        # ----------------------------------------------------------
+        # PAGINATION
+        # ----------------------------------------------------------
+
+        paginator = CustomPageNumberPagination()
+
+        page = paginator.paginate_queryset(
+            teachers,
+            request,
+        )
+
+        # ----------------------------------------------------------
+        # RESPONSE
+        # ----------------------------------------------------------
+
+        data = []
+
+        for teacher in page:
+
+            entries = getattr(
+                teacher,
+                "active_schedule_entries",
+                [],
+            )
+
+            # ------------------------------------------------------
+            # WEEKLY WORKLOAD
+            # ------------------------------------------------------
+
+            weekly_workload = len(entries)
+
+            # ------------------------------------------------------
+            # CLASS COUNT
+            #
+            # Distinct timetable / section combinations
+            # ------------------------------------------------------
+
+            class_count = len({
+                (
+                    entry.timetable_id,
+                    entry.section_id,
+                )
+                for entry in entries
+            })
+
+            # ------------------------------------------------------
+            # SUBJECTS
+            # ------------------------------------------------------
+
+            subjects = {}
+
+            for entry in entries:
+
+                subjects[entry.subject_id] = {
+                    "id": entry.subject_id,
+                    "name": entry.subject.name,
+                }
+
+            # ------------------------------------------------------
+            # SCHEDULE STATUS
+            # ------------------------------------------------------
+
+            if not entries:
+                schedule_status = "UNASSIGNED"
+
+            elif (
+                hasattr(teacher, "status")
+                and teacher.status
+                != Staff.Status.ACTIVE
+            ):
+                schedule_status = "DEACTIVATED"
+
+            else:
+                schedule_status = "SYNCED"
+
+            # ------------------------------------------------------
+            # TEACHER RESPONSE
+            # ------------------------------------------------------
+
+            data.append({
+                "teacher": {
+                    "id": teacher.id,
+                    "employee_id": getattr(
+                        teacher,
+                        "employee_id",
+                        None,
+                    ),
+                    "name": teacher.name,
+                },
+
+                "department": (
+                    {
+                        "id": teacher.department.id,
+                        "name": teacher.department.name,
+                    }
+                    if getattr(
+                        teacher,
+                        "department",
+                        None,
+                    )
+                    else None
+                ),
+
+                "subjects": list(
+                    subjects.values()
+                ),
+
+                "weekly_workload": {
+                    "assigned_periods": weekly_workload,
+                },
+
+                "class_count": class_count,
+
+                "schedule_status": schedule_status,
+
+                "status": teacher.status,
+            })
+
+        # ----------------------------------------------------------
+        # PAGINATED RESPONSE
+        # ----------------------------------------------------------
+
+        return CustomResponse.successResponse(data=data,description="teachers data fetched successfully" )
+
+
+
+
+
+
+
+
+class TeacherScheduleAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "teacher_schedule.view"
+
+    def get(self, request, teacher_id):
+
+        school = request.school
+
+        application_logger.info(
+            "teacher_schedule_view_started",
+            extra={
+                "performed_by": str(request.user.id),
+                "school_id": str(school.id) if school else None,
+                "teacher_id": str(teacher_id),
+            },
+        )
+
+        # ----------------------------------------------------------
+        # SCHOOL VALIDATION
+        # ----------------------------------------------------------
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        # ----------------------------------------------------------
+        # TEACHER
+        # ----------------------------------------------------------
+
+        teacher = (
+            Staff.objects
+            .filter(
+                id=teacher_id,
+                school=school,
+            )
+            .select_related("department")
+            .first()
+        )
+
+        if not teacher:
+            return CustomResponse.errorResponse(
+                description="Teacher not found."
+            )
+
+        # ----------------------------------------------------------
+        # FILTERS
+        # ----------------------------------------------------------
+
+        academic_year_id = request.GET.get(
+            "academic_year_id"
+        )
+
+        if not academic_year_id:
+            return CustomResponse.errorResponse(
+                description="academic_year_id is required."
+            )
+
+        grade_id = request.GET.get("grade_id")
+        section_id = request.GET.get("section_id")
+
+        # ----------------------------------------------------------
+        # SCHEDULE QUERY
+        # ----------------------------------------------------------
+
+        entries = (
+            TimetableEntry.objects
+            .filter(
+                timetable__school=school,
+                teacher=teacher,
+                timetable__academic_year_id=academic_year_id,
+                status=TimetableEntry.Status.ACTIVE,
+            )
+            .select_related(
+                "timetable",
+                "timetable__academic_year",
+                "grade",
+                "section",
+                "subject",
+                "period",
+            )
+            .order_by(
+                "day_of_week",
+                "period__period_number",
+            )
+        )
+
+        # ----------------------------------------------------------
+        # GRADE FILTER
+        # ----------------------------------------------------------
+
+        if grade_id:
+            entries = entries.filter(
+                grade_id=grade_id
+            )
+
+        # ----------------------------------------------------------
+        # SECTION FILTER
+        # ----------------------------------------------------------
+
+        if section_id:
+            entries = entries.filter(
+                section_id=section_id
+            )
+
+        # ----------------------------------------------------------
+        # GROUP BY DAY
+        # ----------------------------------------------------------
+
+        schedule = {
+            day: []
+            for day in TimetableEntry.DayOfWeek.values
+        }
+
+        for entry in entries:
+
+            schedule[entry.day_of_week].append({
+                "entry_id": entry.id,
+
+                "period": {
+                    "id": entry.period.id,
+                    "period_number": entry.period.period_number,
+                    "start_time": getattr(
+                        entry.period,
+                        "start_time",
+                        None,
+                    ),
+                    "end_time": getattr(
+                        entry.period,
+                        "end_time",
+                        None,
+                    ),
+                },
+
+                "subject": {
+                    "id": entry.subject.id,
+                    "name": entry.subject.name,
+                },
+
+                "grade": {
+                    "id": entry.grade.id,
+                    "name": entry.grade.name,
+                },
+
+                "section": {
+                    "id": entry.section.id,
+                    "name": entry.section.name,
+                },
+
+                "notes": entry.notes,
+            })
+
+        # ----------------------------------------------------------
+        # RESPONSE
+        # ----------------------------------------------------------
+
+        return CustomResponse.successResponse(
+            description="Teacher schedule fetched successfully.",
+            data={
+                "teacher": {
+                    "id": teacher.id,
+                    "employee_id": getattr(
+                        teacher,
+                        "employee_id",
+                        None,
+                    ),
+                    "name": teacher.name,
+                },
+
+                "department": (
+                    {
+                        "id": teacher.department.id,
+                        "name": teacher.department.name,
+                    }
+                    if getattr(
+                        teacher,
+                        "department",
+                        None,
+                    )
+                    else None
+                ),
+
+                "academic_year": {
+                    "id": (
+                        entries[0]
+                        .timetable
+                        .academic_year
+                        .id
+                        if entries
+                        else academic_year_id
+                    ),
+                    "name": (
+                        entries[0]
+                        .timetable
+                        .academic_year
+                        .name
+                        if entries
+                        else None
+                    ),
+                },
+
+                "weekly_workload": len(entries),
+
+                "class_count": len({
+                    (
+                        entry.timetable_id,
+                        entry.section_id,
+                    )
+                    for entry in entries
+                }),
+
+                "schedule": schedule,
+            },
+        )
+
+
+
+
+
+
+
+class AssignTeacherSubstitutionAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "substitution.create"
+
+    def post(self, request):
+
+        school = request.school
+
+        application_logger.info(
+            "teacher_substitution_assignment_started",
+            extra={
+                "performed_by": str(request.user.id),
+                "school_id": str(school.id) if school else None,
+            },
+        )
+
+        # ==========================================================
+        # SCHOOL VALIDATION
+        # ==========================================================
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        # ==========================================================
+        # REQUEST DATA
+        # ==========================================================
+
+        timetable_entry_id = request.data.get(
+            "timetable_entry_id"
+        )
+
+        substitute_teacher_id = request.data.get(
+            "substitute_teacher_id"
+        )
+
+        substitution_date = request.data.get(
+            "date"
+        )
+
+        reason = request.data.get(
+            "reason"
+        )
+
+        # ==========================================================
+        # REQUIRED FIELD VALIDATION
+        # ==========================================================
+
+        if not timetable_entry_id:
+            return CustomResponse.errorResponse(
+                description="timetable_entry_id is required."
+            )
+
+        if not substitute_teacher_id:
+            return CustomResponse.errorResponse(
+                description="substitute_teacher_id is required."
+            )
+
+        if not substitution_date:
+            return CustomResponse.errorResponse(
+                description="date is required."
+            )
+
+        # ==========================================================
+        # UUID VALIDATION
+        # ==========================================================
+
+        try:
+            timetable_entry_uuid = uuid.UUID(
+                str(timetable_entry_id)
+            )
+        except (ValueError, TypeError, AttributeError):
+
+            return CustomResponse.errorResponse(
+                description="Invalid timetable_entry_id."
+            )
+
+        try:
+            substitute_teacher_uuid = uuid.UUID(
+                str(substitute_teacher_id)
+            )
+        except (ValueError, TypeError, AttributeError):
+
+            return CustomResponse.errorResponse(
+                description="Invalid substitute_teacher_id."
+            )
+
+        # ==========================================================
+        # DATE VALIDATION
+        # ==========================================================
+
+        try:
+            substitution_date = date.fromisoformat(
+                str(substitution_date)
+            )
+        except (ValueError, TypeError):
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Invalid date. "
+                    "Use YYYY-MM-DD format."
+                )
+            )
+
+        # ==========================================================
+        # GET TIMETABLE ENTRY
+        # ==========================================================
+
+        timetable_entry = (
+            TimetableEntry.objects
+            .filter(
+                id=timetable_entry_uuid,
+                timetable__school=school,
+                status=TimetableEntry.Status.ACTIVE,
+            )
+            .select_related(
+                "timetable",
+                "timetable__academic_year",
+                "grade",
+                "section",
+                "subject",
+                "teacher",
+                "period",
+            )
+            .first()
+        )
+
+        if not timetable_entry:
+
+            application_logger.warning(
+                "teacher_substitution_assignment_failed",
+                extra={
+                    "performed_by": str(request.user.id),
+                    "school_id": str(school.id),
+                    "timetable_entry_id": str(
+                        timetable_entry_id
+                    ),
+                    "reason": "timetable_entry_not_found",
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="Timetable entry not found."
+            )
+
+        # ==========================================================
+        # CHECK DATE AGAINST TIMETABLE DAY
+        # ==========================================================
+
+        selected_day = (
+            substitution_date
+            .strftime("%A")
+            .upper()
+        )
+
+        if selected_day != timetable_entry.day_of_week:
+
+            return CustomResponse.errorResponse(
+                description=(
+                    f"Selected date is {selected_day}, "
+                    f"but the timetable entry is scheduled "
+                    f"for {timetable_entry.day_of_week}."
+                )
+            )
+
+        # ==========================================================
+        # ORIGINAL TEACHER
+        # ==========================================================
+
+        original_teacher = timetable_entry.teacher
+
+        # ==========================================================
+        # GET SUBSTITUTE TEACHER
+        # ==========================================================
+
+        substitute_teacher = (
+            Staff.objects
+            .filter(
+                id=substitute_teacher_uuid,
+                school=school,
+                status=Staff.Status.ACTIVE,
+            )
+            .first()
+        )
+
+        if not substitute_teacher:
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Substitute teacher not found "
+                    "or inactive."
+                )
+            )
+
+        # ==========================================================
+        # SAME TEACHER VALIDATION
+        # ==========================================================
+
+        if (
+            original_teacher.id
+            == substitute_teacher.id
+        ):
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Substitute teacher cannot be "
+                    "the original teacher."
+                )
+            )
+
+        # ==========================================================
+        # EXISTING SUBSTITUTION FOR THIS CLASS / DATE
+        # ==========================================================
+
+        existing_substitution = (
+            TimetableSubstitution.objects
+            .filter(
+                timetable_entry=timetable_entry,
+                date=substitution_date,
+                status=(
+                    TimetableSubstitution
+                    .Status
+                    .SCHEDULED
+                ),
+            )
+            .first()
+        )
+
+        if existing_substitution:
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "A substitution is already scheduled "
+                    "for this class on the selected date."
+                )
+            )
+
+        # ==========================================================
+        # SUBSTITUTE TEACHER REGULAR TIMETABLE CONFLICT
+        # ==========================================================
+
+        timetable_conflict = (
+            TimetableEntry.objects
+            .filter(
+                timetable__school=school,
+                timetable__academic_year_id=(
+                    timetable_entry
+                    .timetable
+                    .academic_year_id
+                ),
+                teacher=substitute_teacher,
+                day_of_week=timetable_entry.day_of_week,
+                period=timetable_entry.period,
+                status=TimetableEntry.Status.ACTIVE,
+            )
+            .exclude(
+                id=timetable_entry.id
+            )
+            .select_related(
+                "grade",
+                "section",
+                "subject",
+            )
+            .first()
+        )
+
+        if timetable_conflict:
+
+            application_logger.warning(
+                "teacher_substitution_period_conflict",
+                extra={
+                    "performed_by": str(request.user.id),
+                    "school_id": str(school.id),
+                    "substitute_teacher_id": str(
+                        substitute_teacher.id
+                    ),
+                    "timetable_entry_id": str(
+                        timetable_entry.id
+                    ),
+                    "conflicting_entry_id": str(
+                        timetable_conflict.id
+                    ),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    f"{substitute_teacher.name} is already "
+                    f"scheduled for "
+                    f"{timetable_conflict.subject.name} "
+                    f"({timetable_conflict.grade.name} "
+                    f"{timetable_conflict.section.name}) "
+                    f"during Period "
+                    f"{timetable_entry.period.period_number}."
+                )
+            )
+
+        # ==========================================================
+        # SUBSTITUTE TEACHER EXISTING SUBSTITUTION CONFLICT
+        # ==========================================================
+
+        substitution_conflict = (
+            TimetableSubstitution.objects
+            .filter(
+                substitute_teacher=substitute_teacher,
+                date=substitution_date,
+                status=(
+                    TimetableSubstitution
+                    .Status
+                    .SCHEDULED
+                ),
+                timetable_entry__period=(
+                    timetable_entry.period
+                ),
+                timetable_entry__day_of_week=(
+                    timetable_entry.day_of_week
+                ),
+            )
+            .select_related(
+                "timetable_entry",
+                "timetable_entry__subject",
+                "timetable_entry__grade",
+                "timetable_entry__section",
+            )
+            .first()
+        )
+
+        if substitution_conflict:
+
+            conflict_entry = (
+                substitution_conflict
+                .timetable_entry
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    f"{substitute_teacher.name} is already "
+                    f"assigned as a substitute for "
+                    f"{conflict_entry.subject.name} "
+                    f"({conflict_entry.grade.name} "
+                    f"{conflict_entry.section.name}) "
+                    f"during Period "
+                    f"{timetable_entry.period.period_number}."
+                )
+            )
+
+        # ==========================================================
+        # WEEKLY WORKLOAD
+        # ==========================================================
+
+        # Current regular timetable periods for the teacher
+        current_regular_periods = (
+            TimetableEntry.objects
+            .filter(
+                timetable__school=school,
+                timetable__academic_year_id=(
+                    timetable_entry
+                    .timetable
+                    .academic_year_id
+                ),
+                teacher=substitute_teacher,
+                status=TimetableEntry.Status.ACTIVE,
+            )
+            .count()
+        )
+
+        # Existing scheduled substitutions for the teacher
+        current_substitution_periods = (
+            TimetableSubstitution.objects
+            .filter(
+                substitute_teacher=substitute_teacher,
+                status=(
+                    TimetableSubstitution
+                    .Status
+                    .SCHEDULED
+                ),
+                timetable_entry__timetable__academic_year_id=(
+                    timetable_entry
+                    .timetable
+                    .academic_year_id
+                ),
+            )
+            .count()
+        )
+
+        current_workload = (
+            current_regular_periods
+            + current_substitution_periods
+        )
+
+        workload_after_substitution = (
+            current_workload + 1
+        )
+
+        # ----------------------------------------------------------
+        # MAXIMUM WORKLOAD
+        #
+        # There is no maximum workload field in the models
+        # provided so far. Therefore we don't reject the
+        # substitution based on a hardcoded maximum.
+        # ----------------------------------------------------------
+
+        maximum_workload = None
+
+        # ==========================================================
+        # VALIDATION RESULT
+        # ==========================================================
+
+        validation = {
+            "period_conflict": False,
+            "workload_limit_exceeded": False,
+            "subject_expertise_match": None,
+        }
+
+        # ==========================================================
+        # CREATE SUBSTITUTION
+        # ==========================================================
+
+        try:
+
+            with transaction.atomic():
+
+                substitution = (
+                    TimetableSubstitution.objects.create(
+                        timetable_entry=timetable_entry,
+                        date=substitution_date,
+                        original_teacher=original_teacher,
+                        substitute_teacher=substitute_teacher,
+                        reason=reason,
+                        status=(
+                            TimetableSubstitution
+                            .Status
+                            .SCHEDULED
+                        ),
+                        created_by=request.user,
+                    )
+                )
+
+        except IntegrityError:
+
+            application_logger.warning(
+                "teacher_substitution_duplicate",
+                extra={
+                    "performed_by": str(request.user.id),
+                    "school_id": str(school.id),
+                    "timetable_entry_id": str(
+                        timetable_entry.id
+                    ),
+                    "date": str(
+                        substitution_date
+                    ),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "A substitution already exists "
+                    "for this timetable entry on "
+                    "the selected date."
+                )
+            )
+
+        except Exception as exc:
+
+            application_logger.exception(
+                "teacher_substitution_assignment_failed",
+                extra={
+                    "performed_by": str(request.user.id),
+                    "school_id": str(school.id),
+                    "timetable_entry_id": str(
+                        timetable_entry.id
+                    ),
+                    "substitute_teacher_id": str(
+                        substitute_teacher.id
+                    ),
+                    "error": str(exc),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Unable to assign teacher substitution."
+                )
+            )
+
+        # ==========================================================
+        # RESPONSE DATA
+        # ==========================================================
+
+        data = {
+            "id": str(substitution.id),
+
+            "date": substitution.date,
+
+            # ------------------------------------------------------
+            # ABSENT TEACHER
+            # ------------------------------------------------------
+
+            "absent_teacher": {
+                "id": str(
+                    original_teacher.id
+                ),
+                "employee_id": getattr(
+                    original_teacher,
+                    "employee_id",
+                    None,
+                ),
+                "name": original_teacher.name,
+            },
+
+            # ------------------------------------------------------
+            # SUBSTITUTE TEACHER
+            # ------------------------------------------------------
+
+            "substitute_teacher": {
+                "id": str(
+                    substitute_teacher.id
+                ),
+                "employee_id": getattr(
+                    substitute_teacher,
+                    "employee_id",
+                    None,
+                ),
+                "name": substitute_teacher.name,
+            },
+
+            # ------------------------------------------------------
+            # ASSIGNMENT
+            # ------------------------------------------------------
+
+            "assignment": {
+                "grade": {
+                    "id": str(
+                        timetable_entry
+                        .grade
+                        .id
+                    ),
+                    "name": (
+                        timetable_entry
+                        .grade
+                        .name
+                    ),
+                },
+
+                "section": {
+                    "id": str(
+                        timetable_entry
+                        .section
+                        .id
+                    ),
+                    "name": (
+                        timetable_entry
+                        .section
+                        .name
+                    ),
+                },
+
+                "subject": {
+                    "id": str(
+                        timetable_entry
+                        .subject
+                        .id
+                    ),
+                    "name": (
+                        timetable_entry
+                        .subject
+                        .name
+                    ),
+                },
+
+                "day_of_week": (
+                    timetable_entry
+                    .day_of_week
+                ),
+
+                "period": {
+                    "id": str(
+                        timetable_entry
+                        .period
+                        .id
+                    ),
+                    "period_number": (
+                        timetable_entry
+                        .period
+                        .period_number
+                    ),
+                    "start_time": getattr(
+                        timetable_entry.period,
+                        "start_time",
+                        None,
+                    ),
+                    "end_time": getattr(
+                        timetable_entry.period,
+                        "end_time",
+                        None,
+                    ),
+                },
+            },
+
+            # ------------------------------------------------------
+            # WORKLOAD
+            # ------------------------------------------------------
+
+            "workload": {
+                "current_periods": current_workload,
+                "after_substitution": (
+                    workload_after_substitution
+                ),
+                "maximum_periods": maximum_workload,
+            },
+
+            # ------------------------------------------------------
+            # VALIDATION
+            # ------------------------------------------------------
+
+            "validation": validation,
+
+            "reason": substitution.reason,
+
+            "status": substitution.status,
+        }
+
+        # ==========================================================
+        # LOG
+        # ==========================================================
+
+        application_logger.info(
+            "teacher_substitution_assignment_completed",
+            extra={
+                "performed_by": str(request.user.id),
+                "school_id": str(school.id),
+                "substitution_id": str(
+                    substitution.id
+                ),
+                "timetable_entry_id": str(
+                    timetable_entry.id
+                ),
+                "original_teacher_id": str(
+                    original_teacher.id
+                ),
+                "substitute_teacher_id": str(
+                    substitute_teacher.id
+                ),
+                "subject_id": str(
+                    timetable_entry.subject_id
+                ),
+                "date": str(
+                    substitution_date
+                ),
+            },
+        )
+
+        # ==========================================================
+        # RESPONSE
+        # ==========================================================
+
+        return CustomResponse.successResponse(
+            data=data,
+            description=(
+                "Teacher substitution assigned successfully."
+            ),
+        )
+
+
+class TeacherSubstitutionListAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "substitution.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        application_logger.info(
+            "teacher_substitution_list_started",
+            extra={
+                "performed_by": str(request.user.id),
+                "school_id": str(school.id) if school else None,
+            },
+        )
+
+        # ==========================================================
+        # SCHOOL VALIDATION
+        # ==========================================================
+
+        if not school:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        # ==========================================================
+        # QUERY PARAMETERS
+        # ==========================================================
+
+        date_value = request.GET.get("date")
+        status = request.GET.get("status")
+        teacher_id = request.GET.get("teacher_id")
+        grade_id = request.GET.get("grade_id")
+        section_id = request.GET.get("section_id")
+        search = request.GET.get("search")
+        academic_year_id = request.GET.get("academic_year_id")
+
+        # ==========================================================
+        # BASE QUERY
+        # ==========================================================
+
+        substitutions = (
+            TimetableSubstitution.objects
+            .filter(
+                timetable_entry__timetable__school=school,
+            )
+            .select_related(
+                "timetable_entry",
+                "timetable_entry__timetable",
+                "timetable_entry__timetable__academic_year",
+                "timetable_entry__grade",
+                "timetable_entry__section",
+                "timetable_entry__subject",
+                "timetable_entry__period",
+                "original_teacher",
+                "substitute_teacher",
+            )
+        )
+
+        # ==========================================================
+        # ACADEMIC YEAR FILTER
+        # ==========================================================
+
+        if academic_year_id:
+            substitutions = substitutions.filter(
+                timetable_entry__timetable__academic_year_id=(
+                    academic_year_id
+                )
+            )
+
+        # ==========================================================
+        # DATE FILTER
+        # ==========================================================
+
+        if date_value:
+            substitutions = substitutions.filter(
+                date=date_value
+            )
+
+        # ==========================================================
+        # STATUS FILTER
+        # ==========================================================
+
+        if status:
+            substitutions = substitutions.filter(
+                status=status
+            )
+
+        # ==========================================================
+        # TEACHER FILTER
+        #
+        # Matches either original teacher or substitute teacher.
+        # ==========================================================
+
+        if teacher_id:
+
+            substitutions = substitutions.filter(
+                Q(original_teacher_id=teacher_id)
+                | Q(substitute_teacher_id=teacher_id)
+            )
+
+        # ==========================================================
+        # GRADE FILTER
+        # ==========================================================
+
+        if grade_id:
+            substitutions = substitutions.filter(
+                timetable_entry__grade_id=grade_id
+            )
+
+        # ==========================================================
+        # SECTION FILTER
+        # ==========================================================
+
+        if section_id:
+            substitutions = substitutions.filter(
+                timetable_entry__section_id=section_id
+            )
+
+        # ==========================================================
+        # SEARCH
+        #
+        # Search by original teacher, substitute teacher,
+        # subject, grade, section.
+        # ==========================================================
+
+        if search:
+
+            substitutions = substitutions.filter(
+                Q(original_teacher__name__icontains=search)
+                | Q(
+                    substitute_teacher__name__icontains=search
+                )
+                | Q(
+                    timetable_entry__subject__name__icontains=search
+                )
+                | Q(
+                    timetable_entry__grade__name__icontains=search
+                )
+                | Q(
+                    timetable_entry__section__name__icontains=search
+                )
+            )
+
+        # ==========================================================
+        # ORDERING
+        # ==========================================================
+
+        substitutions = substitutions.order_by(
+            "-date",
+            "timetable_entry__period__period_number",
+        )
+
+        # ==========================================================
+        # PAGINATION
+        # ==========================================================
+
+        paginator = CustomPageNumberPagination()
+
+        page = paginator.paginate_queryset(
+            substitutions,
+            request,
+        )
+
+        # ==========================================================
+        # RESPONSE DATA
+        # ==========================================================
+
+        data = []
+
+        for substitution in page:
+
+            entry = substitution.timetable_entry
+
+            data.append({
+                "id": str(
+                    substitution.id
+                ),
+
+                "date": substitution.date,
+
+                "status": substitution.status,
+
+                # --------------------------------------------------
+                # ABSENT / ORIGINAL TEACHER
+                # --------------------------------------------------
+
+                "absent_teacher": {
+                    "id": str(
+                        substitution
+                        .original_teacher
+                        .id
+                    ),
+                    "employee_id": getattr(
+                        substitution.original_teacher,
+                        "employee_id",
+                        None,
+                    ),
+                    "name": (
+                        substitution
+                        .original_teacher
+                        .name
+                    ),
+                },
+
+                # --------------------------------------------------
+                # SUBSTITUTE TEACHER
+                # --------------------------------------------------
+
+                "substitute_teacher": {
+                    "id": str(
+                        substitution
+                        .substitute_teacher
+                        .id
+                    ),
+                    "employee_id": getattr(
+                        substitution.substitute_teacher,
+                        "employee_id",
+                        None,
+                    ),
+                    "name": (
+                        substitution
+                        .substitute_teacher
+                        .name
+                    ),
+                },
+
+                # --------------------------------------------------
+                # CLASS
+                # --------------------------------------------------
+
+                "class": {
+                    "grade": {
+                        "id": str(
+                            entry.grade.id
+                        ),
+                        "name": (
+                            entry.grade.name
+                        ),
+                    },
+                    "section": {
+                        "id": str(
+                            entry.section.id
+                        ),
+                        "name": (
+                            entry.section.name
+                        ),
+                    },
+                },
+
+                # --------------------------------------------------
+                # SUBJECT
+                # --------------------------------------------------
+
+                "subject": {
+                    "id": str(
+                        entry.subject.id
+                    ),
+                    "name": (
+                        entry.subject.name
+                    ),
+                },
+
+                # --------------------------------------------------
+                # PERIOD
+                # --------------------------------------------------
+
+                "period": {
+                    "id": str(
+                        entry.period.id
+                    ),
+                    "period_number": (
+                        entry.period
+                        .period_number
+                    ),
+                    "start_time": getattr(
+                        entry.period,
+                        "start_time",
+                        None,
+                    ),
+                    "end_time": getattr(
+                        entry.period,
+                        "end_time",
+                        None,
+                    ),
+                },
+
+                "day_of_week": (
+                    entry.day_of_week
+                ),
+
+                "reason": substitution.reason,
+
+                # --------------------------------------------------
+                # ACADEMIC YEAR
+                # --------------------------------------------------
+
+                "academic_year": {
+                    "id": str(
+                        entry
+                        .timetable
+                        .academic_year
+                        .id
+                    ),
+                    "name": (
+                        entry
+                        .timetable
+                        .academic_year
+                        .name
+                    ),
+                },
+            })
+
+        # ==========================================================
+        # PAGINATION
+        # ==========================================================
+
+        pagination = {
+            "count": paginator.page.paginator.count,
+            "page": paginator.page.number,
+            "page_size": (
+                paginator.page
+                .paginator
+                .per_page
+            ),
+            "total_pages": (
+                paginator.page
+                .paginator
+                .num_pages
+            ),
+        }
+
+        # ==========================================================
+        # LOG
+        # ==========================================================
+
+        application_logger.info(
+            "teacher_substitution_list_completed",
+            extra={
+                "performed_by": str(request.user.id),
+                "school_id": str(school.id),
+                "count": len(data),
+            },
+        )
+
+        # ==========================================================
+        # RESPONSE
+        # ==========================================================
+
+        return CustomResponse.successResponse(
+            data={
+                "results": data,
+                "pagination": pagination,
+            },
+            description=(
+                "Teacher substitutions fetched successfully."
+            ),
         )

@@ -68,7 +68,9 @@ from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdmin
     CreateSchoolConfigurationAPIView, GetSchoolConfigurationAPIView, UpdateSchoolConfigurationAPIView
 from apps.backoffice.views.timetable import TimetableTermCreateAPIView, TimetableTermListAPIView, \
     TimetableTermUpdateAPIView, TimetablePeriodCreateAPIView, TimetablePeriodListAPIView, TimetablePeriodUpdateAPIView, \
-    TimetablePeriodDeleteAPIView
+    TimetablePeriodDeleteAPIView, TimetableCreateAPIView, TimetableListAPIView, TimetableUpdateAPIView, \
+    TimetableDeleteAPIView, BulkUploadTimetableAPIView, DownloadTimetableSampleExcelAPIView, TeacherScheduleListAPIView, \
+    TeacherScheduleAPIView, AssignTeacherSubstitutionAPIView, TeacherSubstitutionListAPIView
 from apps.backoffice.views.transport import CreateVehicleAPIView, VehicleListAPIView, UpdateVehicleAPIView, \
     CreateVehicleDocumentAPIView, VehicleDocumentListAPIView, UpdateVehicleDocumentAPIView, CreateRouteAPIView, \
     RouteListAPIView, UpdateRouteAPIView, CreateStopAPIView, StopListAPIView, UpdateStopAPIView, \
@@ -645,6 +647,26 @@ urlpatterns = [
     path("timetable/period/<uuid:period_id>",TimetablePeriodUpdateAPIView.as_view(),),
 
     path("timetable/period/<uuid:period_id>/delete",TimetablePeriodDeleteAPIView.as_view(),),
+
+    path("timetable/create",TimetableCreateAPIView.as_view(),),
+
+    path("timetable",TimetableListAPIView.as_view(),),
+
+    path("timetable/<uuid:timetable_id>",TimetableUpdateAPIView.as_view(),),
+
+    path("timetable/<uuid:timetable_id>/delete",TimetableDeleteAPIView.as_view(),),
+
+    path("timetable/bulk/upload",BulkUploadTimetableAPIView.as_view(),),
+
+    path("timetable/bulk/sample",DownloadTimetableSampleExcelAPIView.as_view(),),
+
+    path("teacher/schedule",TeacherScheduleListAPIView.as_view(),),
+
+    path("teacher/schedule/<uuid:teacher_id>",TeacherScheduleAPIView.as_view()),
+
+    path("assign/teacher/substitute",AssignTeacherSubstitutionAPIView.as_view(),),
+
+    path("teacher/substitutions",TeacherSubstitutionListAPIView.as_view(),),
 
     path("bulletin/categories/create",BulletinCategoryCreateAPIView.as_view(),),
 
