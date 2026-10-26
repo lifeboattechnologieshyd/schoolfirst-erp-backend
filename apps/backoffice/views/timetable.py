@@ -1,6 +1,9 @@
 import uuid
 from datetime import date
+from django.conf import settings
 
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.db.models import Prefetch, Q
 from django.http import HttpResponse
 from io import BytesIO
@@ -3410,7 +3413,7 @@ class BulkUploadTimetableAPIView(APIView):
 
 
 
-class DownloadTimetableSampleExcelAPIView(APIView):
+class DownloadTimetableTemplateAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "timetable.bulk_upload"
 
@@ -3418,180 +3421,145 @@ class DownloadTimetableSampleExcelAPIView(APIView):
 
         school = request.school
 
-        # ----------------------------------------------------------
-        # SCHOOL VALIDATION
-        # ----------------------------------------------------------
-
-        if not school:
-            application_logger.warning(
-                "timetable_sample_download_failed",
-                extra={
-                    "performed_by": str(request.user.id),
-                    "reason": "school_not_found",
-                },
-            )
-
-            return CustomResponse.errorResponse(
-                description="School not found."
-            )
-
         application_logger.info(
-            "timetable_sample_download_started",
-            extra={
-                "performed_by": str(request.user.id),
-                "school_id": str(school.id),
-            },
+            "timetable_template_download_started",
+            requested_by=str(request.user.id),
+            school_id=str(school.id) if school else None,
         )
 
-        # ----------------------------------------------------------
-        # CREATE WORKBOOK
-        # ----------------------------------------------------------
+        try:
 
-        workbook = Workbook()
-        worksheet = workbook.active
-        worksheet.title = "Timetable"
+            # ------------------------------------------------------
+            # CREATE WORKBOOK
+            # ------------------------------------------------------
 
-        # ----------------------------------------------------------
-        # HEADERS
-        # ----------------------------------------------------------
+            workbook = Workbook()
 
-        headers = [
-            "Day",
-            "Period",
-            "Subject",
-            "Teacher",
-            "Notes",
-        ]
+            sheet = workbook.active
+            sheet.title = "Timetable"
 
-        worksheet.append(headers)
+            # ------------------------------------------------------
+            # HEADERS
+            # ------------------------------------------------------
 
-        # ----------------------------------------------------------
-        # SAMPLE DATA
-        # ----------------------------------------------------------
+            headers = [
+                "Day",
+                "Period",
+                "Subject",
+                "Teacher",
+                "Notes",
+            ]
 
-        sample_rows = [
-            [
+            for column_number, header in enumerate(
+                headers,
+                start=1,
+            ):
+                sheet.cell(
+                    row=1,
+                    column=column_number,
+                    value=header,
+                )
+
+            # ------------------------------------------------------
+            # SAMPLE ROW
+            # ------------------------------------------------------
+
+            sample_row = [
                 "MONDAY",
                 1,
                 "Mathematics",
                 "John",
                 "Regular class",
-            ],
-            [
-                "MONDAY",
-                2,
-                "English",
-                "David",
-                "",
-            ],
-            [
-                "TUESDAY",
-                1,
-                "Science",
-                "John",
-                "",
-            ],
-            [
-                "TUESDAY",
-                2,
-                "Mathematics",
-                "David",
-                "Revision class",
-            ],
-        ]
+            ]
 
-        for row in sample_rows:
-            worksheet.append(row)
-
-        # ----------------------------------------------------------
-        # HEADER STYLE
-        # ----------------------------------------------------------
-
-        header_fill = PatternFill(
-            fill_type="solid",
-            fgColor="1F4E78",
-        )
-
-        for cell in worksheet[1]:
-            cell.font = Font(
-                bold=True,
-                color="FFFFFF",
-            )
-            cell.fill = header_fill
-            cell.alignment = Alignment(
-                horizontal="center",
-                vertical="center",
-            )
-
-        # ----------------------------------------------------------
-        # COLUMN WIDTHS
-        # ----------------------------------------------------------
-
-        column_widths = {
-            "A": 18,  # Day
-            "B": 12,  # Period
-            "C": 25,  # Subject
-            "D": 25,  # Teacher
-            "E": 35,  # Notes
-        }
-
-        for column, width in column_widths.items():
-            worksheet.column_dimensions[column].width = width
-
-        # ----------------------------------------------------------
-        # ALIGNMENT
-        # ----------------------------------------------------------
-
-        for row in worksheet.iter_rows(
-            min_row=2,
-            max_row=worksheet.max_row,
-        ):
-            for cell in row:
-                cell.alignment = Alignment(
-                    vertical="center",
+            for column_number, value in enumerate(
+                sample_row,
+                start=1,
+            ):
+                sheet.cell(
+                    row=2,
+                    column=column_number,
+                    value=value,
                 )
 
+            # ------------------------------------------------------
+            # SAVE EXCEL TO MEMORY
+            # ------------------------------------------------------
+
+            excel_file = BytesIO()
+
+            workbook.save(excel_file)
+
+            excel_file.seek(0)
+
+            # ------------------------------------------------------
+            # SAVE FILE TO STORAGE
+            # ------------------------------------------------------
+
+            file_name = (
+                "templates/timetable_template.xlsx"
+            )
+
+            file_path = default_storage.save(
+                file_name,
+                ContentFile(
+                    excel_file.getvalue()
+                ),
+            )
+
+            # ------------------------------------------------------
+            # FILE URL
+            # ------------------------------------------------------
+
+            file_url = (
+                settings.MEDIA_URL
+                + file_path
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "timetable_template_download_failed",
+                requested_by=str(request.user.id),
+                school_id=(
+                    str(school.id)
+                    if school
+                    else None
+                ),
+                reason="template_generation_failed",
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(e),
+            )
+
         # ----------------------------------------------------------
-        # FREEZE HEADER
+        # SUCCESS LOG
         # ----------------------------------------------------------
 
-        worksheet.freeze_panes = "A2"
-
-        # ----------------------------------------------------------
-        # AUTO FILTER
-        # ----------------------------------------------------------
-
-        worksheet.auto_filter.ref = (
-            f"A1:E{worksheet.max_row}"
+        application_logger.info(
+            "timetable_template_generated",
+            requested_by=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            file_path=file_path,
+            file_url=file_url,
+            total_columns=len(headers),
         )
 
         # ----------------------------------------------------------
         # RESPONSE
         # ----------------------------------------------------------
 
-        response = HttpResponse(
-            content_type=(
-                "application/vnd.openxmlformats-officedocument."
-                "spreadsheetml.sheet"
-            )
-        )
-
-        response[
-            "Content-Disposition"
-        ] = 'attachment; filename="timetable_sample.xlsx"'
-
-        workbook.save(response)
-
-        application_logger.info(
-            "timetable_sample_download_completed",
-            extra={
-                "performed_by": str(request.user.id),
-                "school_id": str(school.id),
+        return CustomResponse.successResponse(
+            description=(
+                "Timetable template generated successfully."
+            ),
+            data={
+                "file_url": file_url,
+                "file_path": file_path,
             },
         )
-
-        return response
-
 
 
 class TeacherScheduleListAPIView(APIView):

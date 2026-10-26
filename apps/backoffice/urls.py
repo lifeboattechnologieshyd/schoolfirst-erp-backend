@@ -69,8 +69,9 @@ from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdmin
 from apps.backoffice.views.timetable import TimetableTermCreateAPIView, TimetableTermListAPIView, \
     TimetableTermUpdateAPIView, TimetablePeriodCreateAPIView, TimetablePeriodListAPIView, TimetablePeriodUpdateAPIView, \
     TimetablePeriodDeleteAPIView, TimetableCreateAPIView, TimetableListAPIView, TimetableUpdateAPIView, \
-    TimetableDeleteAPIView, BulkUploadTimetableAPIView, DownloadTimetableSampleExcelAPIView, TeacherScheduleListAPIView, \
-    TeacherScheduleAPIView, AssignTeacherSubstitutionAPIView, TeacherSubstitutionListAPIView
+    TimetableDeleteAPIView, BulkUploadTimetableAPIView, TeacherScheduleListAPIView, \
+    TeacherScheduleAPIView, AssignTeacherSubstitutionAPIView, TeacherSubstitutionListAPIView, \
+    DownloadTimetableTemplateAPIView
 from apps.backoffice.views.transport import CreateVehicleAPIView, VehicleListAPIView, UpdateVehicleAPIView, \
     CreateVehicleDocumentAPIView, VehicleDocumentListAPIView, UpdateVehicleDocumentAPIView, CreateRouteAPIView, \
     RouteListAPIView, UpdateRouteAPIView, CreateStopAPIView, StopListAPIView, UpdateStopAPIView, \
@@ -658,7 +659,7 @@ urlpatterns = [
 
     path("timetable/bulk/upload",BulkUploadTimetableAPIView.as_view(),),
 
-    path("timetable/bulk/sample",DownloadTimetableSampleExcelAPIView.as_view(),),
+    path("timetable/bulk/sample",DownloadTimetableTemplateAPIView.as_view(),),
 
     path("teacher/schedule",TeacherScheduleListAPIView.as_view(),),
 
