@@ -354,13 +354,13 @@ class TimetableEntry(AuditModel):
         related_name="timetable_entries",
     )
 
-    room = models.ForeignKey(
-        Room,
-        on_delete=models.SET_NULL,
-        related_name="timetable_entries",
-        null=True,
-        blank=True,
-    )
+    # room = models.ForeignKey(
+    #     Room,
+    #     on_delete=models.SET_NULL,
+    #     related_name="timetable_entries",
+    #     null=True,
+    #     blank=True,
+    # )
 
     period = models.ForeignKey(
         TimetablePeriod,
@@ -396,7 +396,7 @@ class TimetableEntry(AuditModel):
             models.Index(fields=["section"]),
             models.Index(fields=["subject"]),
             models.Index(fields=["teacher"]),
-            models.Index(fields=["room"]),
+            # models.Index(fields=["room"]),
             models.Index(fields=["period"]),
             models.Index(fields=["day_of_week"]),
             models.Index(
@@ -415,7 +415,7 @@ class TimetableEntry(AuditModel):
             ),
             models.Index(
                 fields=[
-                    "room",
+                    # "room",
                     "day_of_week",
                     "period",
                 ]

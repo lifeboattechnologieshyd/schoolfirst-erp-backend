@@ -1,4 +1,6 @@
 import uuid
+
+from django.db.models import Prefetch
 from django.http import HttpResponse
 from io import BytesIO
 from openpyxl import load_workbook, Workbook
@@ -9,8 +11,8 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.school.models.school import Branch, AcademicYear
-from apps.timetable.models import TimetableTerm, TimetablePeriod, Room, Timetable
+from apps.school.models.school import Branch, AcademicYear, Grade, Subject, Staff
+from apps.timetable.models import TimetableTerm, TimetablePeriod, Room, Timetable, TimetableEntry
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
@@ -2199,7 +2201,7 @@ class TimetableCreateAPIView(APIView):
             # -------------------------
 
             valid_statuses = dict(
-                Timetable.STATUS_CHOICES
+                Timetable.status
             )
 
             if status not in valid_statuses:
@@ -2269,3 +2271,1041 @@ class TimetableCreateAPIView(APIView):
             return CustomResponse.errorResponse(
                 message="Failed to create timetable"
             )
+
+class TimetableListAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "timetable.view"
+
+    def get(self, request):
+        try:
+            # ----------------------------------------------------------
+            # SCHOOL
+            # ----------------------------------------------------------
+
+            school = request.school
+
+            if not school:
+                return CustomResponse.errorResponse(
+                    description="School not found."
+                )
+
+            # ----------------------------------------------------------
+            # QUERY PARAMETERS
+            # ----------------------------------------------------------
+
+            academic_year_id = request.query_params.get(
+                "academic_year_id"
+            )
+            grade_id = request.query_params.get("grade_id")
+            section_id = request.query_params.get("section_id")
+            status = request.query_params.get("status")
+
+            # ----------------------------------------------------------
+            # GET TIMETABLES
+            # ----------------------------------------------------------
+
+            timetables = (
+                Timetable.objects
+                .filter(
+                    school=school,
+                )
+                .select_related(
+                    "academic_year",
+                    "grade",
+                    "section",
+                )
+                .prefetch_related(
+                    Prefetch(
+                        "entries",
+                        queryset=(
+                            TimetableEntry.objects
+                            .filter(
+                                status=TimetableEntry.Status.ACTIVE
+                            )
+                            .select_related(
+                                "subject",
+                                "teacher",
+                                "period",
+                            )
+                            .order_by(
+                                "day_of_week",
+                                "period__period_number",
+                            )
+                        ),
+                    )
+                )
+                .order_by("-created_at")
+            )
+
+            # ----------------------------------------------------------
+            # FILTERS
+            # ----------------------------------------------------------
+
+            if academic_year_id:
+                timetables = timetables.filter(
+                    academic_year_id=academic_year_id
+                )
+
+            if grade_id:
+                timetables = timetables.filter(
+                    grade_id=grade_id
+                )
+
+            if section_id:
+                timetables = timetables.filter(
+                    section_id=section_id
+                )
+
+            if status:
+                timetables = timetables.filter(
+                    status=status
+                )
+
+            # ----------------------------------------------------------
+            # PAGINATION
+            # ----------------------------------------------------------
+
+            paginator = CustomPageNumberPagination()
+
+            page = paginator.paginate_queryset(
+                timetables,
+                request,
+            )
+
+            # ----------------------------------------------------------
+            # RESPONSE DATA
+            # ----------------------------------------------------------
+
+            data = []
+
+            for timetable in page:
+
+                entries = []
+
+                for entry in timetable.entries.all():
+
+                    entries.append({
+                        "id": str(entry.id),
+
+                        "day_of_week": entry.day_of_week,
+
+                        "period": {
+                            "id": str(entry.period.id),
+                            "period_number": (
+                                entry.period.period_number
+                            ),
+                            "name": getattr(
+                                entry.period,
+                                "name",
+                                None,
+                            ),
+                            "start_time": getattr(
+                                entry.period,
+                                "start_time",
+                                None,
+                            ),
+                            "end_time": getattr(
+                                entry.period,
+                                "end_time",
+                                None,
+                            ),
+                        },
+
+                        "subject": {
+                            "id": str(entry.subject.id),
+                            "name": entry.subject.name,
+                        },
+
+                        "teacher": {
+                            "id": str(entry.teacher.id),
+                            "name": entry.teacher.name,
+                        },
+
+                        "notes": entry.notes,
+
+                        "status": entry.status,
+                    })
+
+                data.append({
+                    "id": str(timetable.id),
+
+                    "academic_year": {
+                        "id": str(
+                            timetable.academic_year.id
+                        ),
+                        "name": timetable.academic_year.name,
+                    },
+
+                    "grade": {
+                        "id": str(timetable.grade.id),
+                        "name": timetable.grade.name,
+                    },
+
+                    "section": {
+                        "id": str(timetable.section.id),
+                        "name": timetable.section.name,
+                    },
+
+                    "status": timetable.status,
+
+                    "entries": entries,
+
+                    "created_at": timetable.created_at,
+
+                    "updated_at": timetable.updated_at,
+                })
+
+            # ----------------------------------------------------------
+            # LOG
+            # ----------------------------------------------------------
+
+            application_logger.info(
+                "Timetables fetched successfully.",
+                extra={
+                    "school_id": str(school.id),
+                    "academic_year_id": academic_year_id,
+                    "grade_id": grade_id,
+                    "section_id": section_id,
+                    "status": status,
+                    "page": request.query_params.get(
+                        "page",
+                        1,
+                    ),
+                    "count": len(data),
+                },
+            )
+
+            # ----------------------------------------------------------
+            # RESPONSE
+            # ----------------------------------------------------------
+
+            return CustomResponse.successResponse(
+                description="Timetables fetched successfully.",
+                data=data,
+            )
+
+        except Exception as exc:
+
+            application_logger.exception(
+                "Error fetching timetables.",
+                extra={
+                    "school_id": (
+                        str(request.school.id)
+                        if getattr(request, "school", None)
+                        else None
+                    ),
+                    "academic_year_id": request.query_params.get(
+                        "academic_year_id"
+                    ),
+                    "grade_id": request.query_params.get(
+                        "grade_id"
+                    ),
+                    "section_id": request.query_params.get(
+                        "section_id"
+                    ),
+                    "error": str(exc),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="Unable to fetch timetables."
+            )
+
+
+class TimetableUpdateAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "timetable.update"
+
+    @transaction.atomic
+    def put(self, request, timetable_id):
+
+        try:
+            school = request.school
+
+            if not school:
+                return CustomResponse.errorResponse(
+                    description="School not found."
+                )
+
+            # ----------------------------------------------------------
+            # GET TIMETABLE
+            # ----------------------------------------------------------
+
+            timetable = (
+                Timetable.objects
+                .filter(
+                    id=timetable_id,
+                    school=school,
+                )
+                .first()
+            )
+
+            if not timetable:
+                return CustomResponse.errorResponse(
+                    description="Timetable not found."
+                )
+
+            # ----------------------------------------------------------
+            # BASIC FIELDS
+            # ----------------------------------------------------------
+
+            if "status" in request.data:
+
+                status = request.data.get("status")
+
+                if status not in Timetable.Status.values:
+                    return CustomResponse.errorResponse(
+                        description="Invalid timetable status."
+                    )
+
+                timetable.status = status
+
+            timetable.save()
+
+            # ----------------------------------------------------------
+            # ENTRIES
+            # ----------------------------------------------------------
+
+            entries = request.data.get("entries")
+
+            if entries is not None:
+
+                if not isinstance(entries, list):
+                    return CustomResponse.errorResponse(
+                        description="entries must be a list."
+                    )
+
+                # Remove existing entries
+                TimetableEntry.objects.filter(
+                    timetable=timetable
+                ).update(
+                    status=TimetableEntry.Status.INACTIVE
+                )
+
+                for entry_data in entries:
+
+                    grade_id = entry_data.get("grade_id")
+                    section_id = entry_data.get("section_id")
+                    subject_id = entry_data.get("subject_id")
+                    teacher_id = entry_data.get("teacher_id")
+                    period_id = entry_data.get("period_id")
+                    day_of_week = entry_data.get("day_of_week")
+                    notes = entry_data.get("notes")
+
+                    # --------------------------------------------------
+                    # REQUIRED FIELDS
+                    # --------------------------------------------------
+
+                    required_fields = {
+                        "grade_id": grade_id,
+                        "section_id": section_id,
+                        "subject_id": subject_id,
+                        "teacher_id": teacher_id,
+                        "period_id": period_id,
+                        "day_of_week": day_of_week,
+                    }
+
+                    for field, value in required_fields.items():
+
+                        if value in [None, ""]:
+                            raise ValueError(
+                                f"{field} is required."
+                            )
+
+                    # --------------------------------------------------
+                    # VALIDATE DAY
+                    # --------------------------------------------------
+
+                    if day_of_week not in (
+                        TimetableEntry.DayOfWeek.values
+                    ):
+                        raise ValueError(
+                            "Invalid day_of_week."
+                        )
+
+                    # --------------------------------------------------
+                    # GET GRADE
+                    # --------------------------------------------------
+
+                    grade = Grade.objects.filter(
+                        id=grade_id,
+                        school=school,
+                    ).first()
+
+                    if not grade:
+                        raise ValueError(
+                            "Grade not found."
+                        )
+
+                    # --------------------------------------------------
+                    # GET SECTION
+                    # --------------------------------------------------
+
+                    section = Section.objects.filter(
+                        id=section_id,
+                        grade=grade,
+                    ).first()
+
+                    if not section:
+                        raise ValueError(
+                            "Section not found."
+                        )
+
+                    # --------------------------------------------------
+                    # GET SUBJECT
+                    # --------------------------------------------------
+
+                    subject = Subject.objects.filter(
+                        id=subject_id,
+                        school=school,
+                    ).first()
+
+                    if not subject:
+                        raise ValueError(
+                            "Subject not found."
+                        )
+
+                    # --------------------------------------------------
+                    # GET TEACHER
+                    # --------------------------------------------------
+
+                    teacher = Staff.objects.filter(
+                        id=teacher_id,
+                        school=school,
+                    ).first()
+
+                    if not teacher:
+                        raise ValueError(
+                            "Teacher not found."
+                        )
+
+                    # --------------------------------------------------
+                    # GET PERIOD
+                    # --------------------------------------------------
+
+                    period = TimetablePeriod.objects.filter(
+                        id=period_id,
+                        school=school,
+                    ).first()
+
+                    if not period:
+                        raise ValueError(
+                            "Timetable period not found."
+                        )
+
+                    # --------------------------------------------------
+                    # CREATE ENTRY
+                    # --------------------------------------------------
+
+                    TimetableEntry.objects.create(
+                        timetable=timetable,
+                        grade=grade,
+                        section=section,
+                        subject=subject,
+                        teacher=teacher,
+                        period=period,
+                        day_of_week=day_of_week,
+                        notes=notes,
+                        status=TimetableEntry.Status.ACTIVE,
+                    )
+
+            application_logger.info(
+                "Timetable updated successfully.",
+                extra={
+                    "school_id": str(school.id),
+                    "timetable_id": str(timetable.id),
+                    "performed_by": str(request.user.id),
+                },
+            )
+
+            return CustomResponse.successResponse(
+                description="Timetable updated successfully.",
+                data={
+                    "id": str(timetable.id),
+                },
+            )
+
+        except IntegrityError as exc:
+
+            application_logger.exception(
+                "Timetable update integrity error.",
+                extra={
+                    "timetable_id": str(timetable_id),
+                    "error": str(exc),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "A timetable entry already exists for "
+                    "this section, day and period."
+                )
+            )
+
+        except Exception as exc:
+
+            application_logger.exception(
+                "Error updating timetable.",
+                extra={
+                    "timetable_id": str(timetable_id),
+                    "error": str(exc),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(exc)
+            )
+
+
+class TimetableDeleteAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "timetable.delete"
+
+    @transaction.atomic
+    def delete(self, request, timetable_id):
+
+        try:
+            school = request.school
+
+            if not school:
+                return CustomResponse.errorResponse(
+                    description="School not found."
+                )
+
+            timetable = (
+                Timetable.objects
+                .filter(
+                    id=timetable_id,
+                    school=school,
+                )
+                .first()
+            )
+
+            if not timetable:
+                return CustomResponse.errorResponse(
+                    description="Timetable not found."
+                )
+
+            # ----------------------------------------------------------
+            # SOFT DELETE ENTRIES
+            # ----------------------------------------------------------
+
+            TimetableEntry.objects.filter(
+                timetable=timetable
+            ).update(
+                status=TimetableEntry.Status.INACTIVE
+            )
+
+            # ----------------------------------------------------------
+            # SOFT DELETE TIMETABLE
+            # ----------------------------------------------------------
+
+            timetable.soft_delete(request.user)
+
+            application_logger.info(
+                "Timetable deleted successfully.",
+                extra={
+                    "school_id": str(school.id),
+                    "timetable_id": str(timetable.id),
+                    "performed_by": str(request.user.id),
+                },
+            )
+
+            return CustomResponse.successResponse(
+                description="Timetable deleted successfully.",
+                data={
+                    "id": str(timetable.id),
+                },
+            )
+
+        except Exception as exc:
+
+            application_logger.exception(
+                "Error deleting timetable.",
+                extra={
+                    "timetable_id": str(timetable_id),
+                    "error": str(exc),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="Unable to delete timetable."
+            )
+
+from openpyxl import load_workbook
+
+from django.db import transaction, IntegrityError
+
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser
+
+
+from apps.timetable.models import (
+    Timetable,
+    TimetableEntry,
+    TimetablePeriod,
+)
+
+from shared.permissions import HasPermission
+from shared.utils.logger import application_logger
+
+
+class BulkUploadTimetableAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "timetable.bulk_upload"
+
+    parser_classes = [MultiPartParser]
+
+    def post(self, request):
+
+        school = request.school
+
+        application_logger.info(
+            "timetable_bulk_upload_started",
+            extra={
+                "performed_by": str(request.user.id),
+                "school_id": str(school.id) if school else None,
+            },
+        )
+
+        # ----------------------------------------------------------
+        # SCHOOL VALIDATION
+        # ----------------------------------------------------------
+
+        if not school:
+            application_logger.warning(
+                "timetable_bulk_upload_failed",
+                extra={
+                    "performed_by": str(request.user.id),
+                    "reason": "school_not_found",
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        # ----------------------------------------------------------
+        # FILE VALIDATION
+        # ----------------------------------------------------------
+
+        file = request.FILES.get("file")
+
+        if not file:
+            application_logger.warning(
+                "timetable_bulk_upload_failed",
+                extra={
+                    "performed_by": str(request.user.id),
+                    "school_id": str(school.id),
+                    "reason": "excel_file_missing",
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="Excel file is required."
+            )
+
+        # ----------------------------------------------------------
+        # LOAD EXCEL
+        # ----------------------------------------------------------
+
+        try:
+            workbook = load_workbook(
+                file,
+                data_only=True,
+            )
+
+            sheet = workbook.active
+
+        except Exception as exc:
+
+            application_logger.exception(
+                "timetable_bulk_upload_failed",
+                extra={
+                    "performed_by": str(request.user.id),
+                    "school_id": str(school.id),
+                    "file_name": file.name,
+                    "reason": "invalid_excel_file",
+                    "error": str(exc),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="Invalid Excel file."
+            )
+
+        # ----------------------------------------------------------
+        # HEADERS
+        # ----------------------------------------------------------
+
+        headers = [
+            str(cell.value).strip()
+            if cell.value is not None
+            else ""
+            for cell in sheet[1]
+        ]
+
+        required_headers = [
+            "Academic Year",
+            "Grade",
+            "Section",
+            "Day",
+            "Period",
+            "Subject",
+            "Teacher",
+            "Notes",
+        ]
+
+        for header in required_headers:
+
+            if header not in headers:
+
+                application_logger.warning(
+                    "timetable_bulk_upload_failed",
+                    extra={
+                        "performed_by": str(request.user.id),
+                        "school_id": str(school.id),
+                        "file_name": file.name,
+                        "missing_header": header,
+                        "reason": "required_column_missing",
+                    },
+                )
+
+                return CustomResponse.errorResponse(
+                    description=f"{header} column is missing."
+                )
+
+        # ----------------------------------------------------------
+        # COUNTERS
+        # ----------------------------------------------------------
+
+        success_count = 0
+        failed_count = 0
+        errors = []
+
+        # ----------------------------------------------------------
+        # PROCESS ROWS
+        # ----------------------------------------------------------
+
+        for row_number, row in enumerate(
+            sheet.iter_rows(
+                min_row=2,
+                values_only=True,
+            ),
+            start=2,
+        ):
+
+            data = {}
+
+            try:
+
+                data = dict(
+                    zip(
+                        headers,
+                        row,
+                    )
+                )
+
+                # --------------------------------------------------
+                # GET VALUES
+                # --------------------------------------------------
+
+                academic_year_name = str(
+                    data.get("Academic Year") or ""
+                ).strip()
+
+                grade_name = str(
+                    data.get("Grade") or ""
+                ).strip()
+
+                section_name = str(
+                    data.get("Section") or ""
+                ).strip()
+
+                day_of_week = str(
+                    data.get("Day") or ""
+                ).strip().upper()
+
+                period_value = data.get("Period")
+
+                subject_name = str(
+                    data.get("Subject") or ""
+                ).strip()
+
+                teacher_name = str(
+                    data.get("Teacher") or ""
+                ).strip()
+
+                notes = data.get("Notes")
+
+                # --------------------------------------------------
+                # REQUIRED VALUES
+                # --------------------------------------------------
+
+                required_values = {
+                    "Academic Year": academic_year_name,
+                    "Grade": grade_name,
+                    "Section": section_name,
+                    "Day": day_of_week,
+                    "Period": period_value,
+                    "Subject": subject_name,
+                    "Teacher": teacher_name,
+                }
+
+                for field, value in required_values.items():
+
+                    if value in [None, ""]:
+
+                        raise ValueError(
+                            f"{field} is required."
+                        )
+
+                # --------------------------------------------------
+                # ACADEMIC YEAR
+                # --------------------------------------------------
+
+                academic_year = AcademicYear.objects.filter(
+                    school=school,
+                    name__iexact=academic_year_name,
+                ).first()
+
+                if not academic_year:
+                    raise ValueError(
+                        f"Academic year '{academic_year_name}' not found."
+                    )
+
+                # --------------------------------------------------
+                # GRADE
+                # --------------------------------------------------
+
+                grade = Grade.objects.filter(
+                    school=school,
+                    name__iexact=grade_name,
+                ).first()
+
+                if not grade:
+                    raise ValueError(
+                        f"Grade '{grade_name}' not found."
+                    )
+
+                # --------------------------------------------------
+                # SECTION
+                # --------------------------------------------------
+
+                section = Section.objects.filter(
+                    grade=grade,
+                    name__iexact=section_name,
+                ).first()
+
+                if not section:
+                    raise ValueError(
+                        f"Section '{section_name}' not found."
+                    )
+
+                # --------------------------------------------------
+                # DAY VALIDATION
+                # --------------------------------------------------
+
+                if day_of_week not in (
+                    TimetableEntry.DayOfWeek.values
+                ):
+                    raise ValueError(
+                        f"Invalid day '{day_of_week}'."
+                    )
+
+                # --------------------------------------------------
+                # PERIOD
+                # --------------------------------------------------
+
+                try:
+                    period_number = int(
+                        float(period_value)
+                    )
+                except (ValueError, TypeError):
+                    raise ValueError(
+                        f"Invalid period '{period_value}'."
+                    )
+
+                period = TimetablePeriod.objects.filter(
+                    period_number=period_number,
+                ).first()
+
+                if not period:
+                    raise ValueError(
+                        f"Period '{period_number}' not found."
+                    )
+
+                # --------------------------------------------------
+                # SUBJECT
+                # --------------------------------------------------
+
+                subject = Subject.objects.filter(
+                    school=school,
+                    name__iexact=subject_name,
+                ).first()
+
+                if not subject:
+                    raise ValueError(
+                        f"Subject '{subject_name}' not found."
+                    )
+
+                # --------------------------------------------------
+                # TEACHER
+                # --------------------------------------------------
+
+                teacher = Staff.objects.filter(
+                    school=school,
+                    name__iexact=teacher_name,
+                    status=Staff.Status.ACTIVE,
+                ).first()
+
+                if not teacher:
+                    raise ValueError(
+                        f"Teacher '{teacher_name}' not found."
+                    )
+
+                # --------------------------------------------------
+                # CREATE / GET TIMETABLE
+                # --------------------------------------------------
+
+                with transaction.atomic():
+
+                    timetable, created = (
+                        Timetable.objects.get_or_create(
+                            school=school,
+                            academic_year=academic_year,
+                            grade=grade,
+                            section=section,
+                            defaults={
+                                "status": Timetable.Status.ACTIVE,
+                            },
+                        )
+                    )
+
+                    # --------------------------------------------------
+                    # DUPLICATE ENTRY CHECK
+                    # --------------------------------------------------
+
+                    existing_entry = (
+                        TimetableEntry.objects.filter(
+                            timetable=timetable,
+                            section=section,
+                            day_of_week=day_of_week,
+                            period=period,
+                        )
+                        .first()
+                    )
+
+                    if existing_entry:
+
+                        raise ValueError(
+                            f"Timetable entry already exists for "
+                            f"{section.name}, "
+                            f"{day_of_week}, "
+                            f"Period {period_number}."
+                        )
+
+                    # --------------------------------------------------
+                    # CREATE ENTRY
+                    # --------------------------------------------------
+
+                    TimetableEntry.objects.create(
+                        timetable=timetable,
+                        grade=grade,
+                        section=section,
+                        subject=subject,
+                        teacher=teacher,
+                        period=period,
+                        day_of_week=day_of_week,
+                        notes=notes,
+                        status=TimetableEntry.Status.ACTIVE,
+                    )
+
+                success_count += 1
+
+            except IntegrityError as exc:
+
+                failed_count += 1
+
+                errors.append({
+                    "row": row_number,
+                    "message": (
+                        "Duplicate timetable entry or "
+                        "invalid timetable data."
+                    ),
+                })
+
+                application_logger.warning(
+                    "timetable_bulk_upload_row_failed",
+                    extra={
+                        "performed_by": str(request.user.id),
+                        "school_id": str(school.id),
+                        "file_name": file.name,
+                        "row_number": row_number,
+                        "error": str(exc),
+                    },
+                )
+
+            except Exception as exc:
+
+                failed_count += 1
+
+                errors.append({
+                    "row": row_number,
+                    "message": str(exc),
+                })
+
+                application_logger.warning(
+                    "timetable_bulk_upload_row_failed",
+                    extra={
+                        "performed_by": str(request.user.id),
+                        "school_id": str(school.id),
+                        "file_name": file.name,
+                        "row_number": row_number,
+                        "academic_year": data.get(
+                            "Academic Year"
+                        ),
+                        "grade": data.get("Grade"),
+                        "section": data.get("Section"),
+                        "day": data.get("Day"),
+                        "period": data.get("Period"),
+                        "subject": data.get("Subject"),
+                        "teacher": data.get("Teacher"),
+                        "error": str(exc),
+                    },
+                )
+
+        # ----------------------------------------------------------
+        # FINAL LOG
+        # ----------------------------------------------------------
+
+        application_logger.info(
+            "timetable_bulk_upload_completed",
+            extra={
+                "performed_by": str(request.user.id),
+                "school_id": str(school.id),
+                "file_name": file.name,
+                "total_records": (
+                    success_count + failed_count
+                ),
+                "success_count": success_count,
+                "failed_count": failed_count,
+            },
+        )
+
+        # ----------------------------------------------------------
+        # RESPONSE
+        # ----------------------------------------------------------
+
+        return CustomResponse.successResponse(
+            description="Timetable bulk upload completed.",
+            data={
+                "total_records": (
+                    success_count + failed_count
+                ),
+                "success_count": success_count,
+                "failed_count": failed_count,
+                "errors": errors,
+            },
+        )

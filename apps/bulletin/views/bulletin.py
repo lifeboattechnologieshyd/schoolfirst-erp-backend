@@ -5,11 +5,77 @@ from django.db.models import Prefetch, Q
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.bulletin.models import Bulletin, BulletinAttachment, BulletinRead, BulletinAudience
+from apps.bulletin.models import Bulletin, BulletinAttachment, BulletinRead, BulletinAudience, BulletinCategory
 from apps.school.models.school import Student
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.utils.logger import application_logger
 
+class BulletinCategoryLISTAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+
+
+    def get(self, request):
+        try:
+            school = request.school
+
+            search = request.query_params.get(
+                "search"
+            )
+
+            categories = BulletinCategory.objects.filter(
+                school=school,
+                is_active=True,
+            ).order_by("name")
+
+            if search:
+                search = search.strip()
+
+                if search:
+                    categories = categories.filter(
+                        name__icontains=search
+                    )
+
+            data = []
+
+            for category in categories:
+
+                data.append(
+                    {
+                        "id": str(category.id),
+                        "name": category.name,
+                        "description": category.description,
+                        "is_active": category.is_active,
+                    }
+                )
+
+            application_logger.info(
+                "Bulletin categories fetched successfully. "
+                "school_id=%s count=%s",
+                school.id,
+                len(data),
+            )
+
+            return CustomResponse.successResponse(
+                data=data,
+                description=(
+                    "Bulletin categories fetched successfully."
+                ),
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "Error fetching bulletin categories. "
+                "error=%s",
+                str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Failed to fetch bulletin categories."
+                )
+            )
 
 class BulletinLISTAPIView(APIView):
     permission_classes = [IsAuthenticated]
