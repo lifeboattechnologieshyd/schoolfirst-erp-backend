@@ -1844,6 +1844,7 @@ class CreateStudentAPIView(APIView):
                 generate_student_fees(
                     student=student,
                     fee_template=fee_template,
+                    concession=concession,
                 )
 
         except Exception as e:
@@ -2130,18 +2131,19 @@ class BulkUploadStudentAPIView(APIView):
                     if fee_template is None:
                         raise Exception(f"Fee template not configured for grade '{grade.name}'.")
 
-                    StudentFeeAssignment.objects.get_or_create(
-                        student=student,
-                        fee_template=fee_template,
-                        defaults={
-                            "concession": concession,
-                            "assigned_by": request.user,
-                        },
-                    )
+                    # StudentFeeAssignment.objects.get_or_create(
+                    #     student=student,
+                    #     fee_template=fee_template,
+                    #     defaults={
+                    #         "concession": concession,
+                    #         "assigned_by": request.user,
+                    #     },
+                    # )
 
                     generate_student_fees(
                         student=student,
                         fee_template=fee_template,
+                        concession=concession,
                     )
 
                 success_count += 1
