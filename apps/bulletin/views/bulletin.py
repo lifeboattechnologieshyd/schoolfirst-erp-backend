@@ -307,7 +307,7 @@ class BulletinLISTAPIView(APIView):
                         "banner_color": bulletin.banner_color,
                     },
 
-                    "audiences": audience_data,
+                    # "audiences": audience_data,
 
                     "is_pinned": bulletin.is_pinned,
 
