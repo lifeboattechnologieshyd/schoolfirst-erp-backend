@@ -6446,6 +6446,8 @@ class ReportCardPreviewAPIView(APIView):
                 .select_related(
                     "examination_schedule",
                     "examination_schedule__subject",
+                    "grade_configuration",
+
                 )
                 .order_by(
                     "examination_schedule__exam_date",
@@ -6482,6 +6484,7 @@ class ReportCardPreviewAPIView(APIView):
 
                     "grade": result.grade,
                     "grade_point": result.grade_point,
+                    "grade_color": result.grade_color,
 
                     "status": result.status,
 
