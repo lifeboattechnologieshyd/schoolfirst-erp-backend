@@ -3592,7 +3592,7 @@ class TeacherScheduleListAPIView(APIView):
         # ----------------------------------------------------------
 
         search = request.GET.get("search")
-        department_id = request.GET.get("department_id")
+        department = request.GET.get("department")
         status = request.GET.get("status")
 
         academic_year_id = request.GET.get("academic_year_id")
@@ -3622,9 +3622,20 @@ class TeacherScheduleListAPIView(APIView):
         # DEPARTMENT FILTER
         # ----------------------------------------------------------
 
-        if department_id:
+        if department:
+
+            valid_departments = {
+                value
+                for value, label in Staff.Department.choices
+            }
+
+            if department not in valid_departments:
+                return CustomResponse.errorResponse(
+                    description="Invalid department."
+                )
+
             teachers = teachers.filter(
-                department_id=department_id
+                department=department
             )
 
         # ----------------------------------------------------------
@@ -5055,10 +5066,8 @@ class TeacherSubstitutionListAPIView(APIView):
         # ==========================================================
 
         return CustomResponse.successResponse(
-            data={
-                "results": data,
-                "pagination": pagination,
-            },
+            data= data,
+
             description=(
                 "Teacher substitutions fetched successfully."
             ),
