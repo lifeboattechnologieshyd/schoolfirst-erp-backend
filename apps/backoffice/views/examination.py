@@ -4292,6 +4292,7 @@ class ExaminationMarksUploadAPIView(APIView):
                     "percentage": percentage,
                     "grade": grade,
                     "grade_point": grade_point,
+                    "grade_configuration": grade_configuration,
                     "result_status": result_status,
                 })
 
@@ -4429,6 +4430,7 @@ class ExaminationMarksUploadAPIView(APIView):
                                 "grade_point": (
                                     row["grade_point"]
                                 ),
+                                "grade_configuration": row["grade_configuration"],
 
                                 "status": (
                                     ExaminationResult
@@ -4585,6 +4587,8 @@ class ExaminationResultListAPIView(APIView):
                     "examination_schedule",
                     "examination_schedule__grade",
                     "examination_schedule__subject",
+                    "grade_configuration",
+
                 )
                 .order_by(
                     "examination_schedule__exam_date",
@@ -4592,18 +4596,18 @@ class ExaminationResultListAPIView(APIView):
                     "student__name",
                 )
             )
-            grade_configurations = GradeConfiguration.objects.filter(
-                school=school,
-                academic_year=examination.academic_year,
-            ).filter(
-                Q(branch=examination.branch) |
-                Q(branch__isnull=True)
-            )
-
-            grade_config_map = {
-                config.grade: config
-                for config in grade_configurations
-            }
+            # grade_configurations = GradeConfiguration.objects.filter(
+            #     school=school,
+            #     academic_year=examination.academic_year,
+            # ).filter(
+            #     Q(branch=examination.branch) |
+            #     Q(branch__isnull=True)
+            # )
+            #
+            # grade_config_map = {
+            #     config.grade: config
+            #     for config in grade_configurations
+            # }
 
             # -----------------------------------------
             # Filters
@@ -4713,7 +4717,6 @@ class ExaminationResultListAPIView(APIView):
 
                 maximum_marks = schedule.maximum_marks
 
-                grade_config = grade_config_map.get(result.grade)
 
                 # -------------------------------------
                 # Calculate Percentage
@@ -4836,7 +4839,11 @@ class ExaminationResultListAPIView(APIView):
                         if result.marks_obtained >= schedule.passing_marks
                         else "FAIL"
                     ),
-                    "color": grade_config.color if grade_config else None,
+                    "color": (
+                        result.grade_configuration.color
+                        if result.grade_configuration
+                        else None
+                    ),
 
                     "remarks": (
                         result.remarks
@@ -5959,6 +5966,7 @@ class GenerateReportCardAPIView(APIView):
                     report_card = ReportCard.objects.create(
                         examination=examination,
                         student=student,
+                        grade_configuration=grade_configuration,
                         total_marks=total_marks,
                         obtained_marks=obtained_marks,
                         percentage=percentage,
@@ -5979,7 +5987,11 @@ class GenerateReportCardAPIView(APIView):
                         "percentage": percentage,
                         "grade": overall_grade,
                         "grade_point": overall_grade_point,
-                        "grade_color": overall_grade_color,
+                         "grade_color": (
+                            grade_configuration.color
+                            if grade_configuration
+                            else None
+                        ),
                         "result": result_status,
                     })
 
@@ -6078,6 +6090,8 @@ class ReportCardListAPIView(APIView):
                     "student",
                     "student__grade",
                     "student__section",
+                    "grade_configuration",
+
                 )
                 .order_by(
                     "-examination__start_date",
@@ -6255,6 +6269,11 @@ class ReportCardListAPIView(APIView):
                     "percentage": report_card.percentage,
                     "grade": report_card.grade,
                     "grade_point": report_card.grade_point,
+                    "grade_color": (
+                        report_card.grade_configuration.color
+                        if report_card.grade_configuration
+                        else None
+                    ),
                     "result": report_card.result,
 
                     "status": report_card.status,
@@ -6402,6 +6421,9 @@ class ReportCardPreviewAPIView(APIView):
                     examination=examination,
                     student=student,
                 )
+                .select_related(
+                    "grade_configuration",
+                )
                 .first()
             )
 
@@ -6481,21 +6503,22 @@ class ReportCardPreviewAPIView(APIView):
                     "percentage": report_card.percentage,
 
                     "grade": report_card.grade,
-                    "grade_color":report_card.grade.color,
+
+                    "grade_color": (
+                        report_card.grade_configuration.color
+                        if report_card.grade_configuration
+                        else None
+                    ),
+
                     "grade_point": report_card.grade_point,
 
                     "result": report_card.result,
 
-                    "teacher_remarks": (
-                        report_card.teacher_remarks
-                    ),
+                    "teacher_remarks": report_card.teacher_remarks,
 
-                    "published_at": (
-                        report_card.published_at
-                    ),
+                    "published_at": report_card.published_at,
                 },
-
-                "school": {
+                                "school": {
                     "id": school.id,
                     "name": school.name,
                     "address": school.address,

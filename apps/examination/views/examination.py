@@ -636,6 +636,7 @@ class ExaminationResultLISTAPIView(APIView):
                 "examination",
                 "examination__examination_type",
                 "examination__academic_year",
+                "grade_configuration",
             ).order_by(
                 "-examination__start_date",
                 "-created_at",
@@ -725,6 +726,11 @@ class ExaminationResultLISTAPIView(APIView):
                     "grade_point": (
                         str(report_card.grade_point)
                         if report_card.grade_point is not None
+                        else None
+                    ),
+                    "grade_color": (
+                        report_card.grade_configuration.color
+                        if report_card.grade_configuration
                         else None
                     ),
 
@@ -831,6 +837,8 @@ class ExaminationResultDetailAPIView(APIView):
                 "examination",
                 "examination__examination_type",
                 "examination__academic_year",
+                "grade_configuration",
+
             ).first()
 
             if not report_card:
@@ -849,6 +857,7 @@ class ExaminationResultDetailAPIView(APIView):
             ).select_related(
                 "examination_schedule",
                 "examination_schedule__subject",
+                "grade_configuration",
             ).order_by(
                 "examination_schedule__exam_date",
                 "examination_schedule__start_time",
@@ -896,6 +905,11 @@ class ExaminationResultDetailAPIView(APIView):
                     ),
 
                     "grade": result.grade,
+                    "grade_color": (
+                        result.grade_configuration.color
+                        if result.grade_configuration
+                        else None
+                    ),
 
                     "grade_point": (
                         str(result.grade_point)
@@ -1655,6 +1669,7 @@ class ReportCardDetailAPIView(APIView):
                     "examination",
                     "examination__examination_type",
                     "examination__academic_year",
+                    "grade_configuration",
                 )
                 .filter(
                     examination_id=examination_uuid,
@@ -1719,6 +1734,12 @@ class ReportCardDetailAPIView(APIView):
                     "remarks": result.remarks,
                 })
 
+            grade_color = (
+                report_card.grade_configuration.color
+                if report_card.grade_configuration
+                else None
+            )
+
             data = {
                 "report_card": {
                     "id": str(report_card.id),
@@ -1728,6 +1749,7 @@ class ReportCardDetailAPIView(APIView):
                     "percentage": report_card.percentage,
                     "grade": report_card.grade,
                     "grade_point": report_card.grade_point,
+                    "grade_color": grade_color,
                     "result": report_card.result,
                     "teacher_remarks": report_card.teacher_remarks,
                     "published_at": report_card.published_at,

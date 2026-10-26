@@ -563,6 +563,13 @@ class ExaminationResult(AuditModel):
         null=True,
         blank=True,
     )
+    grade_configuration = models.ForeignKey(
+        "GradeConfiguration",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="examination_results",
+    )
 
     status = models.CharField(
         max_length=20,
@@ -708,6 +715,15 @@ class ReportCard(AuditModel):
         related_name="report_cards",
     )
 
+    # Grading configuration used for this report card
+    grade_configuration = models.ForeignKey(
+        GradeConfiguration,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="report_cards",
+    )
+
     total_marks = models.DecimalField(
         max_digits=8,
         decimal_places=2,
@@ -726,6 +742,7 @@ class ReportCard(AuditModel):
         default=0,
     )
 
+    # Grade letter, e.g. A+, A, B, C
     grade = models.CharField(
         max_length=10,
         null=True,
@@ -744,8 +761,12 @@ class ReportCard(AuditModel):
         null=True,
         blank=True,
     )
-    pdf = models.CharField(max_length=500, blank=True, null=True)
 
+    pdf = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+    )
 
     teacher_remarks = models.TextField(
         null=True,
@@ -780,6 +801,7 @@ class ReportCard(AuditModel):
             models.Index(fields=["examination"]),
             models.Index(fields=["student"]),
             models.Index(fields=["status"]),
+            models.Index(fields=["grade_configuration"]),
         ]
 
     def __str__(self):
