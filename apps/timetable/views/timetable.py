@@ -1,3 +1,4 @@
+import uuid
 from datetime import date
 from uuid import UUID
 
@@ -5,10 +6,173 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.school.models.school import Student
-from apps.timetable.models import TimetableEntry, TimetableSubstitution
-from shared.mixins import CustomResponse
+from apps.timetable.models import TimetableEntry, TimetableSubstitution, TimetableTerm
+from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.utils.logger import application_logger
 
+class TimetableTermLISTAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+
+    def get(self, request):
+        try:
+            school = request.school
+
+            academic_year_id = request.query_params.get(
+                "academic_year_id"
+            )
+            branch_id = request.query_params.get("branch_id")
+            status = request.query_params.get("status")
+            search = request.query_params.get("search")
+
+            queryset = (
+                TimetableTerm.objects
+                .filter(
+                    school=school
+                )
+                .select_related(
+                    "academic_year",
+                    "branch",
+                )
+                .order_by(
+                    "-academic_year__start_date",
+                    "start_date",
+                )
+            )
+
+            # ---------------------------------
+            # Academic year
+            # ---------------------------------
+
+            if academic_year_id:
+                try:
+                    academic_year_uuid = uuid.UUID(
+                        str(academic_year_id)
+                    )
+                except (ValueError, AttributeError):
+                    return CustomResponse.errorResponse(
+                        description="Invalid academic_year_id."
+                    )
+
+                queryset = queryset.filter(
+                    academic_year_id=academic_year_uuid
+                )
+
+            # ---------------------------------
+            # Branch
+            # ---------------------------------
+
+            if branch_id:
+                try:
+                    branch_uuid = uuid.UUID(
+                        str(branch_id)
+                    )
+                except (ValueError, AttributeError):
+                    return CustomResponse.errorResponse(
+                        description="Invalid branch_id."
+                    )
+
+                queryset = queryset.filter(
+                    branch_id=branch_uuid
+                )
+
+            # ---------------------------------
+            # Status
+            # ---------------------------------
+
+            if status:
+                valid_statuses = [
+                    choice[0]
+                    for choice in TimetableTerm.Status.choices
+                ]
+
+                if status not in valid_statuses:
+                    return CustomResponse.errorResponse(
+                        description="Invalid status."
+                    )
+
+                queryset = queryset.filter(
+                    status=status
+                )
+
+            # ---------------------------------
+            # Search
+            # ---------------------------------
+
+            if search:
+                queryset = queryset.filter(
+                    name__icontains=search.strip()
+                )
+
+            total = queryset.count()
+
+            # ---------------------------------
+            # Pagination
+            # ---------------------------------
+
+            paginator = CustomPageNumberPagination()
+
+            page = paginator.paginate_queryset(
+                queryset,
+                request,
+            )
+
+            data = []
+
+            for term in page:
+                data.append({
+                    "id": term.id,
+                    "name": term.name,
+
+                    "academic_year": {
+                        "id": term.academic_year.id,
+                        "name": term.academic_year.name,
+                    },
+
+                    "branch": (
+                        {
+                            "id": term.branch.id,
+                            "name": term.branch.name,
+                        }
+                        if term.branch
+                        else None
+                    ),
+
+                    "start_date": term.start_date,
+                    "end_date": term.end_date,
+                    "status": term.status,
+                })
+
+            application_logger.info(
+                "timetable_term_list_fetched",
+                school_id=str(school.id),
+                academic_year_id=academic_year_id,
+                branch_id=branch_id,
+                status=status,
+                total=total,
+            )
+
+            return CustomResponse.successResponse(
+                data=data,
+                total=total,
+                description="Timetable terms fetched successfully.",
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "timetable_term_list_failed",
+                error=str(e),
+                school_id=(
+                    str(school.id)
+                    if school
+                    else None
+                ),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to fetch timetable terms."
+            )
 
 class TimetableAPIView(APIView):
     permission_classes = [IsAuthenticated]
