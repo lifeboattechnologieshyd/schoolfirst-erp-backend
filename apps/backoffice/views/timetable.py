@@ -3652,7 +3652,7 @@ class BulkUploadTimetableAPIView(APIView):
                             academic_year
                         ),
                         # grade=grade,
-                        section=section,
+                        # section=section,
                         defaults={
                             "status": (
                                 Timetable
