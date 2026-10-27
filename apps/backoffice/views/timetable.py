@@ -5033,20 +5033,20 @@ class TeacherSubstitutionListAPIView(APIView):
         # PAGINATION
         # ==========================================================
 
-        pagination = {
-            "count": paginator.page.paginator.count,
-            "page": paginator.page.number,
-            "page_size": (
-                paginator.page
-                .paginator
-                .per_page
-            ),
-            "total_pages": (
-                paginator.page
-                .paginator
-                .num_pages
-            ),
-        }
+        # pagination = {
+        #     "count": paginator.page.paginator.count,
+        #     "page": paginator.page.number,
+        #     "page_size": (
+        #         paginator.page
+        #         .paginator
+        #         .per_page
+        #     ),
+        #     "total_pages": (
+        #         paginator.page
+        #         .paginator
+        #         .num_pages
+        #     ),
+        # }
 
         # ==========================================================
         # LOG
