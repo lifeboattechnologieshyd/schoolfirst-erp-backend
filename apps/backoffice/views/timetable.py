@@ -4937,6 +4937,7 @@ class TeacherScheduleListAPIView(APIView):
         academic_year_id = request.GET.get("academic_year_id")
         grade_id = request.GET.get("grade_id")
         section_id = request.GET.get("section_id")
+        branch_id = request.GET.get("branch_id")
 
         # ----------------------------------------------------------
         # BASE TEACHER QUERY
@@ -5008,6 +5009,10 @@ class TeacherScheduleListAPIView(APIView):
             entry_filters[
                 "section_id"
             ] = section_id
+        if branch_id:
+            entry_filters[
+                "branch_id"
+            ]= branch_id
 
         # ----------------------------------------------------------
         # PREFETCH TEACHER ENTRIES
@@ -5205,7 +5210,6 @@ class TeacherScheduleAPIView(APIView):
                 id=teacher_id,
                 school=school,
             )
-            .select_related("department")
             .first()
         )
 
