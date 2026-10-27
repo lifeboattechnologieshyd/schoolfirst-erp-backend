@@ -3028,6 +3028,8 @@ class BulkUploadTimetableAPIView(APIView):
         section_id = request.query_params.get(
             "section_id"
         )
+        term_id = request.query_params.get("term_id")
+
 
         # ----------------------------------------------------------
         # PARAMETER VALIDATION
@@ -3206,6 +3208,29 @@ class BulkUploadTimetableAPIView(APIView):
                     "Section not found for "
                     "the selected grade."
                 )
+            )
+        term = TimetableTerm.objects.filter(
+            id = term_id,
+            school=school,
+        ).first()
+        if not term:
+            application_logger.warning(
+                "timetable_bulk_upload_failed",
+                extra={
+                    "performed_by": str(
+                        request.user.id
+
+                    ),
+                    "school_id": str(
+                        school.id),
+
+                    "reason": (
+                        "timetable term not found"
+                    ),
+                }
+            )
+            return CustomResponse.errorResponse(
+                description="Timetable term not found."
             )
 
         # ----------------------------------------------------------
@@ -3651,6 +3676,7 @@ class BulkUploadTimetableAPIView(APIView):
                         academic_year=(
                             academic_year
                         ),
+                        term = term,
                         # grade=grade,
                         # section=section,
                         defaults={
