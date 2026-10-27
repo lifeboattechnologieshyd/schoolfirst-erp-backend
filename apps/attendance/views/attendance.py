@@ -973,6 +973,7 @@ class StudentAttendanceAPIView(APIView):
                         #     if record.branch
                         #     else None
                         # ),
+                        "absent_note": record.absent_note if record.absent_note else None,
 
                         "remarks": record.remarks,
 
