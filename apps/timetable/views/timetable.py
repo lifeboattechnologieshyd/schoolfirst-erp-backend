@@ -233,7 +233,7 @@ class TimetableAPIView(APIView):
                 Student.objects
                 .filter(
                     id=student_uuid,
-                    is_active=True,
+                    status=Student.Status.ACTIVE,
                 )
                 .select_related(
                     "school",
