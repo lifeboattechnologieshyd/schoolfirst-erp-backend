@@ -3054,6 +3054,10 @@ class BulkUploadTimetableAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="section_id is required."
             )
+        if not term_id:
+            return CustomResponse.errorResponse(
+                description="term_id is required."
+            )
 
         # ----------------------------------------------------------
         # UUID VALIDATION
