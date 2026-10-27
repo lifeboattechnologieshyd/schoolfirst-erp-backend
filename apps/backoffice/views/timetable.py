@@ -5201,15 +5201,54 @@ class TeacherScheduleAPIView(APIView):
             )
 
         # ----------------------------------------------------------
-        # TEACHER
+        # FILTERS
         # ----------------------------------------------------------
+
+        academic_year_id = request.GET.get("academic_year_id")
+        grade_id = request.GET.get("grade_id")
+        section_id = request.GET.get("section_id")
+        branch_id = request.GET.get("branch_id")
+        department = request.GET.get("department")
+
+        if not academic_year_id:
+            return CustomResponse.errorResponse(
+                description="academic_year_id is required."
+            )
+
+        # ----------------------------------------------------------
+        # DEPARTMENT VALIDATION
+        # ----------------------------------------------------------
+
+        if department:
+
+            valid_departments = {
+                value
+                for value, label in Staff.Department.choices
+            }
+
+            if department not in valid_departments:
+                return CustomResponse.errorResponse(
+                    description="Invalid department."
+                )
+
+        # ----------------------------------------------------------
+        # TEACHER QUERY
+        # ----------------------------------------------------------
+
+        teacher_filters = {
+            "id": teacher_id,
+            "school": school,
+        }
+
+        if branch_id:
+            teacher_filters["branch_id"] = branch_id
+
+        if department:
+            teacher_filters["department"] = department
 
         teacher = (
             Staff.objects
-            .filter(
-                id=teacher_id,
-                school=school,
-            )
+            .filter(**teacher_filters)
             .first()
         )
 
@@ -5219,20 +5258,24 @@ class TeacherScheduleAPIView(APIView):
             )
 
         # ----------------------------------------------------------
-        # FILTERS
+        # TIMETABLE ENTRY FILTERS
         # ----------------------------------------------------------
 
-        academic_year_id = request.GET.get(
-            "academic_year_id"
-        )
+        entry_filters = {
+            "timetable__school": school,
+            "teacher": teacher,
+            "timetable__academic_year_id": academic_year_id,
+            "status": TimetableEntry.Status.ACTIVE,
+        }
 
-        if not academic_year_id:
-            return CustomResponse.errorResponse(
-                description="academic_year_id is required."
-            )
+        if branch_id:
+            entry_filters["timetable__branch_id"] = branch_id
 
-        grade_id = request.GET.get("grade_id")
-        section_id = request.GET.get("section_id")
+        if grade_id:
+            entry_filters["grade_id"] = grade_id
+
+        if section_id:
+            entry_filters["section_id"] = section_id
 
         # ----------------------------------------------------------
         # SCHEDULE QUERY
@@ -5240,15 +5283,11 @@ class TeacherScheduleAPIView(APIView):
 
         entries = (
             TimetableEntry.objects
-            .filter(
-                timetable__school=school,
-                teacher=teacher,
-                timetable__academic_year_id=academic_year_id,
-                status=TimetableEntry.Status.ACTIVE,
-            )
+            .filter(**entry_filters)
             .select_related(
                 "timetable",
                 "timetable__academic_year",
+                "timetable__branch",
                 "grade",
                 "section",
                 "subject",
@@ -5259,24 +5298,6 @@ class TeacherScheduleAPIView(APIView):
                 "period__period_number",
             )
         )
-
-        # ----------------------------------------------------------
-        # GRADE FILTER
-        # ----------------------------------------------------------
-
-        if grade_id:
-            entries = entries.filter(
-                grade_id=grade_id
-            )
-
-        # ----------------------------------------------------------
-        # SECTION FILTER
-        # ----------------------------------------------------------
-
-        if section_id:
-            entries = entries.filter(
-                section_id=section_id
-            )
 
         # ----------------------------------------------------------
         # GROUP BY DAY
@@ -5290,11 +5311,19 @@ class TeacherScheduleAPIView(APIView):
         for entry in entries:
 
             schedule[entry.day_of_week].append({
-                "entry_id": entry.id,
+
+                "entry_id": str(entry.id),
+
+                "day_of_week": entry.day_of_week,
 
                 "period": {
-                    "id": entry.period.id,
+                    "id": str(entry.period.id),
                     "period_number": entry.period.period_number,
+                    "name": getattr(
+                        entry.period,
+                        "name",
+                        None,
+                    ),
                     "start_time": getattr(
                         entry.period,
                         "start_time",
@@ -5305,25 +5334,50 @@ class TeacherScheduleAPIView(APIView):
                         "end_time",
                         None,
                     ),
+                    "is_break": getattr(
+                        entry.period,
+                        "is_break",
+                        False,
+                    ),
                 },
 
                 "subject": {
-                    "id": entry.subject.id,
+                    "id": str(entry.subject.id),
                     "name": entry.subject.name,
                 },
 
                 "grade": {
-                    "id": entry.grade.id,
+                    "id": str(entry.grade.id),
                     "name": entry.grade.name,
                 },
 
                 "section": {
-                    "id": entry.section.id,
+                    "id": str(entry.section.id),
                     "name": entry.section.name,
                 },
 
                 "notes": entry.notes,
             })
+
+        # ----------------------------------------------------------
+        # ACADEMIC YEAR
+        # ----------------------------------------------------------
+
+        academic_year = (
+            entries[0].timetable.academic_year
+            if entries
+            else None
+        )
+
+        # ----------------------------------------------------------
+        # BRANCH
+        # ----------------------------------------------------------
+
+        branch = (
+            entries[0].timetable.branch
+            if entries
+            else teacher.branch
+        )
 
         # ----------------------------------------------------------
         # RESPONSE
@@ -5332,44 +5386,40 @@ class TeacherScheduleAPIView(APIView):
         return CustomResponse.successResponse(
             description="Teacher schedule fetched successfully.",
             data={
+
                 "teacher": {
-                    "id": teacher.id,
-                    "employee_id": getattr(
-                        teacher,
-                        "employee_id",
-                        None,
-                    ),
+                    "id": str(teacher.id),
+                    "employee_id": teacher.employee_id,
                     "name": teacher.name,
                 },
 
                 "department": (
                     {
-                        "id": teacher.department.id,
-                        "name": teacher.department.name,
+                        "value": teacher.department,
+                        "name": teacher.get_department_display(),
                     }
-                    if getattr(
-                        teacher,
-                        "department",
-                        None,
-                    )
+                    if teacher.department
+                    else None
+                ),
+
+                "branch": (
+                    {
+                        "id": str(branch.id),
+                        "name": branch.name,
+                    }
+                    if branch
                     else None
                 ),
 
                 "academic_year": {
                     "id": (
-                        entries[0]
-                        .timetable
-                        .academic_year
-                        .id
-                        if entries
+                        str(academic_year.id)
+                        if academic_year
                         else academic_year_id
                     ),
                     "name": (
-                        entries[0]
-                        .timetable
-                        .academic_year
-                        .name
-                        if entries
+                        academic_year.name
+                        if academic_year
                         else None
                     ),
                 },
@@ -5378,7 +5428,7 @@ class TeacherScheduleAPIView(APIView):
 
                 "class_count": len({
                     (
-                        entry.timetable_id,
+                        entry.grade_id,
                         entry.section_id,
                     )
                     for entry in entries
@@ -5387,7 +5437,6 @@ class TeacherScheduleAPIView(APIView):
                 "schedule": schedule,
             },
         )
-
 
 
 
