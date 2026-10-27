@@ -180,7 +180,7 @@ class TimetableAPIView(APIView):
     def get(self, request):
 
         application_logger.info(
-            "parent_student_timetable_started",
+            "student_timetable_started",
             extra={
                 "requested_by": str(request.user.id),
             },
@@ -191,9 +191,9 @@ class TimetableAPIView(APIView):
         # ==========================================================
 
         student_id = request.GET.get("student_id")
-        academic_year_id = request.GET.get(
-            "academic_year_id"
-        )
+        # academic_year_id = request.GET.get(
+        #     "academic_year_id"
+        # )
 
         date_value = request.GET.get("date")
 
@@ -315,45 +315,45 @@ class TimetableAPIView(APIView):
         # ACADEMIC YEAR
         # ==========================================================
 
-        if academic_year_id:
+        # if academic_year_id:
+        #
+        #     try:
+        #
+        #         academic_year_uuid = UUID(
+        #             str(academic_year_id)
+        #         )
+        #
+        #     except (
+        #         ValueError,
+        #         TypeError,
+        #         AttributeError,
+        #     ):
+        #
+        #         return CustomResponse.errorResponse(
+        #             description="Invalid academic_year_id."
+        #         )
 
-            try:
-
-                academic_year_uuid = UUID(
-                    str(academic_year_id)
-                )
-
-            except (
-                ValueError,
-                TypeError,
-                AttributeError,
-            ):
-
-                return CustomResponse.errorResponse(
-                    description="Invalid academic_year_id."
-                )
-
-            if (
-                student.academic_year_id
-                != academic_year_uuid
-            ):
-
-                return CustomResponse.errorResponse(
-                    description=(
-                        "Academic year does not belong "
-                        "to this student."
-                    )
-                )
+            # if (
+            #     student.academic_year_id
+            #     != academic_year_uuid
+            # ):
+            #
+            #     return CustomResponse.errorResponse(
+            #         description=(
+            #             "Academic year does not belong "
+            #             "to this student."
+            #         )
+            #     )
 
             selected_academic_year_id = (
                 academic_year_uuid
             )
 
-        else:
-
-            selected_academic_year_id = (
-                student.academic_year_id
-            )
+        # else:
+        #
+        #     selected_academic_year_id = (
+        #         student.academic_year_id
+        #     )
 
         # ==========================================================
         # DATE VALIDATION
@@ -389,16 +389,16 @@ class TimetableAPIView(APIView):
             TimetableEntry.objects
             .filter(
                 timetable__school=student.school,
-                timetable__academic_year_id=(
-                    selected_academic_year_id
-                ),
+                # timetable__academic_year_id=(
+                #     selected_academic_year_id
+                # ),
                 grade_id=student.grade_id,
                 section_id=student.section_id,
                 status=TimetableEntry.Status.ACTIVE,
             )
             .select_related(
                 "timetable",
-                "timetable__academic_year",
+                # "timetable__academic_year",
                 "grade",
                 "section",
                 "subject",
@@ -699,9 +699,9 @@ class TimetableAPIView(APIView):
             extra={
                 "requested_by": str(request.user.id),
                 "student_id": str(student.id),
-                "academic_year_id": str(
-                    selected_academic_year_id
-                ),
+                # "academic_year_id": str(
+                #     selected_academic_year_id
+                # ),
                 "date": (
                     str(selected_date)
                     if selected_date
