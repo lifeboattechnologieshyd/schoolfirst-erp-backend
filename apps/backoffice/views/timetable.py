@@ -5161,9 +5161,6 @@ class TeacherScheduleListAPIView(APIView):
                 "status": teacher.status,
             })
 
-        # ----------------------------------------------------------
-        # PAGINATED RESPONSE
-        # ----------------------------------------------------------
 
         return CustomResponse.successResponse(data=data,description="teachers data fetched successfully" )
 
