@@ -3627,11 +3627,11 @@ class BulkUploadTimetableAPIView(APIView):
                                 is_break=(
                                     data["is_break"]
                                 ),
-                                status=(
-                                    TimetablePeriod
-                                    .Status
-                                    .ACTIVE
-                                ),
+                                # status=(
+                                #     TimetablePeriod
+                                #     .Status
+                                #     .ACTIVE
+                                # ),
                             )
                         )
 
