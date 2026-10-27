@@ -391,6 +391,7 @@ class BulletinLISTAPIView(APIView):
                     ],
 
                     "created_at": bulletin.created_at,
+                    "priority": bulletin.priority,
 
                     "status": bulletin.status,
                 })

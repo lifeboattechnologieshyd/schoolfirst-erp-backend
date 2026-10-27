@@ -58,6 +58,10 @@ class FeeType(AuditModel):
     is_active = models.BooleanField(
         default=True,
     )
+    is_transport = models.BooleanField(
+        default=False,
+    )
+
 
     class Meta:
         db_table = "fee_types"
