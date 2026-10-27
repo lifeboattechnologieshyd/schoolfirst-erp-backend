@@ -83,7 +83,7 @@ class TimetableTermLISTAPIView(APIView):
             if status:
                 valid_statuses = [
                     choice[0]
-                    for choice in TimetableTerm.Status.choices
+                    for choice in TimetableTerm.status.choices
                 ]
 
                 if status not in valid_statuses:
