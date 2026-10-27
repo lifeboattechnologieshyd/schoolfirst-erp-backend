@@ -2294,37 +2294,69 @@ class TimetableCreateAPIView(APIView):
                 message="Failed to create timetable"
             )
 
+
 class TimetableListAPIView(APIView):
-    permission_classes = [IsAuthenticated, HasPermission]
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
     required_permission = "timetable.view"
 
     def get(self, request):
+
         try:
-            # ----------------------------------------------------------
+
+            # ------------------------------------------------------
             # SCHOOL
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
 
             school = request.school
 
             if not school:
+
                 return CustomResponse.errorResponse(
                     description="School not found."
                 )
 
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
             # QUERY PARAMETERS
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
 
-            academic_year_id = request.query_params.get(
-                "academic_year_id"
+            academic_year_id = (
+                request.query_params.get(
+                    "academic_year_id"
+                )
             )
-            grade_id = request.query_params.get("grade_id")
-            section_id = request.query_params.get("section_id")
-            status = request.query_params.get("status")
 
-            # ----------------------------------------------------------
+            term_id = (
+                request.query_params.get(
+                    "term_id"
+                )
+            )
+
+            grade_id = (
+                request.query_params.get(
+                    "grade_id"
+                )
+            )
+
+            section_id = (
+                request.query_params.get(
+                    "section_id"
+                )
+            )
+
+            status = (
+                request.query_params.get(
+                    "status"
+                )
+            )
+
+            # ------------------------------------------------------
             # GET TIMETABLES
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
 
             timetables = (
                 Timetable.objects
@@ -2333,8 +2365,8 @@ class TimetableListAPIView(APIView):
                 )
                 .select_related(
                     "academic_year",
-                    "grade",
-                    "section",
+                    "term",
+                    "branch",
                 )
                 .prefetch_related(
                     Prefetch(
@@ -2342,9 +2374,15 @@ class TimetableListAPIView(APIView):
                         queryset=(
                             TimetableEntry.objects
                             .filter(
-                                status=TimetableEntry.Status.ACTIVE
+                                status=(
+                                    TimetableEntry
+                                    .Status
+                                    .ACTIVE
+                                )
                             )
                             .select_related(
+                                "grade",
+                                "section",
                                 "subject",
                                 "teacher",
                                 "period",
@@ -2356,36 +2394,70 @@ class TimetableListAPIView(APIView):
                         ),
                     )
                 )
-                .order_by("-created_at")
+                .order_by(
+                    "-created_at"
+                )
             )
 
-            # ----------------------------------------------------------
-            # FILTERS
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
+            # FILTER - ACADEMIC YEAR
+            # ------------------------------------------------------
 
             if academic_year_id:
+
                 timetables = timetables.filter(
                     academic_year_id=academic_year_id
                 )
 
-            if grade_id:
+            # ------------------------------------------------------
+            # FILTER - TERM
+            # ------------------------------------------------------
+
+            if term_id:
+
                 timetables = timetables.filter(
-                    grade_id=grade_id
+                    term_id=term_id
                 )
+
+            # ------------------------------------------------------
+            # FILTER - GRADE
+            # ------------------------------------------------------
+
+            if grade_id:
+
+                timetables = timetables.filter(
+                    entries__grade_id=grade_id
+                )
+
+            # ------------------------------------------------------
+            # FILTER - SECTION
+            # ------------------------------------------------------
 
             if section_id:
+
                 timetables = timetables.filter(
-                    section_id=section_id
+                    entries__section_id=section_id
                 )
 
+            # ------------------------------------------------------
+            # FILTER - STATUS
+            # ------------------------------------------------------
+
             if status:
+
                 timetables = timetables.filter(
                     status=status
                 )
 
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
+            # REMOVE DUPLICATE TIMETABLES
+            # ------------------------------------------------------
+
+            timetables = timetables.distinct()
+
+            # ------------------------------------------------------
             # PAGINATION
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
 
             paginator = CustomPageNumberPagination()
 
@@ -2394,9 +2466,9 @@ class TimetableListAPIView(APIView):
                 request,
             )
 
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
             # RESPONSE DATA
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
 
             data = []
 
@@ -2407,102 +2479,231 @@ class TimetableListAPIView(APIView):
                 for entry in timetable.entries.all():
 
                     entries.append({
-                        "id": str(entry.id),
 
-                        "day_of_week": entry.day_of_week,
+                        "id": str(
+                            entry.id
+                        ),
+
+                        "grade": {
+                            "id": str(
+                                entry.grade.id
+                            ),
+                            "name": (
+                                entry.grade.name
+                            ),
+                        },
+
+                        "section": {
+                            "id": str(
+                                entry.section.id
+                            ),
+                            "name": (
+                                entry.section.name
+                            ),
+                        },
+
+                        "day_of_week": (
+                            entry.day_of_week
+                        ),
 
                         "period": {
-                            "id": str(entry.period.id),
-                            "period_number": (
-                                entry.period.period_number
+
+                            "id": str(
+                                entry.period.id
                             ),
+
+                            "period_number": (
+                                entry.period
+                                .period_number
+                            ),
+
                             "name": getattr(
                                 entry.period,
                                 "name",
                                 None,
                             ),
+
                             "start_time": getattr(
                                 entry.period,
                                 "start_time",
                                 None,
                             ),
+
                             "end_time": getattr(
                                 entry.period,
                                 "end_time",
                                 None,
                             ),
+
+                            "is_break": getattr(
+                                entry.period,
+                                "is_break",
+                                False,
+                            ),
                         },
 
                         "subject": {
-                            "id": str(entry.subject.id),
-                            "name": entry.subject.name,
+                            "id": str(
+                                entry.subject.id
+                            ),
+                            "name": (
+                                entry.subject.name
+                            ),
                         },
 
                         "teacher": {
-                            "id": str(entry.teacher.id),
-                            "name": entry.teacher.name,
+                            "id": str(
+                                entry.teacher.id
+                            ),
+                            "name": (
+                                entry.teacher.name
+                            ),
                         },
 
                         "notes": entry.notes,
 
-                        "status": entry.status,
+                        "status": (
+                            entry.status
+                        ),
                     })
 
+                # --------------------------------------------------
+                # TIMETABLE
+                # --------------------------------------------------
+
                 data.append({
-                    "id": str(timetable.id),
+
+                    "id": str(
+                        timetable.id
+                    ),
+
+                    "name": (
+                        timetable.name
+                    ),
 
                     "academic_year": {
+
                         "id": str(
-                            timetable.academic_year.id
+                            timetable
+                            .academic_year
+                            .id
                         ),
-                        "name": timetable.academic_year.name,
+
+                        "name": (
+                            timetable
+                            .academic_year
+                            .name
+                        ),
                     },
 
-                    "grade": {
-                        "id": str(timetable.grade.id),
-                        "name": timetable.grade.name,
+                    "term": {
+
+                        "id": str(
+                            timetable
+                            .term
+                            .id
+                        ),
+
+                        "name": (
+                            timetable
+                            .term
+                            .name
+                        ),
+
+                        "start_date": (
+                            timetable
+                            .term
+                            .start_date
+                        ),
+
+                        "end_date": (
+                            timetable
+                            .term
+                            .end_date
+                        ),
                     },
 
-                    "section": {
-                        "id": str(timetable.section.id),
-                        "name": timetable.section.name,
-                    },
+                    "branch": (
+                        {
+                            "id": str(
+                                timetable
+                                .branch
+                                .id
+                            ),
+                            "name": (
+                                timetable
+                                .branch
+                                .name
+                            ),
+                        }
+                        if timetable.branch
+                        else None
+                    ),
 
-                    "status": timetable.status,
+                    "status": (
+                        timetable.status
+                    ),
 
                     "entries": entries,
 
-                    "created_at": timetable.created_at,
+                    "created_at": (
+                        timetable.created_at
+                    ),
 
-                    "updated_at": timetable.updated_at,
+                    "updated_at": (
+                        timetable.updated_at
+                    ),
                 })
 
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
             # LOG
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
 
             application_logger.info(
                 "Timetables fetched successfully.",
                 extra={
-                    "school_id": str(school.id),
-                    "academic_year_id": academic_year_id,
-                    "grade_id": grade_id,
-                    "section_id": section_id,
+
+                    "school_id": str(
+                        school.id
+                    ),
+
+                    "academic_year_id": (
+                        academic_year_id
+                    ),
+
+                    "term_id": (
+                        term_id
+                    ),
+
+                    "grade_id": (
+                        grade_id
+                    ),
+
+                    "section_id": (
+                        section_id
+                    ),
+
                     "status": status,
-                    "page": request.query_params.get(
+
+                    "page": request
+                    .query_params
+                    .get(
                         "page",
                         1,
                     ),
+
                     "count": len(data),
                 },
             )
 
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
             # RESPONSE
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
 
             return CustomResponse.successResponse(
-                description="Timetables fetched successfully.",
+                description=(
+                    "Timetables fetched successfully."
+                ),
                 data=data,
             )
 
@@ -2511,26 +2712,51 @@ class TimetableListAPIView(APIView):
             application_logger.exception(
                 "Error fetching timetables.",
                 extra={
+
                     "school_id": (
-                        str(request.school.id)
-                        if getattr(request, "school", None)
+                        str(
+                            request.school.id
+                        )
+                        if getattr(
+                            request,
+                            "school",
+                            None,
+                        )
                         else None
                     ),
-                    "academic_year_id": request.query_params.get(
-                        "academic_year_id"
+
+                    "academic_year_id": (
+                        request.query_params.get(
+                            "academic_year_id"
+                        )
                     ),
-                    "grade_id": request.query_params.get(
-                        "grade_id"
+
+                    "term_id": (
+                        request.query_params.get(
+                            "term_id"
+                        )
                     ),
-                    "section_id": request.query_params.get(
-                        "section_id"
+
+                    "grade_id": (
+                        request.query_params.get(
+                            "grade_id"
+                        )
                     ),
+
+                    "section_id": (
+                        request.query_params.get(
+                            "section_id"
+                        )
+                    ),
+
                     "error": str(exc),
                 },
             )
 
             return CustomResponse.errorResponse(
-                description="Unable to fetch timetables."
+                description=(
+                    "Unable to fetch timetables."
+                )
             )
 
 
