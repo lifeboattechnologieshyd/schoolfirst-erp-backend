@@ -3112,6 +3112,21 @@ class BulkUploadTimetableAPIView(APIView):
                 return CustomResponse.errorResponse(
                     description="Invalid section_id."
                 )
+            try:
+
+                term_uuid = uuid.UUID(
+                    str(term_id)
+                )
+
+            except (
+                ValueError,
+                TypeError,
+                AttributeError,
+            ):
+
+                return CustomResponse.errorResponse(
+                    description="Invalid term_id."
+                )
 
             # ----------------------------------------------------------
             # ACADEMIC YEAR
@@ -3216,7 +3231,7 @@ class BulkUploadTimetableAPIView(APIView):
                     )
                 )
             term = TimetableTerm.objects.filter(
-                id = term_id,
+                id = term_uuid,
                 school=school,
             ).first()
             if not term:
