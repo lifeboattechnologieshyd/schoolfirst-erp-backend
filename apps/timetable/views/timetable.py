@@ -173,7 +173,6 @@ class TimetableTermLISTAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Failed to fetch timetable terms."
             )
-
 class TimetableAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -191,10 +190,7 @@ class TimetableAPIView(APIView):
         # ==========================================================
 
         student_id = request.GET.get("student_id")
-        # academic_year_id = request.GET.get(
-        #     "academic_year_id"
-        # )
-
+        term_id = request.GET.get("term_id")
         date_value = request.GET.get("date")
 
         # ==========================================================
@@ -246,10 +242,14 @@ class TimetableAPIView(APIView):
         if not student:
 
             application_logger.warning(
-                "parent_student_timetable_failed",
+                "student_timetable_failed",
                 extra={
-                    "requested_by": str(request.user.id),
-                    "student_id": str(student_id),
+                    "requested_by": str(
+                        request.user.id
+                    ),
+                    "student_id": str(
+                        student_id
+                    ),
                     "reason": "student_not_found",
                 },
             )
@@ -267,19 +267,19 @@ class TimetableAPIView(APIView):
         #     "mobile",
         #     None,
         # )
-        #
+
         # if not parent_mobile:
-        #
+
         #     return CustomResponse.errorResponse(
         #         description=(
         #             "Parent mobile number is not available."
         #         )
         #     )
-        #
+
         # parent_mobile = str(
         #     parent_mobile
         # ).strip()
-        #
+
         # student_parent_match = (
         #     Student.objects
         #     .filter(
@@ -292,18 +292,24 @@ class TimetableAPIView(APIView):
         #     )
         #     .exists()
         # )
-        #
+
         # if not student_parent_match:
-        #
+
         #     application_logger.warning(
-        #         "parent_student_timetable_unauthorized",
+        #         "student_timetable_unauthorized",
         #         extra={
-        #             "requested_by": str(request.user.id),
-        #             "student_id": str(student.id),
-        #             "reason": "student_not_linked_to_parent",
+        #             "requested_by": str(
+        #                 request.user.id
+        #             ),
+        #             "student_id": str(
+        #                 student.id
+        #             ),
+        #             "reason": (
+        #                 "student_not_linked_to_parent"
+        #             ),
         #         },
         #     )
-        #
+
         #     return CustomResponse.errorResponse(
         #         description=(
         #             "You are not authorized to view "
@@ -312,48 +318,60 @@ class TimetableAPIView(APIView):
         #     )
 
         # ==========================================================
-        # ACADEMIC YEAR
+        # TERM VALIDATION
         # ==========================================================
 
-        # if academic_year_id:
-        #
-        #     try:
-        #
-        #         academic_year_uuid = UUID(
-        #             str(academic_year_id)
-        #         )
-        #
-        #     except (
-        #         ValueError,
-        #         TypeError,
-        #         AttributeError,
-        #     ):
-        #
-        #         return CustomResponse.errorResponse(
-        #             description="Invalid academic_year_id."
-        #         )
+        term = None
 
-            # if (
-            #     student.academic_year_id
-            #     != academic_year_uuid
-            # ):
-            #
-            #     return CustomResponse.errorResponse(
-            #         description=(
-            #             "Academic year does not belong "
-            #             "to this student."
-            #         )
-            #     )
+        if term_id:
 
-            selected_academic_year_id = (
-                academic_year_uuid
+            try:
+
+                term_uuid = UUID(
+                    str(term_id)
+                )
+
+            except (
+                ValueError,
+                TypeError,
+                AttributeError,
+            ):
+
+                return CustomResponse.errorResponse(
+                    description="Invalid term_id."
+                )
+
+            term = (
+                TimetableTerm.objects
+                .filter(
+                    id=term_uuid,
+                    school=student.school,
+                    status=TimetableTerm.Status.ACTIVE,
+                )
+                .first()
             )
 
-        # else:
-        #
-        #     selected_academic_year_id = (
-        #         student.academic_year_id
-        #     )
+            if not term:
+
+                application_logger.warning(
+                    "student_timetable_failed",
+                    extra={
+                        "requested_by": str(
+                            request.user.id
+                        ),
+                        "student_id": str(
+                            student.id
+                        ),
+                        "term_id": str(
+                            term_id
+                        ),
+                        "reason": "term_not_found",
+                    },
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Timetable term not found."
+                )
 
         # ==========================================================
         # DATE VALIDATION
@@ -389,16 +407,13 @@ class TimetableAPIView(APIView):
             TimetableEntry.objects
             .filter(
                 timetable__school=student.school,
-                # timetable__academic_year_id=(
-                #     selected_academic_year_id
-                # ),
                 grade_id=student.grade_id,
                 section_id=student.section_id,
                 status=TimetableEntry.Status.ACTIVE,
             )
             .select_related(
                 "timetable",
-                # "timetable__academic_year",
+                "timetable__term",
                 "grade",
                 "section",
                 "subject",
@@ -412,9 +427,17 @@ class TimetableAPIView(APIView):
         )
 
         # ==========================================================
+        # TERM FILTER
+        # ==========================================================
+
+        if term:
+
+            entries = entries.filter(
+                timetable__term_id=term.id
+            )
+
+        # ==========================================================
         # DATE-SPECIFIC ENTRIES
-        #
-        # If date is supplied, only return the selected day.
         # ==========================================================
 
         if selected_date:
@@ -442,9 +465,6 @@ class TimetableAPIView(APIView):
 
         # ==========================================================
         # SUBSTITUTIONS
-        #
-        # Only scheduled substitutions for the selected date
-        # are applied.
         # ==========================================================
 
         substitutions = {}
@@ -469,8 +489,10 @@ class TimetableAPIView(APIView):
             )
 
             substitutions = {
-                substitution.timetable_entry_id: substitution
-                for substitution in substitution_queryset
+                substitution.timetable_entry_id:
+                    substitution
+                for substitution
+                in substitution_queryset
             }
 
         # ==========================================================
@@ -489,8 +511,6 @@ class TimetableAPIView(APIView):
 
         total_periods = 0
         substitution_count = 0
-
-
 
         # ==========================================================
         # BUILD RESPONSE
@@ -511,12 +531,12 @@ class TimetableAPIView(APIView):
             )
 
             if substitution:
-
                 substitution_count += 1
 
             total_periods += 1
 
             schedule_entry = {
+
                 "entry_id": str(
                     entry.id
                 ),
@@ -577,9 +597,6 @@ class TimetableAPIView(APIView):
 
                 # --------------------------------------------------
                 # CURRENT TEACHER
-                #
-                # This is the teacher the student should see
-                # for this particular date.
                 # --------------------------------------------------
 
                 "teacher": {
@@ -614,6 +631,7 @@ class TimetableAPIView(APIView):
                         "reason": (
                             substitution.reason
                         ),
+
                         "original_teacher": {
                             "id": str(
                                 substitution
@@ -626,6 +644,7 @@ class TimetableAPIView(APIView):
                                 .name
                             ),
                         },
+
                         "substitute_teacher": {
                             "id": str(
                                 substitution
@@ -661,11 +680,14 @@ class TimetableAPIView(APIView):
         # ==========================================================
 
         student_data = {
-            "id": str(student.id),
+            "id": str(
+                student.id
+            ),
             "name": student.name,
             "admission_number": (
                 student.admission_number
             ),
+
             "grade": {
                 "id": str(
                     student.grade.id
@@ -674,6 +696,7 @@ class TimetableAPIView(APIView):
                     student.grade.name
                 ),
             },
+
             "section": {
                 "id": str(
                     student.section.id
@@ -685,34 +708,74 @@ class TimetableAPIView(APIView):
         }
 
         # ==========================================================
-        # ACADEMIC YEAR DATA
+        # TERM DATA
         # ==========================================================
 
-        academic_year = student.academic_year
+        selected_term = term
+
+        if not selected_term:
+
+            first_entry = entries.first()
+
+            if first_entry:
+                selected_term = (
+                    first_entry.timetable.term
+                )
+
+        term_data = None
+
+        if selected_term:
+
+            term_data = {
+                "id": str(
+                    selected_term.id
+                ),
+                "name": (
+                    selected_term.name
+                ),
+                "start_date": (
+                    selected_term.start_date
+                ),
+                "end_date": (
+                    selected_term.end_date
+                ),
+            }
 
         # ==========================================================
-        # RESPONSE
+        # RESPONSE LOG
         # ==========================================================
 
         application_logger.info(
-            "parent_student_timetable_completed",
+            "student_timetable_completed",
             extra={
-                "requested_by": str(request.user.id),
-                "student_id": str(student.id),
-                # "academic_year_id": str(
-                #     selected_academic_year_id
-                # ),
+                "requested_by": str(
+                    request.user.id
+                ),
+                "student_id": str(
+                    student.id
+                ),
+                "term_id": (
+                    str(term.id)
+                    if term
+                    else None
+                ),
                 "date": (
                     str(selected_date)
                     if selected_date
                     else None
                 ),
-                "total_periods": total_periods,
+                "total_periods": (
+                    total_periods
+                ),
                 "substitution_count": (
                     substitution_count
                 ),
             },
         )
+
+        # ==========================================================
+        # RESPONSE
+        # ==========================================================
 
         return CustomResponse.successResponse(
             description=(
@@ -721,12 +784,7 @@ class TimetableAPIView(APIView):
             data={
                 "student": student_data,
 
-                "academic_year": {
-                    "id": str(
-                        academic_year.id
-                    ),
-                    "name": academic_year.name,
-                },
+                "term": term_data,
 
                 "date": (
                     selected_date
@@ -734,7 +792,9 @@ class TimetableAPIView(APIView):
                     else None
                 ),
 
-                "total_periods": total_periods,
+                "total_periods": (
+                    total_periods
+                ),
 
                 "substitution_count": (
                     substitution_count
