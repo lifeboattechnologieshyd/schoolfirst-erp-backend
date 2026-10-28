@@ -9844,7 +9844,7 @@ class TransportFeeRuleListAPIView(APIView):
                     "stop": (
                         {
                             "id": str(rule.stop.id),
-                            "name": rule.stop.route_name,
+                            "name": rule.stop.stop_name,
                         }
                         if rule.stop
                         else None
