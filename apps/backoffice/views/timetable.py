@@ -5138,7 +5138,7 @@ class TeacherScheduleListAPIView(APIView):
 
                     "department": (
                         {
-                            "id": teacher.department.id,
+                            "id": str(teacher.department.id),
                             "name": teacher.department.name,
                         }
                         if getattr(
