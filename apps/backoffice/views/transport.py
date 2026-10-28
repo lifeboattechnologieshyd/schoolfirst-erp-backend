@@ -9716,7 +9716,7 @@ class CreateTransportFeeRuleAPIView(APIView):
                             else None
                         ),
                         "billing_model": transport_fee_rule.billing_model,
-                        "billing_model_label": transport_fee_rule.get_billing_model_display(),
+                        # "billing_model_label": transport_fee_rule.get_billing_model_display(),
                         "amount": str(transport_fee_rule.amount),
                         "is_active": transport_fee_rule.is_active,
                     },
