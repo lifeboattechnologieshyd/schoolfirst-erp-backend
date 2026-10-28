@@ -581,6 +581,623 @@ class CreatePaymentAPIView(APIView):
                 description="Internal server error."
             )
 
+
+
+
+
+
+
+class VerifyPaymentAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        school = request.school
+
+        transaction_number = request.data.get("transaction_number")
+
+        payment_logger.info(
+            "verify_payment_started",
+            school_id=str(school.id),
+            user_id=str(request.user.id),
+            transaction_number=str(transaction_number),
+        )
+
+        # ---------------------------------------------------------
+        # Validate request
+        # ---------------------------------------------------------
+
+        if not transaction_number:
+            return CustomResponse.errorResponse(
+                description="Transaction number is required."
+            )
+
+        try:
+            # -----------------------------------------------------
+            # Get payment transaction
+            # -----------------------------------------------------
+
+            payment_transaction = (
+                PaymentTransaction.objects
+                .select_related(
+                    "student",
+                    "gateway",
+                )
+                .filter(
+                    school=school,
+                    transaction_number=transaction_number,
+                )
+                .first()
+            )
+
+            if payment_transaction is None:
+                payment_logger.warning(
+                    "payment_transaction_not_found",
+                    school_id=str(school.id),
+                    transaction_number=str(transaction_number),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Payment transaction not found."
+                )
+
+            # -----------------------------------------------------
+            # Already completed
+            # -----------------------------------------------------
+
+            if (
+                payment_transaction.status
+                == PaymentTransaction.Status.SUCCESS
+            ):
+                payment_logger.info(
+                    "payment_already_verified",
+                    transaction_id=str(payment_transaction.id),
+                    transaction_number=transaction_number,
+                )
+
+                return CustomResponse.successResponse(
+                    description="Payment already verified.",
+                    data={
+                        "transaction_id": str(payment_transaction.id),
+                        "transaction_number": (
+                            payment_transaction.transaction_number
+                        ),
+                        "status": payment_transaction.status,
+                        "amount": str(payment_transaction.amount),
+                        "gateway_order_id": (
+                            payment_transaction.gateway_order_id
+                        ),
+                        "gateway_transaction_id": (
+                            payment_transaction.gateway_transaction_id
+                        ),
+                        "paid_at": (
+                            payment_transaction.paid_at.isoformat()
+                            if payment_transaction.paid_at
+                            else None
+                        ),
+                    },
+                )
+
+            # -----------------------------------------------------
+            # Get gateway
+            # -----------------------------------------------------
+
+            gateway = payment_transaction.gateway
+
+            if gateway is None or not gateway.is_active:
+                payment_logger.warning(
+                    "payment_gateway_not_configured",
+                    school_id=str(school.id),
+                    transaction_number=transaction_number,
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Payment gateway not configured."
+                )
+
+            # -----------------------------------------------------
+            # Get PhonePe client
+            # -----------------------------------------------------
+
+            client = get_phonepe_client(gateway)
+
+            # -----------------------------------------------------
+            # Verify payment with PhonePe
+            #
+            # IMPORTANT:
+            # Use your existing PhonePe SDK/status function here.
+            # The merchant order ID is the transaction_number created
+            # in CreatePaymentAPIView.
+            # -----------------------------------------------------
+
+            phonepe_response = client.get_order_status(
+                merchant_order_id=payment_transaction.transaction_number
+            )
+
+            payment_logger.info(
+                "phonepe_payment_status_received",
+                transaction_id=str(payment_transaction.id),
+                transaction_number=transaction_number,
+                gateway_order_id=str(
+                    getattr(phonepe_response, "order_id", None)
+                ),
+                state=str(
+                    getattr(phonepe_response, "state", None)
+                ),
+            )
+
+            state = getattr(phonepe_response, "state", None)
+
+            gateway_order_id = getattr(
+                phonepe_response,
+                "order_id",
+                None,
+            )
+
+            gateway_transaction_id = getattr(
+                phonepe_response,
+                "transaction_id",
+                None,
+            )
+
+            # -----------------------------------------------------
+            # Validate gateway order ID
+            # -----------------------------------------------------
+
+            if (
+                payment_transaction.gateway_order_id
+                and gateway_order_id
+                and payment_transaction.gateway_order_id
+                != gateway_order_id
+            ):
+                payment_logger.warning(
+                    "phonepe_order_id_mismatch",
+                    transaction_id=str(payment_transaction.id),
+                    expected_gateway_order_id=(
+                        payment_transaction.gateway_order_id
+                    ),
+                    received_gateway_order_id=gateway_order_id,
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Payment order mismatch."
+                )
+
+            # -----------------------------------------------------
+            # Update transaction
+            # -----------------------------------------------------
+
+            with transaction.atomic():
+
+                payment_transaction = (
+                    PaymentTransaction.objects
+                    .select_for_update()
+                    .select_related("student", "gateway")
+                    .get(
+                        id=payment_transaction.id,
+                    )
+                )
+
+                # -------------------------------------------------
+                # COMPLETED
+                # -------------------------------------------------
+
+                if state == "COMPLETED":
+
+                    # Another webhook/process may have completed it
+                    if (
+                        payment_transaction.status
+                        != PaymentTransaction.Status.SUCCESS
+                    ):
+                        payment_transaction.status = (
+                            PaymentTransaction.Status.SUCCESS
+                        )
+
+                        payment_transaction.gateway_transaction_id = (
+                            gateway_transaction_id
+                            or gateway_order_id
+                        )
+
+                        payment_transaction.paid_at = timezone.now()
+
+                        payment_transaction.save(
+                            update_fields=[
+                                "status",
+                                "gateway_transaction_id",
+                                "paid_at",
+                                "updated_at",
+                            ]
+                        )
+
+                        # -----------------------------------------
+                        # Update student fees
+                        # -----------------------------------------
+
+                        self.update_student_fees(
+                            payment_transaction
+                        )
+
+                        payment_logger.info(
+                            "payment_verified_successfully",
+                            transaction_id=str(
+                                payment_transaction.id
+                            ),
+                            student_id=str(
+                                payment_transaction.student_id
+                            ),
+                            amount=str(
+                                payment_transaction.amount
+                            ),
+                        )
+
+                # -------------------------------------------------
+                # FAILED
+                # -------------------------------------------------
+
+                elif state == "FAILED":
+
+                    if payment_transaction.status not in [
+                        PaymentTransaction.Status.SUCCESS,
+                    ]:
+                        payment_transaction.status = (
+                            PaymentTransaction.Status.FAILED
+                        )
+
+                        payment_transaction.gateway_transaction_id = (
+                            gateway_transaction_id
+                            or gateway_order_id
+                        )
+
+                        payment_transaction.save(
+                            update_fields=[
+                                "status",
+                                "gateway_transaction_id",
+                                "updated_at",
+                            ]
+                        )
+
+                    payment_logger.info(
+                        "payment_verification_failed",
+                        transaction_id=str(
+                            payment_transaction.id
+                        ),
+                    )
+
+                # -------------------------------------------------
+                # PENDING
+                # -------------------------------------------------
+
+                elif state == "PENDING":
+
+                    if payment_transaction.status not in [
+                        PaymentTransaction.Status.SUCCESS,
+                    ]:
+                        payment_transaction.status = (
+                            PaymentTransaction.Status.PENDING
+                        )
+
+                        payment_transaction.gateway_transaction_id = (
+                            gateway_transaction_id
+                            or gateway_order_id
+                        )
+
+                        payment_transaction.save(
+                            update_fields=[
+                                "status",
+                                "gateway_transaction_id",
+                                "updated_at",
+                            ]
+                        )
+
+                    payment_logger.info(
+                        "payment_verification_pending",
+                        transaction_id=str(
+                            payment_transaction.id
+                        ),
+                    )
+
+                # -------------------------------------------------
+                # CANCELLED / OTHER
+                # -------------------------------------------------
+
+                else:
+
+                    if payment_transaction.status not in [
+                        PaymentTransaction.Status.SUCCESS,
+                    ]:
+                        payment_transaction.status = (
+                            PaymentTransaction.Status.CANCELLED
+                        )
+
+                        payment_transaction.gateway_transaction_id = (
+                            gateway_transaction_id
+                            or gateway_order_id
+                        )
+
+                        payment_transaction.save(
+                            update_fields=[
+                                "status",
+                                "gateway_transaction_id",
+                                "updated_at",
+                            ]
+                        )
+
+                    payment_logger.info(
+                        "payment_verification_cancelled",
+                        transaction_id=str(
+                            payment_transaction.id
+                        ),
+                        state=state,
+                    )
+
+            # -----------------------------------------------------
+            # Final response
+            # -----------------------------------------------------
+
+            payment_transaction.refresh_from_db()
+
+            return CustomResponse.successResponse(
+                description="Payment status verified successfully.",
+                data={
+                    "transaction_id": str(
+                        payment_transaction.id
+                    ),
+                    "transaction_number": (
+                        payment_transaction.transaction_number
+                    ),
+                    "student_id": str(
+                        payment_transaction.student_id
+                    ),
+                    "amount": str(
+                        payment_transaction.amount
+                    ),
+                    "status": payment_transaction.status,
+                    "gateway_order_id": (
+                        payment_transaction.gateway_order_id
+                    ),
+                    "gateway_transaction_id": (
+                        payment_transaction.gateway_transaction_id
+                    ),
+                    "paid_at": (
+                        payment_transaction.paid_at.isoformat()
+                        if payment_transaction.paid_at
+                        else None
+                    ),
+                },
+            )
+
+        except Exception:
+            payment_logger.exception(
+                "verify_payment_failed",
+                school_id=str(school.id),
+                user_id=str(request.user.id),
+                transaction_number=str(transaction_number),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Unable to verify payment."
+            )
+
+    # =============================================================
+    # UPDATE STUDENT FEES
+    # =============================================================
+
+    def update_student_fees(self, payment_transaction):
+
+        payment_logger.info(
+            "student_fee_update_started",
+            transaction_id=str(payment_transaction.id),
+        )
+
+        # ---------------------------------------------------------
+        # Lock payment allocations
+        # ---------------------------------------------------------
+
+        items = list(
+            PaymentTransactionItem.objects
+            .select_for_update()
+            .filter(
+                transaction=payment_transaction,
+            )
+            .order_by("id")
+        )
+
+        if not items:
+            raise ValueError(
+                "No fee allocations found for this payment transaction."
+            )
+
+        # ---------------------------------------------------------
+        # Lock student fees
+        # ---------------------------------------------------------
+
+        fee_ids = [
+            item.student_fee_id
+            for item in items
+        ]
+
+        locked_fees = {
+            fee.id: fee
+            for fee in (
+                StudentFee.objects
+                .select_for_update()
+                .filter(
+                    id__in=fee_ids,
+                )
+            )
+        }
+
+        # ---------------------------------------------------------
+        # Update each fee
+        # ---------------------------------------------------------
+
+        for item in items:
+
+            fee = locked_fees.get(
+                item.student_fee_id
+            )
+
+            if fee is None:
+                raise ValueError(
+                    f"Student fee {item.student_fee_id} not found."
+                )
+
+            previous_paid_amount = Decimal(
+                str(fee.paid_amount or 0)
+            )
+
+            allocated_amount = Decimal(
+                str(item.amount)
+            )
+
+            if allocated_amount <= Decimal("0.00"):
+                raise ValueError(
+                    "Payment allocation must be greater than zero."
+                )
+
+            # ---------------------------------------------
+            # Prevent duplicate fee payment
+            # ---------------------------------------------
+
+            # Since the PaymentTransaction is locked and only
+            # successful transactions call this method, the
+            # allocation is applied exactly once.
+
+            fee.paid_amount = (
+                previous_paid_amount
+                + allocated_amount
+            )
+
+            payable_amount = (
+                Decimal(str(fee.total_amount))
+                - Decimal(str(fee.concession_amount or 0))
+                + Decimal(str(fee.late_fee or 0))
+            )
+
+            if fee.paid_amount >= payable_amount:
+
+                fee.status = StudentFee.Status.PAID
+
+            elif (
+                fee.due_date
+                and fee.due_date < timezone.localdate()
+            ):
+
+                fee.status = StudentFee.Status.OVERDUE
+
+            else:
+
+                fee.status = StudentFee.Status.PARTIAL
+
+            fee.save(
+                update_fields=[
+                    "paid_amount",
+                    "status",
+                    "updated_at",
+                ]
+            )
+
+            payment_logger.info(
+                "student_fee_updated",
+                transaction_id=str(
+                    payment_transaction.id
+                ),
+                student_fee_id=str(fee.id),
+                previous_paid_amount=str(
+                    previous_paid_amount
+                ),
+                allocated_amount=str(
+                    allocated_amount
+                ),
+                current_paid_amount=str(
+                    fee.paid_amount
+                ),
+                status=fee.status,
+            )
+
+        # ---------------------------------------------------------
+        # Update StudentFeeSummary
+        # ---------------------------------------------------------
+
+        student = payment_transaction.student
+        academic_year = student.academic_year
+
+        totals = (
+            StudentFee.objects
+            .filter(
+                school=payment_transaction.school,
+                student=student,
+                fee_template__academic_year=academic_year,
+            )
+            .exclude(
+                status=StudentFee.Status.WAIVED,
+            )
+            .aggregate(
+                total_fee=Sum("total_amount"),
+                total_concession=Sum("concession_amount"),
+                total_late_fee=Sum("late_fee"),
+                total_paid=Sum("paid_amount"),
+            )
+        )
+
+        total_fee = (
+            totals["total_fee"]
+            or Decimal("0.00")
+        )
+
+        total_concession = (
+            totals["total_concession"]
+            or Decimal("0.00")
+        )
+
+        total_late_fee = (
+            totals["total_late_fee"]
+            or Decimal("0.00")
+        )
+
+        total_paid = (
+            totals["total_paid"]
+            or Decimal("0.00")
+        )
+
+        outstanding_amount = (
+            total_fee
+            - total_concession
+            + total_late_fee
+            - total_paid
+        )
+
+        summary, _ = StudentFeeSummary.objects.update_or_create(
+            school=payment_transaction.school,
+            student=student,
+            academic_year=academic_year,
+            defaults={
+                "total_fee": total_fee,
+                "total_concession": total_concession,
+                "total_late_fee": total_late_fee,
+                "total_paid": total_paid,
+                "outstanding_amount": max(
+                    outstanding_amount,
+                    Decimal("0.00"),
+                ),
+            },
+        )
+
+        payment_logger.info(
+            "student_fee_summary_updated",
+            transaction_id=str(
+                payment_transaction.id
+            ),
+            student_id=str(student.id),
+            summary_id=str(summary.id),
+            total_fee=str(summary.total_fee),
+            total_concession=str(summary.total_concession),
+            total_paid=str(summary.total_paid),
+            outstanding_amount=str(
+                summary.outstanding_amount
+            ),
+        )
+
+
 # class CreatePaymentAPIView(APIView):
 #
 #     permission_classes = [

@@ -1,3 +1,4 @@
+import traceback
 import uuid
 from datetime import date, time, datetime
 from django.conf import settings
@@ -4906,263 +4907,279 @@ class TeacherScheduleListAPIView(APIView):
     required_permission = "teacher_schedule.view"
 
     def get(self, request):
+        try:
 
-        school = request.school
 
-        application_logger.info(
-            "teacher_schedule_list_started",
-            extra={
-                "performed_by": str(request.user.id),
-                "school_id": str(school.id) if school else None,
-            },
-        )
+            school = request.school
 
-        # ----------------------------------------------------------
-        # SCHOOL VALIDATION
-        # ----------------------------------------------------------
-
-        if not school:
-            return CustomResponse.errorResponse(
-                description="School not found."
+            application_logger.info(
+                "teacher_schedule_list_started",
+                extra={
+                    "performed_by": str(request.user.id),
+                    "school_id": str(school.id) if school else None,
+                },
             )
 
-        # ----------------------------------------------------------
-        # QUERY PARAMETERS
-        # ----------------------------------------------------------
+            # ----------------------------------------------------------
+            # SCHOOL VALIDATION
+            # ----------------------------------------------------------
 
-        search = request.GET.get("search")
-        department = request.GET.get("department")
-        status = request.GET.get("status")
-
-        academic_year_id = request.GET.get("academic_year_id")
-        grade_id = request.GET.get("grade_id")
-        section_id = request.GET.get("section_id")
-        branch_id = request.GET.get("branch_id")
-
-        # ----------------------------------------------------------
-        # BASE TEACHER QUERY
-        # ----------------------------------------------------------
-
-        teachers = Staff.objects.filter(
-            school=school,
-        )
-
-        # ----------------------------------------------------------
-        # SEARCH
-        # ----------------------------------------------------------
-
-        if search:
-
-            teachers = teachers.filter(
-                Q(name__icontains=search)
-                | Q(employee_id__icontains=search)
-            )
-
-        # ----------------------------------------------------------
-        # DEPARTMENT FILTER
-        # ----------------------------------------------------------
-
-        if department:
-
-            valid_departments = {
-                value
-                for value, label in Staff.Department.choices
-            }
-
-            if department not in valid_departments:
+            if not school:
                 return CustomResponse.errorResponse(
-                    description="Invalid department."
+                    description="School not found."
                 )
 
-            teachers = teachers.filter(
-                department=department
+            # ----------------------------------------------------------
+            # QUERY PARAMETERS
+            # ----------------------------------------------------------
+
+            search = request.GET.get("search")
+            department = request.GET.get("department")
+            status = request.GET.get("status")
+
+            academic_year_id = request.GET.get("academic_year_id")
+            grade_id = request.GET.get("grade_id")
+            section_id = request.GET.get("section_id")
+            branch_id = request.GET.get("branch_id")
+
+            # ----------------------------------------------------------
+            # BASE TEACHER QUERY
+            # ----------------------------------------------------------
+
+            teachers = Staff.objects.filter(
+                school=school,
             )
 
-        # ----------------------------------------------------------
-        # TEACHER STATUS FILTER
-        # ----------------------------------------------------------
+            # ----------------------------------------------------------
+            # SEARCH
+            # ----------------------------------------------------------
 
-        if status:
-            teachers = teachers.filter(
-                status=status
-            )
+            if search:
 
-        # ----------------------------------------------------------
-        # TIMETABLE ENTRY FILTERS
-        # ----------------------------------------------------------
-
-        entry_filters = {
-            "status": TimetableEntry.Status.ACTIVE,
-        }
-
-        if academic_year_id:
-            entry_filters[
-                "timetable__academic_year_id"
-            ] = academic_year_id
-
-        if grade_id:
-            entry_filters[
-                "grade_id"
-            ] = grade_id
-
-        if section_id:
-            entry_filters[
-                "section_id"
-            ] = section_id
-        if branch_id:
-            entry_filters[
-                "branch_id"
-            ]= branch_id
-
-        # ----------------------------------------------------------
-        # PREFETCH TEACHER ENTRIES
-        # ----------------------------------------------------------
-
-        timetable_entries = (
-            TimetableEntry.objects
-            .filter(**entry_filters)
-            .select_related(
-                "timetable",
-                "timetable__academic_year",
-                "grade",
-                "section",
-                "subject",
-                "period",
-            )
-            .order_by(
-                "day_of_week",
-                "period__period_number",
-            )
-        )
-
-        teachers = teachers.prefetch_related(
-            Prefetch(
-                "timetable_entries",
-                queryset=timetable_entries,
-                to_attr="active_schedule_entries",
-            )
-        ).order_by("name")
-
-        # ----------------------------------------------------------
-        # PAGINATION
-        # ----------------------------------------------------------
-
-        paginator = CustomPageNumberPagination()
-
-        page = paginator.paginate_queryset(
-            teachers,
-            request,
-        )
-
-        # ----------------------------------------------------------
-        # RESPONSE
-        # ----------------------------------------------------------
-
-        data = []
-
-        for teacher in page:
-
-            entries = getattr(
-                teacher,
-                "active_schedule_entries",
-                [],
-            )
-
-            # ------------------------------------------------------
-            # WEEKLY WORKLOAD
-            # ------------------------------------------------------
-
-            weekly_workload = len(entries)
-
-            # ------------------------------------------------------
-            # CLASS COUNT
-            #
-            # Distinct timetable / section combinations
-            # ------------------------------------------------------
-
-            class_count = len({
-                (
-                    entry.timetable_id,
-                    entry.section_id,
+                teachers = teachers.filter(
+                    Q(name__icontains=search)
+                    | Q(employee_id__icontains=search)
                 )
-                for entry in entries
-            })
 
-            # ------------------------------------------------------
-            # SUBJECTS
-            # ------------------------------------------------------
+            # ----------------------------------------------------------
+            # DEPARTMENT FILTER
+            # ----------------------------------------------------------
 
-            subjects = {}
+            if department:
 
-            for entry in entries:
-
-                subjects[entry.subject_id] = {
-                    "id": entry.subject_id,
-                    "name": entry.subject.name,
+                valid_departments = {
+                    value
+                    for value, label in Staff.Department.choices
                 }
 
-            # ------------------------------------------------------
-            # SCHEDULE STATUS
-            # ------------------------------------------------------
-
-            if not entries:
-                schedule_status = "UNASSIGNED"
-
-            elif (
-                hasattr(teacher, "status")
-                and teacher.status
-                != Staff.Status.ACTIVE
-            ):
-                schedule_status = "DEACTIVATED"
-
-            else:
-                schedule_status = "SYNCED"
-
-            # ------------------------------------------------------
-            # TEACHER RESPONSE
-            # ------------------------------------------------------
-
-            data.append({
-                "teacher": {
-                    "id": teacher.id,
-                    "employee_id": getattr(
-                        teacher,
-                        "employee_id",
-                        None,
-                    ),
-                    "name": teacher.name,
-                },
-
-                "department": (
-                    {
-                        "id": teacher.department.id,
-                        "name": teacher.department.name,
-                    }
-                    if getattr(
-                        teacher,
-                        "department",
-                        None,
+                if department not in valid_departments:
+                    return CustomResponse.errorResponse(
+                        description="Invalid department."
                     )
-                    else None
-                ),
 
-                "subjects": list(
-                    subjects.values()
-                ),
+                teachers = teachers.filter(
+                    department=department
+                )
 
-                "weekly_workload": {
-                    "assigned_periods": weekly_workload,
+            # ----------------------------------------------------------
+            # TEACHER STATUS FILTER
+            # ----------------------------------------------------------
+
+            if status:
+                teachers = teachers.filter(
+                    status=status
+                )
+
+            # ----------------------------------------------------------
+            # TIMETABLE ENTRY FILTERS
+            # ----------------------------------------------------------
+
+            entry_filters = {
+                "status": TimetableEntry.Status.ACTIVE,
+            }
+
+            if academic_year_id:
+                entry_filters[
+                    "timetable__academic_year_id"
+                ] = academic_year_id
+
+            if grade_id:
+                entry_filters[
+                    "grade_id"
+                ] = grade_id
+
+            if section_id:
+                entry_filters[
+                    "section_id"
+                ] = section_id
+            if branch_id:
+                entry_filters[
+                    "branch_id"
+                ]= branch_id
+
+            # ----------------------------------------------------------
+            # PREFETCH TEACHER ENTRIES
+            # ----------------------------------------------------------
+
+            timetable_entries = (
+                TimetableEntry.objects
+                .filter(**entry_filters)
+                .select_related(
+                    "timetable",
+                    "timetable__academic_year",
+                    "grade",
+                    "section",
+                    "subject",
+                    "period",
+                )
+                .order_by(
+                    "day_of_week",
+                    "period__period_number",
+                )
+            )
+
+            teachers = teachers.prefetch_related(
+                Prefetch(
+                    "timetable_entries",
+                    queryset=timetable_entries,
+                    to_attr="active_schedule_entries",
+                )
+            ).order_by("name")
+
+            # ----------------------------------------------------------
+            # PAGINATION
+            # ----------------------------------------------------------
+
+            paginator = CustomPageNumberPagination()
+
+            page = paginator.paginate_queryset(
+                teachers,
+                request,
+            )
+
+            # ----------------------------------------------------------
+            # RESPONSE
+            # ----------------------------------------------------------
+
+            data = []
+
+            for teacher in page:
+
+                entries = getattr(
+                    teacher,
+                    "active_schedule_entries",
+                    [],
+                )
+
+                # ------------------------------------------------------
+                # WEEKLY WORKLOAD
+                # ------------------------------------------------------
+
+                weekly_workload = len(entries)
+
+                # ------------------------------------------------------
+                # CLASS COUNT
+                #
+                # Distinct timetable / section combinations
+                # ------------------------------------------------------
+
+                class_count = len({
+                    (
+                        entry.timetable_id,
+                        entry.section_id,
+                    )
+                    for entry in entries
+                })
+
+                # ------------------------------------------------------
+                # SUBJECTS
+                # ------------------------------------------------------
+
+                subjects = {}
+
+                for entry in entries:
+
+                    subjects[entry.subject_id] = {
+                        "id": entry.subject_id,
+                        "name": entry.subject.name,
+                    }
+
+                # ------------------------------------------------------
+                # SCHEDULE STATUS
+                # ------------------------------------------------------
+
+                if not entries:
+                    schedule_status = "UNASSIGNED"
+
+                elif (
+                    hasattr(teacher, "status")
+                    and teacher.status
+                    != Staff.Status.ACTIVE
+                ):
+                    schedule_status = "DEACTIVATED"
+
+                else:
+                    schedule_status = "SYNCED"
+
+                # ------------------------------------------------------
+                # TEACHER RESPONSE
+                # ------------------------------------------------------
+
+                data.append({
+                    "teacher": {
+                        "id": teacher.id,
+                        "employee_id": getattr(
+                            teacher,
+                            "employee_id",
+                            None,
+                        ),
+                        "name": teacher.name,
+                    },
+
+                    "department": (
+                        {
+                            "id": teacher.department.id,
+                            "name": teacher.department.name,
+                        }
+                        if getattr(
+                            teacher,
+                            "department",
+                            None,
+                        )
+                        else None
+                    ),
+
+                    "subjects": list(
+                        subjects.values()
+                    ),
+
+                    "weekly_workload": {
+                        "assigned_periods": weekly_workload,
+                    },
+
+                    "class_count": class_count,
+
+                    "schedule_status": schedule_status,
+
+                    "status": teacher.status,
+                })
+
+
+            return CustomResponse.successResponse(data=data,description="teachers data fetched successfully" )
+        except Exception as exc:
+            application_logger.exception(
+                "teacher_schedule_exception",
+                extra={
+                    "requested_by": str(
+                        request.user.id
+                    ),
+                    "error": str(exc),
                 },
+            )
 
-                "class_count": class_count,
-
-                "schedule_status": schedule_status,
-
-                "status": teacher.status,
-            })
-
-
-        return CustomResponse.successResponse(data=data,description="teachers data fetched successfully" )
+            return CustomResponse.errorResponse(
+                description=str(exc)
+            )
 
 
 
