@@ -9710,7 +9710,7 @@ class CreateTransportFeeRuleAPIView(APIView):
                         "stop": (
                             {
                                 "id": str(stop.id),
-                                "name": stop.name,
+                                "name": stop.stop_name,
                             }
                             if stop
                             else None
