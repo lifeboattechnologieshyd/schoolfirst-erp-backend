@@ -5012,10 +5012,10 @@ class TeacherScheduleListAPIView(APIView):
                 entry_filters[
                     "section_id"
                 ] = section_id
+
             if branch_id:
-                entry_filters[
-                    "branch_id"
-                ]= branch_id
+                entry_filters["timetable__branch_id"] = branch_id
+
 
             # ----------------------------------------------------------
             # PREFETCH TEACHER ENTRIES
@@ -5027,6 +5027,7 @@ class TeacherScheduleListAPIView(APIView):
                 .select_related(
                     "timetable",
                     "timetable__academic_year",
+                    "timetable__branch",
                     "grade",
                     "section",
                     "subject",
@@ -5135,6 +5136,14 @@ class TeacherScheduleListAPIView(APIView):
                         ),
                         "name": teacher.name,
                     },
+                    "branch": (
+                        {
+                            "id": str(entries[0].timetable.branch.id),
+                            "name": entries[0].timetable.branch.name,
+                        }
+                        if entries and entries[0].timetable.branch
+                        else None
+                    ),
 
                     "department": teacher.department if teacher.department else None,
 
