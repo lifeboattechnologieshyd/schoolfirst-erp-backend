@@ -5136,14 +5136,7 @@ class TeacherScheduleListAPIView(APIView):
                         "name": teacher.name,
                     },
 
-                    "department": (
-                        {
-                            "value": teacher.department,
-                            "name": teacher.get_department_display(),
-                        }
-                        if teacher.department
-                        else None
-                    ),
+                    "department": teacher.department if teacher.department else None,
 
                     "subjects": list(
                         subjects.values()
