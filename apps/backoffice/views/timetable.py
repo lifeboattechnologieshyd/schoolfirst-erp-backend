@@ -3829,7 +3829,9 @@ class BulkUploadTimetableAPIView(APIView):
             period_existing_count = 0
 
             success_count = 0
+            updated_count = 0
             failed_count = 0
+
 
             errors = []
 
