@@ -5163,7 +5163,7 @@ class TeacherScheduleListAPIView(APIView):
                 })
 
 
-            return CustomResponse.successResponse(data=data,description="teachers data fetched successfully" )
+            return CustomResponse.successResponse(total=len(data),data=data,description="teachers data fetched successfully" )
         except Exception as exc:
             application_logger.exception(
                 "teacher_schedule_exception",
