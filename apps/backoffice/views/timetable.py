@@ -4113,49 +4113,55 @@ class BulkUploadTimetableAPIView(APIView):
                             # DUPLICATE ENTRY
                             # ------------------------------------------
 
-                            existing_entry = (
-                                TimetableEntry.objects.filter(
-                                    timetable=timetable,
-                                    section=section,
-                                    day_of_week=(
-                                        day_of_week
-                                    ),
-                                    period=period,
-                                ).first()
+                            entry, created = TimetableEntry.objects.update_or_create(
+                                timetable=timetable,
+                                section=section,
+                                day_of_week=day_of_week,
+                                period=period,
+                                defaults={
+                                    "grade": grade,
+                                    "subject": subject,
+                                    "teacher": teacher,
+                                    "notes": notes,
+                                    "status": TimetableEntry.Status.ACTIVE,
+                                },
                             )
+                            if created:
+                                success_count += 1
+                            else:
+                                updated_count += 1
 
-                            if existing_entry:
-
-                                raise ValueError(
-                                    "Timetable entry "
-                                    "already exists for "
-                                    f"{section.name}, "
-                                    f"{day_of_week}, "
-                                    f"Period "
-                                    f"{period_number}."
-                                )
+                            # if existing_entry:
+                            #
+                            #     raise ValueError(
+                            #         "Timetable entry "
+                            #         "already exists for "
+                            #         f"{section.name}, "
+                            #         f"{day_of_week}, "
+                            #         f"Period "
+                            #         f"{period_number}."
+                            #     )
 
                             # ------------------------------------------
                             # CREATE ENTRY
                             # ------------------------------------------
 
-                            TimetableEntry.objects.create(
-                                timetable=timetable,
-                                grade=grade,
-                                section=section,
-                                subject=subject,
-                                teacher=teacher,
-                                period=period,
-                                day_of_week=day_of_week,
-                                notes=notes,
-                                status=(
-                                    TimetableEntry
-                                    .Status
-                                    .ACTIVE
-                                ),
-                            )
+                            # TimetableEntry.objects.create(
+                            #     timetable=timetable,
+                            #     grade=grade,
+                            #     section=section,
+                            #     subject=subject,
+                            #     teacher=teacher,
+                            #     period=period,
+                            #     day_of_week=day_of_week,
+                            #     notes=notes,
+                            #     status=(
+                            #         TimetableEntry
+                            #         .Status
+                            #         .ACTIVE
+                            #     ),
+                            # )
 
-                            success_count += 1
 
                         except IntegrityError as exc:
 
@@ -5739,7 +5745,7 @@ class AssignTeacherSubstitutionAPIView(APIView):
                 status=(
                     TimetableSubstitution
                     .Status
-                    .SCHEDULED
+                    .COMPLETED
                 ),
             )
             .first()
@@ -5826,7 +5832,7 @@ class AssignTeacherSubstitutionAPIView(APIView):
                 status=(
                     TimetableSubstitution
                     .Status
-                    .SCHEDULED
+                    .COMPLETED
                 ),
                 timetable_entry__period=(
                     timetable_entry.period
@@ -5891,7 +5897,7 @@ class AssignTeacherSubstitutionAPIView(APIView):
                 status=(
                     TimetableSubstitution
                     .Status
-                    .SCHEDULED
+                    .COMPLETED
                 ),
                 timetable_entry__timetable__academic_year_id=(
                     timetable_entry
@@ -5949,7 +5955,7 @@ class AssignTeacherSubstitutionAPIView(APIView):
                         status=(
                             TimetableSubstitution
                             .Status
-                            .SCHEDULED
+                            .COMPLETED
                         ),
                         created_by=request.user,
                     )
