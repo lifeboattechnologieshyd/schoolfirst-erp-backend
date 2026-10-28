@@ -1024,6 +1024,7 @@ class StaffAttendanceListAPIView(APIView):
         branch_id = request.query_params.get("branch_id")
         status = request.query_params.get("status")
         search = request.query_params.get("search")
+        staff_type = request.query_params.get("staff_type")
 
         # Exact attendance date
         if attendance_date:
@@ -1099,6 +1100,16 @@ class StaffAttendanceListAPIView(APIView):
 
             attendance = attendance.filter(
                 branch_id=branch_uuid
+            )
+
+        if staff_type:
+            if staff_type not in Staff.StaffType.values:
+                return CustomResponse.errorResponse(
+                    description="Invalid staff type."
+                )
+
+            attendance = attendance.filter(
+                staff__staff_type=staff_type
             )
 
         # Filter by attendance status

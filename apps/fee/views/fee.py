@@ -590,14 +590,9 @@ class CreatePaymentAPIView(APIView):
 
 
 
-class VerifyPaymentAPIView(
-    PhonePePaymentProcessingMixin,
-    APIView,
-):
+class VerifyPaymentAPIView(PhonePePaymentProcessingMixin,APIView,):
 
-    permission_classes = [
-        IsAuthenticated,
-    ]
+    permission_classes = [IsAuthenticated,]
 
     def post(self, request):
 
@@ -1093,14 +1088,9 @@ class VerifyPaymentAPIView(
 #
 
 
-class PhonePeWebhookAPIView(
-    PhonePePaymentProcessingMixin,
-    APIView,
-):
+class PhonePeWebhookAPIView(PhonePePaymentProcessingMixin,APIView,):
 
-    permission_classes = [
-        AllowAny,
-    ]
+    permission_classes = [AllowAny,]
 
     authentication_classes = []
 
