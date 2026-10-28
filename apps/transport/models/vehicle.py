@@ -630,9 +630,17 @@ class StudentTransport(AuditModel):
         choices=TripType.choices,
         default=TripType.BOTH,
     )
+    transport_fee_rule = models.ForeignKey(
+        "TransportFeeRule",
+        on_delete=models.PROTECT,
+        related_name="student_transports",
+        null=True,
+        blank=True,
+    )
 
-
-
+    is_fee_exempt = models.BooleanField(
+        default=False
+    )
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
@@ -659,8 +667,12 @@ class StudentTransport(AuditModel):
 
         indexes = [
             models.Index(fields=["school"]),
+            models.Index(fields=["academic_year"]),
             models.Index(fields=["student"]),
             models.Index(fields=["vehicle_assignment"]),
+            models.Index(fields=["pickup_stop"]),
+            models.Index(fields=["drop_stop"]),
+            models.Index(fields=["transport_fee_rule"]),
             models.Index(fields=["status"]),
         ]
 
@@ -1315,6 +1327,104 @@ class TripEvent(AuditModel):
 
     def __str__(self):
         return f"{self.trip} - {self.get_event_type_display()}"
+
+class TransportFeeRule(AuditModel):
+
+    class BillingModel(models.TextChoices):
+        MONTHLY = "MONTHLY", "Monthly"
+        QUARTERLY = "QUARTERLY", "Quarterly"
+        HALF_YEARLY = "HALF_YEARLY", "Half Yearly"
+        YEARLY = "YEARLY", "Yearly"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="transport_fee_rules",
+    )
+
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.CASCADE,
+        related_name="transport_fee_rules",
+    )
+    name = models.CharField(
+        max_length=150
+    )
+
+    fee_type = models.ForeignKey(
+        FeeType,
+        on_delete=models.PROTECT,
+        related_name="transport_fee_rules",
+    )
+
+    route = models.ForeignKey(
+        Route,
+        on_delete=models.CASCADE,
+        related_name="transport_fee_rules",
+    )
+
+    stop = models.ForeignKey(
+        Stop,
+        on_delete=models.CASCADE,
+        related_name="transport_fee_rules",
+        null=True,
+        blank=True,
+    )
+
+    billing_model = models.CharField(
+        max_length=20,
+        choices=BillingModel.choices,
+    )
+
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+    )
+
+    class Meta:
+        db_table = "transport_fee_rules"
+
+        # constraints = [
+        #     models.UniqueConstraint(
+        #         fields=[
+        #             "school",
+        #             "academic_year",
+        #             "fee_type",
+        #             "route",
+        #             "stop",
+        #             "billing_model",
+        #         ],
+        #         name="unique_transport_fee_rule",
+        #     ),
+        # ]
+
+        indexes = [
+            models.Index(
+                fields=[
+                    "school",
+                    "academic_year",
+                ]
+            ),
+            models.Index(
+                fields=["fee_type"]
+            ),
+            models.Index(
+                fields=["route"]
+            ),
+            models.Index(
+                fields=["stop"]
+            ),
+        ]
 
 
 class TransportFeeConfiguration(AuditModel):

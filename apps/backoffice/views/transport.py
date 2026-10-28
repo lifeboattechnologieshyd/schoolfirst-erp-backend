@@ -1,11 +1,14 @@
+from decimal import Decimal, InvalidOperation
+
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import generics
 
+from apps.fee.models import FeeType
 from apps.school.models.school import Branch, Staff, Student, AcademicYear
 from apps.transport.models import Vehicle, VehicleDocument, Route, RouteStop, VehicleAssignment, StudentTransport, Stop, \
-    Trip, TripAttendance, LiveLocation, TripEvent, LocationHistory, TripStopStatus
-from shared.mixins import CustomResponse
+    Trip, TripAttendance, LiveLocation, TripEvent, LocationHistory, TripStopStatus, TransportFeeRule
+from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger, audit_logger
 from shared.utils.transport import update_live_location
@@ -5255,6 +5258,7 @@ class CreateStudentTransportAPIView(APIView):
         pickup_stop_id = request.data.get("pickup_stop_id")
         drop_stop_id = request.data.get("drop_stop_id")
         trip_type = request.data.get("trip_type")
+        transport_fee_rule_id = request.data.get("transport_fee_rule_id")
 
         application_logger.info(
             "student_transport_create_requested",
@@ -5262,6 +5266,7 @@ class CreateStudentTransportAPIView(APIView):
             school_id=str(school.id) if school else None,
             student_id=student_id,
             route_id=route_id,
+            transport_fee_rule_id=transport_fee_rule_id,
         )
 
         # =========================================================
@@ -5288,6 +5293,7 @@ class CreateStudentTransportAPIView(APIView):
             "academic_year_id",
             "student_id",
             "route_id",
+            "transport_fee_rule_id"
         ]
 
         for field in required_fields:
@@ -5381,6 +5387,61 @@ class CreateStudentTransportAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Route not found."
             )
+
+        # =========================================================
+        # TRANSPORT FEE RULE
+        # =========================================================
+
+        transport_fee_rule = (
+            TransportFeeRule.objects
+            .select_related(
+                "fee_type",
+                "route",
+                "stop",
+                "academic_year",
+            )
+            .filter(
+                id=transport_fee_rule_id,
+                school=school,
+                academic_year=academic_year,
+                route=route,
+                is_active=True,
+            )
+            .first()
+        )
+
+        if transport_fee_rule is None:
+
+            application_logger.warning(
+                "student_transport_create_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                student_id=str(student.id),
+                route_id=str(route.id),
+                transport_fee_rule_id=transport_fee_rule_id,
+                reason="transport_fee_rule_not_found",
+            )
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "Transport fee rule not found for the selected "
+                    "academic year and route."
+                )
+            )
+
+        # =========================================================
+        # FEE TYPE VALIDATION
+        # =========================================================
+
+        if not transport_fee_rule.fee_type.is_transport:
+
+            return CustomResponse.errorResponse(
+                description=(
+                    "The selected transport fee rule is not linked "
+                    "to a transport fee type."
+                )
+            )
+
 
         # =========================================================
         # FIND VEHICLE ASSIGNMENT FOR ROUTE
@@ -5533,6 +5594,8 @@ class CreateStudentTransportAPIView(APIView):
                         "trip_type",
                         StudentTransport.TripType.BOTH,
                     ),
+                    transport_fee_rule=transport_fee_rule,
+
                     status=request.data.get(
                         "status",
                         StudentTransport.Status.ACTIVE,
@@ -5548,6 +5611,8 @@ class CreateStudentTransportAPIView(APIView):
                 school_id=str(school.id),
                 student_id=str(student.id),
                 route_id=str(route.id),
+                transport_fee_rule_id=str(transport_fee_rule.id),
+
                 reason="student_transport_creation_failed",
                 error=str(e),
             )
@@ -5567,6 +5632,7 @@ class CreateStudentTransportAPIView(APIView):
             student_transport_id=str(student_transport.id),
             student_id=str(student.id),
             route_id=str(route.id),
+            transport_fee_rule_id=str(transport_fee_rule.id),
             vehicle_assignment_id=str(vehicle_assignment.id),
         )
 
@@ -5621,6 +5687,25 @@ class CreateStudentTransportAPIView(APIView):
 
                 "trip_type": student_transport.trip_type,
                 "status": student_transport.status,
+                "transport_fee_rule": {
+                    "id": str(transport_fee_rule.id),
+                    "name": transport_fee_rule.name,
+
+                    "fee_type": {
+                        "id": str(transport_fee_rule.fee_type.id),
+                        "name": transport_fee_rule.fee_type.name,
+                    },
+
+                    "billing_model": (
+                        transport_fee_rule.billing_model
+                    ),
+
+                    "billing_model_label": (
+                        transport_fee_rule.get_billing_model_display()
+                    ),
+
+                    "amount": str(transport_fee_rule.amount),
+                },
                 "remarks": student_transport.remarks,
             },
         )
@@ -5690,6 +5775,9 @@ class StudentTransportListAPIView(APIView):
                     "vehicle_assignment__driver",
                     "pickup_stop",
                     "drop_stop",
+                    "transport_fee_rule",
+                    "transport_fee_rule__fee_type",
+
                 )
                 .prefetch_related(
                     Prefetch(
@@ -6019,6 +6107,42 @@ class StudentTransportListAPIView(APIView):
 
                         "trip_type_display": (
                             transport.get_trip_type_display()
+                        ),
+                        # =========================================
+                        # TRANSPORT FEE RULE
+                        # =========================================
+
+                        "transport_fee_rule": (
+                            {
+                                "id": str(
+                                    transport.transport_fee_rule.id
+                                ),
+                                "name": (
+                                    transport.transport_fee_rule.name
+                                ),
+                                "fee_type": {
+                                    "id": str(
+                                        transport.transport_fee_rule.fee_type.id
+                                    ),
+                                    "name": (
+                                        transport.transport_fee_rule.fee_type.name
+                                    ),
+                                },
+                                "billing_model": (
+                                    transport.transport_fee_rule.billing_model
+                                ),
+                                "billing_model_display": (
+                                    transport.transport_fee_rule.get_billing_model_display()
+                                ),
+                                "amount": str(
+                                    transport.transport_fee_rule.amount
+                                ),
+                                "is_active": (
+                                    transport.transport_fee_rule.is_active
+                                ),
+                            }
+                            if transport.transport_fee_rule
+                            else None
                         ),
 
                         # =========================================
@@ -9373,3 +9497,673 @@ class EndTripAPIView(APIView):
                 "total_distance": trip.total_distance,
             },
         )
+
+
+
+class CreateTransportFeeRuleAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "transport_fee_rule.create"
+
+    def post(self, request):
+        school = request.school
+
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        name = request.data.get("name")
+        academic_year_id = request.data.get("academic_year_id")
+        fee_type_id = request.data.get("fee_type_id")
+        route_id = request.data.get("route_id")
+        stop_id = request.data.get("stop_id")
+        billing_model = request.data.get("billing_model")
+        amount = request.data.get("amount")
+        is_active = request.data.get("is_active", True)
+
+        # ---------------------------------------------------------
+        # Required fields
+        # ---------------------------------------------------------
+        required_fields = {
+            "name": name,
+            "academic_year_id": academic_year_id,
+            "fee_type_id": fee_type_id,
+            "route_id": route_id,
+            "billing_model": billing_model,
+            "amount": amount,
+        }
+
+        missing_fields = [
+            field
+            for field, value in required_fields.items()
+            if value in [None, ""]
+        ]
+
+        if missing_fields:
+            return CustomResponse.errorResponse(
+                description=f"Required fields missing: {', '.join(missing_fields)}."
+            )
+
+        # ---------------------------------------------------------
+        # UUID validation
+        # ---------------------------------------------------------
+        import uuid
+
+        uuid_fields = {
+            "academic_year_id": academic_year_id,
+            "fee_type_id": fee_type_id,
+            "route_id": route_id,
+        }
+
+        if stop_id:
+            uuid_fields["stop_id"] = stop_id
+
+        for field_name, value in uuid_fields.items():
+            try:
+                uuid.UUID(str(value))
+            except (ValueError, TypeError, AttributeError):
+                return CustomResponse.errorResponse(
+                    description=f"Invalid {field_name}."
+                )
+
+        # ---------------------------------------------------------
+        # Billing model validation
+        # ---------------------------------------------------------
+        valid_billing_models = {
+            value for value, label in TransportFeeRule.BillingModel.choices
+        }
+
+        if billing_model not in valid_billing_models:
+            return CustomResponse.errorResponse(
+                description="Invalid billing model."
+            )
+
+        # ---------------------------------------------------------
+        # Amount validation
+        # ---------------------------------------------------------
+        try:
+            amount = Decimal(str(amount))
+        except (InvalidOperation, ValueError, TypeError):
+            return CustomResponse.errorResponse(
+                description="Invalid amount."
+            )
+
+        if amount <= 0:
+            return CustomResponse.errorResponse(
+                description="Amount must be greater than zero."
+            )
+
+        # ---------------------------------------------------------
+        # Academic Year
+        # ---------------------------------------------------------
+        academic_year = AcademicYear.objects.filter(
+            id=academic_year_id,
+            school=school,
+        ).first()
+
+        if academic_year is None:
+            return CustomResponse.errorResponse(
+                description="Academic year not found."
+            )
+
+        # ---------------------------------------------------------
+        # Fee Type
+        # ---------------------------------------------------------
+        fee_type = FeeType.objects.filter(
+            id=fee_type_id,
+            school=school,
+            academic_year=academic_year,
+            is_active=True,
+        ).first()
+
+        if fee_type is None:
+            return CustomResponse.errorResponse(
+                description="Fee type not found."
+            )
+
+        if not fee_type.is_transport:
+            return CustomResponse.errorResponse(
+                description="Selected fee type is not a transport fee type."
+            )
+
+        # ---------------------------------------------------------
+        # Route
+        # ---------------------------------------------------------
+        route = Route.objects.filter(
+            id=route_id,
+            school=school,
+            is_active=True,
+        ).first()
+
+        if route is None:
+            return CustomResponse.errorResponse(
+                description="Route not found."
+            )
+
+        # ---------------------------------------------------------
+        # Stop - optional
+        # ---------------------------------------------------------
+        stop = None
+
+        if stop_id:
+            stop = Stop.objects.filter(
+                id=stop_id,
+                school=school,
+                is_active=True,
+            ).first()
+
+            if stop is None:
+                return CustomResponse.errorResponse(
+                    description="Stop not found."
+                )
+
+            # If Stop has a route relation, validate it.
+            if hasattr(stop, "route_id") and stop.route_id != route.id:
+                return CustomResponse.errorResponse(
+                    description="Selected stop does not belong to the selected route."
+                )
+
+        # ---------------------------------------------------------
+        # Create
+        # ---------------------------------------------------------
+        try:
+            with transaction.atomic():
+
+                transport_fee_rule = TransportFeeRule.objects.create(
+                    school=school,
+                    academic_year=academic_year,
+                    name=name.strip(),
+                    fee_type=fee_type,
+                    route=route,
+                    stop=stop,
+                    billing_model=billing_model,
+                    amount=amount,
+                    is_active=is_active,
+                    created_by=request.user,
+                )
+
+            application_logger.info(
+                "Transport fee rule created successfully. "
+                "rule_id=%s school_id=%s name=%s",
+                transport_fee_rule.id,
+                school.id,
+                transport_fee_rule.name,
+            )
+
+            return CustomResponse.successResponse(
+                description="Transport fee rule created successfully.",
+                data={
+                    "id": str(transport_fee_rule.id),
+                    "name": transport_fee_rule.name,
+                    "academic_year": {
+                        "id": str(academic_year.id),
+                        "name": academic_year.name,
+                    },
+                    "fee_type": {
+                        "id": str(fee_type.id),
+                        "name": fee_type.name,
+                        "is_transport": fee_type.is_transport,
+                    },
+                    "route": {
+                        "id": str(route.id),
+                        "name": route.name,
+                    },
+                    "stop": (
+                        {
+                            "id": str(stop.id),
+                            "name": stop.name,
+                        }
+                        if stop
+                        else None
+                    ),
+                    "billing_model": transport_fee_rule.billing_model,
+                    "billing_model_label": transport_fee_rule.get_billing_model_display(),
+                    "amount": str(transport_fee_rule.amount),
+                    "is_active": transport_fee_rule.is_active,
+                },
+            )
+
+        except Exception as exc:
+            application_logger.exception(
+                "Error creating transport fee rule: %s",
+                exc,
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to create transport fee rule."
+            )
+
+class TransportFeeRuleListAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "transport_fee_rule.view"
+
+    def get(self, request):
+        school = request.school
+
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        academic_year_id = request.GET.get("academic_year_id")
+        fee_type_id = request.GET.get("fee_type_id")
+        route_id = request.GET.get("route_id")
+        stop_id = request.GET.get("stop_id")
+        billing_model = request.GET.get("billing_model")
+        is_active = request.GET.get("is_active")
+        search = request.GET.get("search")
+
+        rules = (
+            TransportFeeRule.objects
+            .filter(school=school)
+            .select_related(
+                "academic_year",
+                "fee_type",
+                "route",
+                "stop",
+            )
+            .order_by("-created_at")
+        )
+
+        # ---------------------------------------------------------
+        # Filters
+        # ---------------------------------------------------------
+        if academic_year_id:
+            rules = rules.filter(
+                academic_year_id=academic_year_id
+            )
+
+        if fee_type_id:
+            rules = rules.filter(
+                fee_type_id=fee_type_id
+            )
+
+        if route_id:
+            rules = rules.filter(
+                route_id=route_id
+            )
+
+        if stop_id:
+            rules = rules.filter(
+                stop_id=stop_id
+            )
+
+        if billing_model:
+            rules = rules.filter(
+                billing_model=billing_model
+            )
+
+        if is_active is not None:
+            if str(is_active).lower() in ["true", "1"]:
+                rules = rules.filter(is_active=True)
+
+            elif str(is_active).lower() in ["false", "0"]:
+                rules = rules.filter(is_active=False)
+
+        if search:
+            rules = rules.filter(
+                name__icontains=search
+            )
+
+        # ---------------------------------------------------------
+        # Pagination
+        # ---------------------------------------------------------
+        paginator = CustomPageNumberPagination()
+        paginated_rules = paginator.paginate_queryset(
+            rules,
+            request
+        )
+
+        data = []
+
+        for rule in paginated_rules:
+            data.append({
+                "id": str(rule.id),
+                "name": rule.name,
+
+                "academic_year": {
+                    "id": str(rule.academic_year.id),
+                    "name": rule.academic_year.name,
+                },
+
+                "fee_type": {
+                    "id": str(rule.fee_type.id),
+                    "name": rule.fee_type.name,
+                    "is_transport": rule.fee_type.is_transport,
+                },
+
+                "route": {
+                    "id": str(rule.route.id),
+                    "name": rule.route.name,
+                },
+
+                "stop": (
+                    {
+                        "id": str(rule.stop.id),
+                        "name": rule.stop.name,
+                    }
+                    if rule.stop
+                    else None
+                ),
+
+                "billing_model": rule.billing_model,
+                "billing_model_label": rule.get_billing_model_display(),
+
+                "amount": str(rule.amount),
+
+                "is_active": rule.is_active,
+
+                "created_at": rule.created_at,
+                "updated_at": rule.updated_at,
+            })
+
+        return paginator.get_paginated_response(
+            data
+        )
+
+class UpdateTransportFeeRuleAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "transport_fee_rule.update"
+
+    def put(self, request, rule_id):
+        school = request.school
+
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        import uuid
+
+        try:
+            uuid.UUID(str(rule_id))
+        except (ValueError, TypeError, AttributeError):
+            return CustomResponse.errorResponse(
+                description="Invalid transport fee rule ID."
+            )
+
+        rule = (
+            TransportFeeRule.objects
+            .filter(
+                id=rule_id,
+                school=school,
+            )
+            .select_related(
+                "academic_year",
+                "fee_type",
+                "route",
+                "stop",
+            )
+            .first()
+        )
+
+        if rule is None:
+            return CustomResponse.errorResponse(
+                description="Transport fee rule not found."
+            )
+
+        name = request.data.get("name")
+        academic_year_id = request.data.get("academic_year_id")
+        fee_type_id = request.data.get("fee_type_id")
+        route_id = request.data.get("route_id")
+        stop_id = request.data.get("stop_id")
+        billing_model = request.data.get("billing_model")
+        amount = request.data.get("amount")
+        is_active = request.data.get("is_active")
+
+        # ---------------------------------------------------------
+        # Name
+        # ---------------------------------------------------------
+        if name is not None:
+            name = str(name).strip()
+
+            if not name:
+                return CustomResponse.errorResponse(
+                    description="Name cannot be empty."
+                )
+
+            rule.name = name
+
+        # ---------------------------------------------------------
+        # Academic Year
+        # ---------------------------------------------------------
+        if academic_year_id:
+
+            academic_year = AcademicYear.objects.filter(
+                id=academic_year_id,
+                school=school,
+            ).first()
+
+            if academic_year is None:
+                return CustomResponse.errorResponse(
+                    description="Academic year not found."
+                )
+
+            rule.academic_year = academic_year
+
+        # ---------------------------------------------------------
+        # Fee Type
+        # ---------------------------------------------------------
+        if fee_type_id:
+
+            fee_type = FeeType.objects.filter(
+                id=fee_type_id,
+                school=school,
+                is_active=True,
+            ).first()
+
+            if fee_type is None:
+                return CustomResponse.errorResponse(
+                    description="Fee type not found."
+                )
+
+            if not fee_type.is_transport:
+                return CustomResponse.errorResponse(
+                    description="Selected fee type is not a transport fee type."
+                )
+
+            rule.fee_type = fee_type
+
+        # ---------------------------------------------------------
+        # Route
+        # ---------------------------------------------------------
+        if route_id:
+
+            route = Route.objects.filter(
+                id=route_id,
+                school=school,
+                is_active=True,
+            ).first()
+
+            if route is None:
+                return CustomResponse.errorResponse(
+                    description="Route not found."
+                )
+
+            rule.route = route
+
+        # ---------------------------------------------------------
+        # Stop
+        # ---------------------------------------------------------
+        if "stop_id" in request.data:
+
+            if stop_id:
+
+                stop = Stop.objects.filter(
+                    id=stop_id,
+                    school=school,
+                    is_active=True,
+                ).first()
+
+                if stop is None:
+                    return CustomResponse.errorResponse(
+                        description="Stop not found."
+                    )
+
+                if (
+                    hasattr(stop, "route_id")
+                    and stop.route_id != rule.route_id
+                ):
+                    return CustomResponse.errorResponse(
+                        description="Selected stop does not belong to the selected route."
+                    )
+
+                rule.stop = stop
+
+            else:
+                rule.stop = None
+
+        # ---------------------------------------------------------
+        # Billing Model
+        # ---------------------------------------------------------
+        if billing_model:
+
+            valid_billing_models = {
+                value
+                for value, label
+                in TransportFeeRule.BillingModel.choices
+            }
+
+            if billing_model not in valid_billing_models:
+                return CustomResponse.errorResponse(
+                    description="Invalid billing model."
+                )
+
+            rule.billing_model = billing_model
+
+        # ---------------------------------------------------------
+        # Amount
+        # ---------------------------------------------------------
+        if amount is not None:
+
+            try:
+                amount = Decimal(str(amount))
+            except (InvalidOperation, ValueError, TypeError):
+                return CustomResponse.errorResponse(
+                    description="Invalid amount."
+                )
+
+            if amount <= 0:
+                return CustomResponse.errorResponse(
+                    description="Amount must be greater than zero."
+                )
+
+            rule.amount = amount
+
+        # ---------------------------------------------------------
+        # Active Status
+        # ---------------------------------------------------------
+        if is_active is not None:
+
+            if isinstance(is_active, bool):
+                rule.is_active = is_active
+
+            elif str(is_active).lower() in ["true", "1"]:
+                rule.is_active = True
+
+            elif str(is_active).lower() in ["false", "0"]:
+                rule.is_active = False
+
+            else:
+                return CustomResponse.errorResponse(
+                    description="Invalid is_active value."
+                )
+
+        try:
+            rule.updated_by = request.user
+            rule.save()
+
+            application_logger.info(
+                "Transport fee rule updated successfully. "
+                "rule_id=%s school_id=%s",
+                rule.id,
+                school.id,
+            )
+
+            return CustomResponse.successResponse(
+                description="Transport fee rule updated successfully.",
+                data={
+                    "id": str(rule.id),
+                    "name": rule.name,
+                    "academic_year_id": str(rule.academic_year_id),
+                    "fee_type_id": str(rule.fee_type_id),
+                    "route_id": str(rule.route_id),
+                    "stop_id": (
+                        str(rule.stop_id)
+                        if rule.stop_id
+                        else None
+                    ),
+                    "billing_model": rule.billing_model,
+                    "billing_model_label": rule.get_billing_model_display(),
+                    "amount": str(rule.amount),
+                    "is_active": rule.is_active,
+                },
+            )
+
+        except Exception as exc:
+            application_logger.exception(
+                "Error updating transport fee rule: %s",
+                exc,
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to update transport fee rule."
+            )
+
+class DeleteTransportFeeRuleAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "transport_fee_rule.delete"
+
+    def delete(self, request, rule_id):
+        school = request.school
+
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        import uuid
+
+        try:
+            uuid.UUID(str(rule_id))
+        except (ValueError, TypeError, AttributeError):
+            return CustomResponse.errorResponse(
+                description="Invalid transport fee rule ID."
+            )
+
+        rule = TransportFeeRule.objects.filter(
+            id=rule_id,
+            school=school,
+        ).first()
+
+        if rule is None:
+            return CustomResponse.errorResponse(
+                description="Transport fee rule not found."
+            )
+
+        try:
+            rule.delete()
+
+            application_logger.info(
+                "Transport fee rule deleted successfully. "
+                "rule_id=%s school_id=%s",
+                rule.id,
+                school.id,
+            )
+
+            return CustomResponse.successResponse(
+                description="Transport fee rule deleted successfully.",
+                data={
+                    "id": str(rule.id)
+                },
+            )
+
+        except Exception as exc:
+            application_logger.exception(
+                "Error deleting transport fee rule: %s",
+                exc,
+            )
+
+            return CustomResponse.errorResponse(
+                description="Failed to delete transport fee rule."
+            )
