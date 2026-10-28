@@ -1394,19 +1394,19 @@ class TransportFeeRule(AuditModel):
     class Meta:
         db_table = "transport_fee_rules"
 
-        # constraints = [
-        #     models.UniqueConstraint(
-        #         fields=[
-        #             "school",
-        #             "academic_year",
-        #             "fee_type",
-        #             "route",
-        #             "stop",
-        #             "billing_model",
-        #         ],
-        #         name="unique_transport_fee_rule",
-        #     ),
-        # ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "school",
+                    "academic_year",
+                    "fee_type",
+                    "route",
+                    "stop",
+                    "billing_model",
+                ],
+                name="unique_transport_fee_rule",
+            ),
+        ]
 
         indexes = [
             models.Index(

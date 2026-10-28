@@ -9661,6 +9661,23 @@ class CreateTransportFeeRuleAPIView(APIView):
                     return CustomResponse.errorResponse(
                         description="Selected stop does not belong to the selected route."
                     )
+            # Check duplicate transport fee rule
+            duplicate_rule = TransportFeeRule.objects.filter(
+                school=school,
+                academic_year=academic_year,
+                fee_type=fee_type,
+                route=route,
+                stop=stop,
+                billing_model=billing_model,
+            ).exists()
+
+            if duplicate_rule:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "A transport fee rule already exists for this "
+                        "academic year, fee type, route, stop and billing model."
+                    )
+                )
 
             # ---------------------------------------------------------
             # Create

@@ -213,6 +213,7 @@ class FeeTypeListAPIView(APIView):
                 "note": obj.note,
 
                 "is_optional": obj.is_optional,
+                "is_transport": obj.is_transport,
 
                 "refund_type": obj.refund_type,
 
