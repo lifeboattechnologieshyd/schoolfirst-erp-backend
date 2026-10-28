@@ -9705,7 +9705,7 @@ class CreateTransportFeeRuleAPIView(APIView):
                         },
                         "route": {
                             "id": str(route.id),
-                            "name": route.name,
+                            "name": route.route_name,
                         },
                         "stop": (
                             {
