@@ -19,7 +19,7 @@ from shared.utils.logger import payment_logger
 
 
 from decimal import Decimal, InvalidOperation
-from django.db.models import Sum, F, ExpressionWrapper, DecimalField, Prefetch
+from django.db.models import Sum, F, ExpressionWrapper, DecimalField, Prefetch, Q
 
 
 class PendingStudentFeeAPIView(APIView):
@@ -96,7 +96,14 @@ class PendingStudentFeeAPIView(APIView):
                 .filter(
                     school=student.school,
                     student=student,
-                    fee_template__academic_year=student.academic_year,
+                )
+                .filter(
+                    Q(
+                        fee_template__academic_year=student.academic_year
+                    )
+                    | Q(
+                        transport_fee_rule__academic_year=student.academic_year
+                    )
                 )
                 .exclude(
                     status=StudentFee.Status.WAIVED,

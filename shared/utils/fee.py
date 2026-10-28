@@ -1,4 +1,4 @@
-from django.db.models import Sum
+from django.db.models import Sum, Q
 
 from apps.calendar.models import CalendarEvent, CalendarEventTarget
 from apps.fee.models import FeeInstallmentItem, StudentFee, StudentFeeAssignment, FeeTemplateItem, FeeConcession, \
@@ -714,16 +714,21 @@ class PhonePePaymentProcessingMixin:
             .filter(
                 school=payment_transaction.school,
                 student=student,
-                fee_template__academic_year=academic_year,
+            )
+            .filter(
+                Q(
+                    fee_template__academic_year=academic_year
+                )
+                | Q(
+                    transport_fee_rule__academic_year=academic_year
+                )
             )
             .exclude(
                 status=StudentFee.Status.WAIVED,
             )
             .aggregate(
                 total_fee=Sum("total_amount"),
-                total_concession=Sum(
-                    "concession_amount"
-                ),
+                total_concession=Sum("concession_amount"),
                 total_late_fee=Sum("late_fee"),
                 total_paid=Sum("paid_amount"),
             )
