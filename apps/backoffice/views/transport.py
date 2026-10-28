@@ -9741,128 +9741,133 @@ class TransportFeeRuleListAPIView(APIView):
     required_permission = "transport_fee_rule.view"
 
     def get(self, request):
-        school = request.school
+        try:
+            school = request.school
 
-        if school is None:
-            return CustomResponse.errorResponse(
-                description="School not found."
+            if school is None:
+                return CustomResponse.errorResponse(
+                    description="School not found."
+                )
+
+            academic_year_id = request.GET.get("academic_year_id")
+            fee_type_id = request.GET.get("fee_type_id")
+            route_id = request.GET.get("route_id")
+            stop_id = request.GET.get("stop_id")
+            billing_model = request.GET.get("billing_model")
+            is_active = request.GET.get("is_active")
+            search = request.GET.get("search")
+
+            rules = (
+                TransportFeeRule.objects
+                .filter(school=school)
+                .select_related(
+                    "academic_year",
+                    "fee_type",
+                    "route",
+                    "stop",
+                )
+                .order_by("-created_at")
             )
 
-        academic_year_id = request.GET.get("academic_year_id")
-        fee_type_id = request.GET.get("fee_type_id")
-        route_id = request.GET.get("route_id")
-        stop_id = request.GET.get("stop_id")
-        billing_model = request.GET.get("billing_model")
-        is_active = request.GET.get("is_active")
-        search = request.GET.get("search")
+            # ---------------------------------------------------------
+            # Filters
+            # ---------------------------------------------------------
+            if academic_year_id:
+                rules = rules.filter(
+                    academic_year_id=academic_year_id
+                )
 
-        rules = (
-            TransportFeeRule.objects
-            .filter(school=school)
-            .select_related(
-                "academic_year",
-                "fee_type",
-                "route",
-                "stop",
-            )
-            .order_by("-created_at")
-        )
+            if fee_type_id:
+                rules = rules.filter(
+                    fee_type_id=fee_type_id
+                )
 
-        # ---------------------------------------------------------
-        # Filters
-        # ---------------------------------------------------------
-        if academic_year_id:
-            rules = rules.filter(
-                academic_year_id=academic_year_id
-            )
+            if route_id:
+                rules = rules.filter(
+                    route_id=route_id
+                )
 
-        if fee_type_id:
-            rules = rules.filter(
-                fee_type_id=fee_type_id
-            )
+            if stop_id:
+                rules = rules.filter(
+                    stop_id=stop_id
+                )
 
-        if route_id:
-            rules = rules.filter(
-                route_id=route_id
-            )
+            if billing_model:
+                rules = rules.filter(
+                    billing_model=billing_model
+                )
 
-        if stop_id:
-            rules = rules.filter(
-                stop_id=stop_id
-            )
+            if is_active is not None:
+                if str(is_active).lower() in ["true", "1"]:
+                    rules = rules.filter(is_active=True)
 
-        if billing_model:
-            rules = rules.filter(
-                billing_model=billing_model
-            )
+                elif str(is_active).lower() in ["false", "0"]:
+                    rules = rules.filter(is_active=False)
 
-        if is_active is not None:
-            if str(is_active).lower() in ["true", "1"]:
-                rules = rules.filter(is_active=True)
+            if search:
+                rules = rules.filter(
+                    name__icontains=search
+                )
 
-            elif str(is_active).lower() in ["false", "0"]:
-                rules = rules.filter(is_active=False)
-
-        if search:
-            rules = rules.filter(
-                name__icontains=search
+            # ---------------------------------------------------------
+            # Pagination
+            # ---------------------------------------------------------
+            paginator = CustomPageNumberPagination()
+            paginated_rules = paginator.paginate_queryset(
+                rules,
+                request
             )
 
-        # ---------------------------------------------------------
-        # Pagination
-        # ---------------------------------------------------------
-        paginator = CustomPageNumberPagination()
-        paginated_rules = paginator.paginate_queryset(
-            rules,
-            request
-        )
+            data = []
 
-        data = []
+            for rule in paginated_rules:
+                data.append({
+                    "id": str(rule.id),
+                    "name": rule.name,
 
-        for rule in paginated_rules:
-            data.append({
-                "id": str(rule.id),
-                "name": rule.name,
+                    "academic_year": {
+                        "id": str(rule.academic_year.id),
+                        "name": rule.academic_year.name,
+                    },
 
-                "academic_year": {
-                    "id": str(rule.academic_year.id),
-                    "name": rule.academic_year.name,
-                },
+                    "fee_type": {
+                        "id": str(rule.fee_type.id),
+                        "name": rule.fee_type.name,
+                        "is_transport": rule.fee_type.is_transport,
+                    },
 
-                "fee_type": {
-                    "id": str(rule.fee_type.id),
-                    "name": rule.fee_type.name,
-                    "is_transport": rule.fee_type.is_transport,
-                },
+                    "route": {
+                        "id": str(rule.route.id),
+                        "name": rule.route.name,
+                    },
 
-                "route": {
-                    "id": str(rule.route.id),
-                    "name": rule.route.name,
-                },
+                    "stop": (
+                        {
+                            "id": str(rule.stop.id),
+                            "name": rule.stop.name,
+                        }
+                        if rule.stop
+                        else None
+                    ),
 
-                "stop": (
-                    {
-                        "id": str(rule.stop.id),
-                        "name": rule.stop.name,
-                    }
-                    if rule.stop
-                    else None
-                ),
+                    "billing_model": rule.billing_model,
+                    "billing_model_label": rule.get_billing_model_display(),
 
-                "billing_model": rule.billing_model,
-                "billing_model_label": rule.get_billing_model_display(),
+                    "amount": str(rule.amount),
 
-                "amount": str(rule.amount),
+                    "is_active": rule.is_active,
 
-                "is_active": rule.is_active,
+                    "created_at": rule.created_at,
+                    "updated_at": rule.updated_at,
+                })
 
-                "created_at": rule.created_at,
-                "updated_at": rule.updated_at,
-            })
-
-        return paginator.get_paginated_response(
-            data
-        )
+            return paginator.get_paginated_response(
+                data
+            )
+        except Exception as e:
+            application_logger.exception(
+                "Error getting transport fee rule: %s",
+            )
 
 class UpdateTransportFeeRuleAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
