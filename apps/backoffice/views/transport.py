@@ -4,7 +4,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import generics
 
-from apps.fee.models import FeeType
+from apps.fee.models import FeeType, StudentFee
 from apps.school.models.school import Branch, Staff, Student, AcademicYear
 from apps.transport.models import Vehicle, VehicleDocument, Route, RouteStop, VehicleAssignment, StudentTransport, Stop, \
     Trip, TripAttendance, LiveLocation, TripEvent, LocationHistory, TripStopStatus, TransportFeeRule
@@ -5242,13 +5242,481 @@ class UpdateStopAPIView(APIView):
 
 
 
-class CreateStudentTransportAPIView(APIView):
+# class CreateStudentTransportAPIView(APIView):
+#
+#     permission_classes = [IsAuthenticated, HasPermission]
+#     required_permission = "student.transport.create"
+#
+#     def post(self, request):
+#
+#         school = request.school
+#
+#         academic_year_id = request.data.get("academic_year_id")
+#         branch_id = request.data.get("branch_id")
+#         student_id = request.data.get("student_id")
+#         route_id = request.data.get("route_id")
+#         pickup_stop_id = request.data.get("pickup_stop_id")
+#         drop_stop_id = request.data.get("drop_stop_id")
+#         trip_type = request.data.get("trip_type")
+#         transport_fee_rule_id = request.data.get("transport_fee_rule_id")
+#
+#         application_logger.info(
+#             "student_transport_create_requested",
+#             requested_by=str(request.user.id),
+#             school_id=str(school.id) if school else None,
+#             student_id=student_id,
+#             route_id=route_id,
+#             transport_fee_rule_id=transport_fee_rule_id,
+#         )
+#
+#         # =========================================================
+#         # SCHOOL VALIDATION
+#         # =========================================================
+#
+#         if school is None:
+#
+#             application_logger.warning(
+#                 "student_transport_create_failed",
+#                 requested_by=str(request.user.id),
+#                 reason="school_not_found",
+#             )
+#
+#             return CustomResponse.errorResponse(
+#                 description="School not found."
+#             )
+#
+#         # =========================================================
+#         # REQUIRED FIELDS
+#         # =========================================================
+#
+#         required_fields = [
+#             "academic_year_id",
+#             "student_id",
+#             "route_id",
+#             "transport_fee_rule_id"
+#         ]
+#
+#         for field in required_fields:
+#
+#             if request.data.get(field) in [None, ""]:
+#
+#                 application_logger.warning(
+#                     "student_transport_create_failed",
+#                     requested_by=str(request.user.id),
+#                     school_id=str(school.id),
+#                     field=field,
+#                     reason="required_field_missing",
+#                 )
+#
+#                 return CustomResponse.errorResponse(
+#                     description=f"{field} is required."
+#                 )
+#
+#         # =========================================================
+#         # ACADEMIC YEAR
+#         # =========================================================
+#
+#         academic_year = AcademicYear.objects.filter(
+#             id=academic_year_id,
+#             school=school,
+#         ).first()
+#
+#         if academic_year is None:
+#
+#             return CustomResponse.errorResponse(
+#                 description="Academic year not found."
+#             )
+#
+#         # =========================================================
+#         # BRANCH
+#         # =========================================================
+#
+#         branch = None
+#
+#         if branch_id:
+#
+#             branch = Branch.objects.filter(
+#                 id=branch_id,
+#                 school=school,
+#             ).first()
+#
+#             if branch is None:
+#
+#                 return CustomResponse.errorResponse(
+#                     description="Branch not found."
+#                 )
+#
+#         # =========================================================
+#         # STUDENT
+#         # =========================================================
+#
+#         student = Student.objects.filter(
+#             id=student_id,
+#             school=school,
+#         ).first()
+#
+#         if student is None:
+#
+#             return CustomResponse.errorResponse(
+#                 description="Student not found."
+#             )
+#
+#         # =========================================================
+#         # ROUTE
+#         # =========================================================
+#
+#         route = (
+#             Route.objects
+#             .filter(
+#                 id=route_id,
+#                 school=school,
+#             )
+#             .first()
+#         )
+#
+#         if route is None:
+#
+#             application_logger.warning(
+#                 "student_transport_create_failed",
+#                 requested_by=str(request.user.id),
+#                 school_id=str(school.id),
+#                 route_id=route_id,
+#                 reason="route_not_found",
+#             )
+#
+#             return CustomResponse.errorResponse(
+#                 description="Route not found."
+#             )
+#
+#         # =========================================================
+#         # TRANSPORT FEE RULE
+#         # =========================================================
+#
+#         transport_fee_rule = (
+#             TransportFeeRule.objects
+#             .select_related(
+#                 "fee_type",
+#                 "route",
+#                 "stop",
+#                 "academic_year",
+#             )
+#             .filter(
+#                 id=transport_fee_rule_id,
+#                 school=school,
+#                 academic_year=academic_year,
+#                 route=route,
+#                 is_active=True,
+#             )
+#             .first()
+#         )
+#
+#         if transport_fee_rule is None:
+#
+#             application_logger.warning(
+#                 "student_transport_create_failed",
+#                 requested_by=str(request.user.id),
+#                 school_id=str(school.id),
+#                 student_id=str(student.id),
+#                 route_id=str(route.id),
+#                 transport_fee_rule_id=transport_fee_rule_id,
+#                 reason="transport_fee_rule_not_found",
+#             )
+#
+#             return CustomResponse.errorResponse(
+#                 description=(
+#                     "Transport fee rule not found for the selected "
+#                     "academic year and route."
+#                 )
+#             )
+#
+#         # =========================================================
+#         # FEE TYPE VALIDATION
+#         # =========================================================
+#
+#         if not transport_fee_rule.fee_type.is_transport:
+#
+#             return CustomResponse.errorResponse(
+#                 description=(
+#                     "The selected transport fee rule is not linked "
+#                     "to a transport fee type."
+#                 )
+#             )
+#
+#
+#         # =========================================================
+#         # FIND VEHICLE ASSIGNMENT FOR ROUTE
+#         # =========================================================
+#
+#         vehicle_assignment = (
+#             VehicleAssignment.objects
+#             .select_related(
+#                 "vehicle",
+#                 "driver",
+#                 "route",
+#             )
+#             .filter(
+#                 route=route,
+#                 school=school,
+#                 status=VehicleAssignment.Status.ACTIVE,
+#             )
+#             .first()
+#         )
+#
+#         if vehicle_assignment is None:
+#
+#             application_logger.warning(
+#                 "student_transport_create_failed",
+#                 requested_by=str(request.user.id),
+#                 school_id=str(school.id),
+#                 route_id=route_id,
+#                 reason="active_vehicle_assignment_not_found",
+#             )
+#
+#             return CustomResponse.errorResponse(
+#                 description=(
+#                     "No active vehicle assignment found for the selected route."
+#                 )
+#             )
+#
+#         # =========================================================
+#         # PICKUP STOP
+#         # =========================================================
+#
+#         pickup_stop = None
+#
+#         if pickup_stop_id:
+#
+#             pickup_stop = Stop.objects.filter(
+#                 id=pickup_stop_id,
+#                 school=school,
+#             ).first()
+#
+#             if pickup_stop is None:
+#
+#                 return CustomResponse.errorResponse(
+#                     description="Pickup stop not found."
+#                 )
+#
+#             if not RouteStop.objects.filter(
+#                 route=route,
+#                 stop=pickup_stop,
+#             ).exists():
+#
+#                 return CustomResponse.errorResponse(
+#                     description=(
+#                         "Pickup stop is not mapped to the selected route."
+#                     )
+#                 )
+#
+#         # =========================================================
+#         # DROP STOP
+#         # =========================================================
+#
+#         drop_stop = None
+#
+#         if drop_stop_id:
+#
+#             drop_stop = Stop.objects.filter(
+#                 id=drop_stop_id,
+#                 school=school,
+#             ).first()
+#
+#             if drop_stop is None:
+#
+#                 return CustomResponse.errorResponse(
+#                     description="Drop stop not found."
+#                 )
+#
+#             if not RouteStop.objects.filter(
+#                 route=route,
+#                 stop=drop_stop,
+#             ).exists():
+#
+#                 return CustomResponse.errorResponse(
+#                     description=(
+#                         "Drop stop is not mapped to the selected route."
+#                     )
+#                 )
+#
+#         # =========================================================
+#         # TRIP TYPE
+#         # =========================================================
+#
+#         if trip_type:
+#
+#             if trip_type not in StudentTransport.TripType.values:
+#
+#                 return CustomResponse.errorResponse(
+#                     description="Invalid trip type."
+#                 )
+#
+#         # =========================================================
+#         # EXISTING STUDENT TRANSPORT
+#         # =========================================================
+#
+#         # if StudentTransport.objects.filter(
+#         #     academic_year=academic_year,
+#         #     student=student,
+#         # ).exists():
+#         #
+#         #     application_logger.warning(
+#         #         "student_transport_create_failed",
+#         #         requested_by=str(request.user.id),
+#         #         school_id=str(school.id),
+#         #         student_id=str(student.id),
+#         #         academic_year_id=str(academic_year.id),
+#         #         reason="student_transport_already_exists",
+#         #     )
+#         #
+#         #     return CustomResponse.errorResponse(
+#         #         description=(
+#         #             "Transport is already assigned to this student."
+#         #         )
+#         #     )
+#
+#         # =========================================================
+#         # CREATE
+#         # =========================================================
+#
+#         try:
+#
+#             with transaction.atomic():
+#
+#                 student_transport = StudentTransport.objects.create(
+#                     school=school,
+#                     branch=branch,
+#                     academic_year=academic_year,
+#                     student=student,
+#                     vehicle_assignment=vehicle_assignment,
+#                     pickup_stop=pickup_stop,
+#                     drop_stop=drop_stop,
+#                     trip_type=request.data.get(
+#                         "trip_type",
+#                         StudentTransport.TripType.BOTH,
+#                     ),
+#                     transport_fee_rule=transport_fee_rule,
+#
+#                     status=request.data.get(
+#                         "status",
+#                         StudentTransport.Status.ACTIVE,
+#                     ),
+#                     remarks=request.data.get("remarks"),
+#                 )
+#
+#         except Exception as e:
+#
+#             application_logger.exception(
+#                 "student_transport_create_failed",
+#                 requested_by=str(request.user.id),
+#                 school_id=str(school.id),
+#                 student_id=str(student.id),
+#                 route_id=str(route.id),
+#                 transport_fee_rule_id=str(transport_fee_rule.id),
+#
+#                 reason="student_transport_creation_failed",
+#                 error=str(e),
+#             )
+#
+#             return CustomResponse.errorResponse(
+#                 description=str(e),
+#             )
+#
+#         # =========================================================
+#         # SUCCESS LOG
+#         # =========================================================
+#
+#         application_logger.info(
+#             "student_transport_created",
+#             requested_by=str(request.user.id),
+#             school_id=str(school.id),
+#             student_transport_id=str(student_transport.id),
+#             student_id=str(student.id),
+#             route_id=str(route.id),
+#             transport_fee_rule_id=str(transport_fee_rule.id),
+#             vehicle_assignment_id=str(vehicle_assignment.id),
+#         )
+#
+#         # =========================================================
+#         # RESPONSE
+#         # =========================================================
+#
+#         return CustomResponse.successResponse(
+#             description="Student transport assigned successfully.",
+#             data={
+#                 "id": str(student_transport.id),
+#
+#                 "student": {
+#                     "id": str(student.id),
+#                     "name": student.name,
+#                 },
+#
+#                 "vehicle": {
+#                     "id": str(vehicle_assignment.vehicle.id),
+#                     "vehicle_number": (
+#                         vehicle_assignment.vehicle.vehicle_number
+#                     ),
+#                 },
+#
+#                 "route": {
+#                     "id": str(route.id),
+#                     "route_name": route.route_name,
+#                 },
+#
+#                 "driver": {
+#                     "id": str(vehicle_assignment.driver.id),
+#                     "name": vehicle_assignment.driver.name,
+#                 },
+#
+#                 "pickup_stop": (
+#                     {
+#                         "id": str(pickup_stop.id),
+#                         "stop_name": pickup_stop.stop_name,
+#                     }
+#                     if pickup_stop
+#                     else None
+#                 ),
+#
+#                 "drop_stop": (
+#                     {
+#                         "id": str(drop_stop.id),
+#                         "stop_name": drop_stop.stop_name,
+#                     }
+#                     if drop_stop
+#                     else None
+#                 ),
+#
+#                 "trip_type": student_transport.trip_type,
+#                 "status": student_transport.status,
+#                 "transport_fee_rule": {
+#                     "id": str(transport_fee_rule.id),
+#                     "name": transport_fee_rule.name,
+#
+#                     "fee_type": {
+#                         "id": str(transport_fee_rule.fee_type.id),
+#                         "name": transport_fee_rule.fee_type.name,
+#                     },
+#
+#                     "billing_model": (
+#                         transport_fee_rule.billing_model
+#                     ),
+#
+#                     "billing_model_label": (
+#                         transport_fee_rule.get_billing_model_display()
+#                     ),
+#
+#                     "amount": str(transport_fee_rule.amount),
+#                 },
+#                 "remarks": student_transport.remarks,
+#             },
+#         )
+#
 
+
+class CreateStudentTransportAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "student.transport.create"
 
     def post(self, request):
-
         school = request.school
 
         academic_year_id = request.data.get("academic_year_id")
@@ -5274,7 +5742,6 @@ class CreateStudentTransportAPIView(APIView):
         # =========================================================
 
         if school is None:
-
             application_logger.warning(
                 "student_transport_create_failed",
                 requested_by=str(request.user.id),
@@ -5293,13 +5760,11 @@ class CreateStudentTransportAPIView(APIView):
             "academic_year_id",
             "student_id",
             "route_id",
-            "transport_fee_rule_id"
+            "transport_fee_rule_id",
         ]
 
         for field in required_fields:
-
             if request.data.get(field) in [None, ""]:
-
                 application_logger.warning(
                     "student_transport_create_failed",
                     requested_by=str(request.user.id),
@@ -5312,307 +5777,517 @@ class CreateStudentTransportAPIView(APIView):
                     description=f"{field} is required."
                 )
 
-        # =========================================================
-        # ACADEMIC YEAR
-        # =========================================================
-
-        academic_year = AcademicYear.objects.filter(
-            id=academic_year_id,
-            school=school,
-        ).first()
-
-        if academic_year is None:
-
-            return CustomResponse.errorResponse(
-                description="Academic year not found."
-            )
-
-        # =========================================================
-        # BRANCH
-        # =========================================================
-
-        branch = None
-
-        if branch_id:
-
-            branch = Branch.objects.filter(
-                id=branch_id,
-                school=school,
-            ).first()
-
-            if branch is None:
-
-                return CustomResponse.errorResponse(
-                    description="Branch not found."
-                )
-
-        # =========================================================
-        # STUDENT
-        # =========================================================
-
-        student = Student.objects.filter(
-            id=student_id,
-            school=school,
-        ).first()
-
-        if student is None:
-
-            return CustomResponse.errorResponse(
-                description="Student not found."
-            )
-
-        # =========================================================
-        # ROUTE
-        # =========================================================
-
-        route = (
-            Route.objects
-            .filter(
-                id=route_id,
-                school=school,
-            )
-            .first()
-        )
-
-        if route is None:
-
-            application_logger.warning(
-                "student_transport_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                route_id=route_id,
-                reason="route_not_found",
-            )
-
-            return CustomResponse.errorResponse(
-                description="Route not found."
-            )
-
-        # =========================================================
-        # TRANSPORT FEE RULE
-        # =========================================================
-
-        transport_fee_rule = (
-            TransportFeeRule.objects
-            .select_related(
-                "fee_type",
-                "route",
-                "stop",
-                "academic_year",
-            )
-            .filter(
-                id=transport_fee_rule_id,
-                school=school,
-                academic_year=academic_year,
-                route=route,
-                is_active=True,
-            )
-            .first()
-        )
-
-        if transport_fee_rule is None:
-
-            application_logger.warning(
-                "student_transport_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                student_id=str(student.id),
-                route_id=str(route.id),
-                transport_fee_rule_id=transport_fee_rule_id,
-                reason="transport_fee_rule_not_found",
-            )
-
-            return CustomResponse.errorResponse(
-                description=(
-                    "Transport fee rule not found for the selected "
-                    "academic year and route."
-                )
-            )
-
-        # =========================================================
-        # FEE TYPE VALIDATION
-        # =========================================================
-
-        if not transport_fee_rule.fee_type.is_transport:
-
-            return CustomResponse.errorResponse(
-                description=(
-                    "The selected transport fee rule is not linked "
-                    "to a transport fee type."
-                )
-            )
-
-
-        # =========================================================
-        # FIND VEHICLE ASSIGNMENT FOR ROUTE
-        # =========================================================
-
-        vehicle_assignment = (
-            VehicleAssignment.objects
-            .select_related(
-                "vehicle",
-                "driver",
-                "route",
-            )
-            .filter(
-                route=route,
-                school=school,
-                status=VehicleAssignment.Status.ACTIVE,
-            )
-            .first()
-        )
-
-        if vehicle_assignment is None:
-
-            application_logger.warning(
-                "student_transport_create_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                route_id=route_id,
-                reason="active_vehicle_assignment_not_found",
-            )
-
-            return CustomResponse.errorResponse(
-                description=(
-                    "No active vehicle assignment found for the selected route."
-                )
-            )
-
-        # =========================================================
-        # PICKUP STOP
-        # =========================================================
-
-        pickup_stop = None
-
-        if pickup_stop_id:
-
-            pickup_stop = Stop.objects.filter(
-                id=pickup_stop_id,
-                school=school,
-            ).first()
-
-            if pickup_stop is None:
-
-                return CustomResponse.errorResponse(
-                    description="Pickup stop not found."
-                )
-
-            if not RouteStop.objects.filter(
-                route=route,
-                stop=pickup_stop,
-            ).exists():
-
-                return CustomResponse.errorResponse(
-                    description=(
-                        "Pickup stop is not mapped to the selected route."
-                    )
-                )
-
-        # =========================================================
-        # DROP STOP
-        # =========================================================
-
-        drop_stop = None
-
-        if drop_stop_id:
-
-            drop_stop = Stop.objects.filter(
-                id=drop_stop_id,
-                school=school,
-            ).first()
-
-            if drop_stop is None:
-
-                return CustomResponse.errorResponse(
-                    description="Drop stop not found."
-                )
-
-            if not RouteStop.objects.filter(
-                route=route,
-                stop=drop_stop,
-            ).exists():
-
-                return CustomResponse.errorResponse(
-                    description=(
-                        "Drop stop is not mapped to the selected route."
-                    )
-                )
-
-        # =========================================================
-        # TRIP TYPE
-        # =========================================================
-
-        if trip_type:
-
-            if trip_type not in StudentTransport.TripType.values:
-
-                return CustomResponse.errorResponse(
-                    description="Invalid trip type."
-                )
-
-        # =========================================================
-        # EXISTING STUDENT TRANSPORT
-        # =========================================================
-
-        # if StudentTransport.objects.filter(
-        #     academic_year=academic_year,
-        #     student=student,
-        # ).exists():
-        #
-        #     application_logger.warning(
-        #         "student_transport_create_failed",
-        #         requested_by=str(request.user.id),
-        #         school_id=str(school.id),
-        #         student_id=str(student.id),
-        #         academic_year_id=str(academic_year.id),
-        #         reason="student_transport_already_exists",
-        #     )
-        #
-        #     return CustomResponse.errorResponse(
-        #         description=(
-        #             "Transport is already assigned to this student."
-        #         )
-        #     )
-
-        # =========================================================
-        # CREATE
-        # =========================================================
-
         try:
+            # =====================================================
+            # ACADEMIC YEAR
+            # =====================================================
+
+            academic_year = AcademicYear.objects.filter(
+                id=academic_year_id,
+                school=school,
+            ).first()
+
+            if academic_year is None:
+                return CustomResponse.errorResponse(
+                    description="Academic year not found."
+                )
+
+            # =====================================================
+            # BRANCH
+            # =====================================================
+
+            branch = None
+
+            if branch_id:
+                branch = Branch.objects.filter(
+                    id=branch_id,
+                    school=school,
+                ).first()
+
+                if branch is None:
+                    return CustomResponse.errorResponse(
+                        description="Branch not found."
+                    )
+
+            # =====================================================
+            # STUDENT
+            # =====================================================
+
+            student = Student.objects.filter(
+                id=student_id,
+                school=school,
+            ).first()
+
+            if student is None:
+                return CustomResponse.errorResponse(
+                    description="Student not found."
+                )
+
+            # =====================================================
+            # ROUTE
+            # =====================================================
+
+            route = (
+                Route.objects
+                .filter(
+                    id=route_id,
+                    school=school,
+                )
+                .first()
+            )
+
+            if route is None:
+                application_logger.warning(
+                    "student_transport_create_failed",
+                    requested_by=str(request.user.id),
+                    school_id=str(school.id),
+                    route_id=route_id,
+                    reason="route_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Route not found."
+                )
+
+            # =====================================================
+            # TRANSPORT FEE RULE
+            # =====================================================
+
+            transport_fee_rule = (
+                TransportFeeRule.objects
+                .select_related(
+                    "fee_type",
+                    "route",
+                    "stop",
+                    "academic_year",
+                )
+                .filter(
+                    id=transport_fee_rule_id,
+                    school=school,
+                    academic_year=academic_year,
+                    route=route,
+                    is_active=True,
+                )
+                .first()
+            )
+
+            if transport_fee_rule is None:
+                application_logger.warning(
+                    "student_transport_create_failed",
+                    requested_by=str(request.user.id),
+                    school_id=str(school.id),
+                    student_id=str(student.id),
+                    route_id=str(route.id),
+                    transport_fee_rule_id=transport_fee_rule_id,
+                    reason="transport_fee_rule_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Transport fee rule not found for the selected "
+                        "academic year and route."
+                    )
+                )
+
+            # =====================================================
+            # FEE TYPE VALIDATION
+            # =====================================================
+
+            if not transport_fee_rule.fee_type.is_transport:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "The selected transport fee rule is not linked "
+                        "to a transport fee type."
+                    )
+                )
+
+            # =====================================================
+            # FIND ACTIVE VEHICLE ASSIGNMENT
+            # =====================================================
+
+            vehicle_assignment = (
+                VehicleAssignment.objects
+                .select_related(
+                    "vehicle",
+                    "driver",
+                    "route",
+                )
+                .filter(
+                    route=route,
+                    school=school,
+                    status=VehicleAssignment.Status.ACTIVE,
+                )
+                .first()
+            )
+
+            if vehicle_assignment is None:
+                application_logger.warning(
+                    "student_transport_create_failed",
+                    requested_by=str(request.user.id),
+                    school_id=str(school.id),
+                    route_id=str(route.id),
+                    reason="active_vehicle_assignment_not_found",
+                )
+
+                return CustomResponse.errorResponse(
+                    description=(
+                        "No active vehicle assignment found "
+                        "for the selected route."
+                    )
+                )
+
+            # =====================================================
+            # PICKUP STOP
+            # =====================================================
+
+            pickup_stop = None
+
+            if pickup_stop_id:
+                pickup_stop = Stop.objects.filter(
+                    id=pickup_stop_id,
+                    school=school,
+                ).first()
+
+                if pickup_stop is None:
+                    return CustomResponse.errorResponse(
+                        description="Pickup stop not found."
+                    )
+
+                if not RouteStop.objects.filter(
+                    route=route,
+                    stop=pickup_stop,
+                ).exists():
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Pickup stop is not mapped to the selected route."
+                        )
+                    )
+
+            # =====================================================
+            # DROP STOP
+            # =====================================================
+
+            drop_stop = None
+
+            if drop_stop_id:
+                drop_stop = Stop.objects.filter(
+                    id=drop_stop_id,
+                    school=school,
+                ).first()
+
+                if drop_stop is None:
+                    return CustomResponse.errorResponse(
+                        description="Drop stop not found."
+                    )
+
+                if not RouteStop.objects.filter(
+                    route=route,
+                    stop=drop_stop,
+                ).exists():
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Drop stop is not mapped to the selected route."
+                        )
+                    )
+
+            # =====================================================
+            # TRANSPORT FEE RULE STOP VALIDATION
+            # =====================================================
+
+            if transport_fee_rule.stop_id:
+                selected_stop_ids = {
+                    stop.id
+                    for stop in [pickup_stop, drop_stop]
+                    if stop
+                }
+
+                if transport_fee_rule.stop_id not in selected_stop_ids:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "The selected transport fee rule is configured "
+                            "for a different stop."
+                        )
+                    )
+
+            # =====================================================
+            # TRIP TYPE
+            # =====================================================
+
+            if trip_type:
+                if trip_type not in StudentTransport.TripType.values:
+                    return CustomResponse.errorResponse(
+                        description="Invalid trip type."
+                    )
+
+            trip_type = (
+                trip_type
+                or StudentTransport.TripType.BOTH
+            )
+
+            # =====================================================
+            # STATUS
+            # =====================================================
+
+            status = request.data.get(
+                "status",
+                StudentTransport.Status.ACTIVE,
+            )
+
+            if status not in StudentTransport.Status.values:
+                return CustomResponse.errorResponse(
+                    description="Invalid transport status."
+                )
+
+            # =====================================================
+            # CREATE
+            # =====================================================
 
             with transaction.atomic():
 
-                student_transport = StudentTransport.objects.create(
-                    school=school,
-                    branch=branch,
-                    academic_year=academic_year,
-                    student=student,
-                    vehicle_assignment=vehicle_assignment,
-                    pickup_stop=pickup_stop,
-                    drop_stop=drop_stop,
-                    trip_type=request.data.get(
-                        "trip_type",
-                        StudentTransport.TripType.BOTH,
-                    ),
-                    transport_fee_rule=transport_fee_rule,
+                # -------------------------------------------------
+                # DUPLICATE STUDENT TRANSPORT CHECK
+                # -------------------------------------------------
 
-                    status=request.data.get(
-                        "status",
-                        StudentTransport.Status.ACTIVE,
-                    ),
-                    remarks=request.data.get("remarks"),
+                existing_transport = (
+                    StudentTransport.objects
+                    .select_for_update()
+                    .filter(
+                        school=school,
+                        academic_year=academic_year,
+                        student=student,
+                        status=StudentTransport.Status.ACTIVE,
+                    )
+                    .first()
                 )
 
-        except Exception as e:
+                if existing_transport:
+                    application_logger.warning(
+                        "student_transport_create_failed",
+                        requested_by=str(request.user.id),
+                        school_id=str(school.id),
+                        student_id=str(student.id),
+                        academic_year_id=str(academic_year.id),
+                        existing_transport_id=str(
+                            existing_transport.id
+                        ),
+                        reason="student_transport_already_exists",
+                    )
 
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Transport is already assigned to this "
+                            "student for the selected academic year."
+                        )
+                    )
+
+                # -------------------------------------------------
+                # DUPLICATE TRANSPORT FEE CHECK
+                # -------------------------------------------------
+
+                existing_transport_fee = (
+                    StudentFee.objects
+                    .select_for_update()
+                    .filter(
+                        school=school,
+                        student=student,
+                        fee_type=transport_fee_rule.fee_type,
+                        transport_fee_rule=transport_fee_rule,
+                    )
+                    .exclude(
+                        status=StudentFee.Status.WAIVED,
+                    )
+                    .first()
+                )
+
+                if existing_transport_fee:
+                    application_logger.warning(
+                        "student_transport_create_failed",
+                        requested_by=str(request.user.id),
+                        school_id=str(school.id),
+                        student_id=str(student.id),
+                        transport_fee_rule_id=str(
+                            transport_fee_rule.id
+                        ),
+                        existing_student_fee_id=str(
+                            existing_transport_fee.id
+                        ),
+                        reason="transport_fee_already_exists",
+                    )
+
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "Transport fee has already been created "
+                            "for this student."
+                        )
+                    )
+
+                # -------------------------------------------------
+                # CREATE STUDENT TRANSPORT
+                # -------------------------------------------------
+
+                student_transport = (
+                    StudentTransport.objects.create(
+                        school=school,
+                        branch=branch,
+                        academic_year=academic_year,
+                        student=student,
+                        vehicle_assignment=vehicle_assignment,
+                        pickup_stop=pickup_stop,
+                        drop_stop=drop_stop,
+                        trip_type=trip_type,
+                        transport_fee_rule=transport_fee_rule,
+                        status=status,
+                        remarks=request.data.get("remarks"),
+                    )
+                )
+
+                # -------------------------------------------------
+                # CREATE STUDENT FEE
+                # -------------------------------------------------
+
+                student_fee = StudentFee.objects.create(
+                    school=school,
+                    student=student,
+                    fee_type=transport_fee_rule.fee_type,
+                    transport_fee_rule=transport_fee_rule,
+                    total_amount=transport_fee_rule.amount,
+                    concession_amount=Decimal("0.00"),
+                    late_fee=Decimal("0.00"),
+                    paid_amount=Decimal("0.00"),
+                    status=StudentFee.Status.PENDING,
+                )
+
+                application_logger.info(
+                    "student_transport_and_fee_created",
+                    requested_by=str(request.user.id),
+                    school_id=str(school.id),
+                    student_transport_id=str(
+                        student_transport.id
+                    ),
+                    student_fee_id=str(student_fee.id),
+                    student_id=str(student.id),
+                    route_id=str(route.id),
+                    transport_fee_rule_id=str(
+                        transport_fee_rule.id
+                    ),
+                    amount=str(transport_fee_rule.amount),
+                )
+
+            # =====================================================
+            # SUCCESS RESPONSE
+            # =====================================================
+
+            return CustomResponse.successResponse(
+                description="Student transport assigned successfully.",
+                data={
+                    "id": str(student_transport.id),
+
+                    "student": {
+                        "id": str(student.id),
+                        "name": student.name,
+                    },
+
+                    "vehicle": {
+                        "id": str(vehicle_assignment.vehicle.id),
+                        "vehicle_number": (
+                            vehicle_assignment.vehicle.vehicle_number
+                        ),
+                    },
+
+                    "route": {
+                        "id": str(route.id),
+                        "route_name": route.route_name,
+                    },
+
+                    "driver": {
+                        "id": str(vehicle_assignment.driver.id),
+                        "name": vehicle_assignment.driver.name,
+                    },
+
+                    "pickup_stop": (
+                        {
+                            "id": str(pickup_stop.id),
+                            "stop_name": pickup_stop.stop_name,
+                        }
+                        if pickup_stop
+                        else None
+                    ),
+
+                    "drop_stop": (
+                        {
+                            "id": str(drop_stop.id),
+                            "stop_name": drop_stop.stop_name,
+                        }
+                        if drop_stop
+                        else None
+                    ),
+
+                    "trip_type": student_transport.trip_type,
+                    "status": student_transport.status,
+
+                    "transport_fee": {
+                        "student_fee_id": str(student_fee.id),
+                        "fee_type": {
+                            "id": str(
+                                transport_fee_rule.fee_type.id
+                            ),
+                            "name": (
+                                transport_fee_rule.fee_type.name
+                            ),
+                        },
+                        "total_amount": str(
+                            student_fee.total_amount
+                        ),
+                        "paid_amount": str(
+                            student_fee.paid_amount
+                        ),
+                        "outstanding_amount": str(
+                            student_fee.total_amount
+                            - student_fee.paid_amount
+                        ),
+                    },
+
+                    "transport_fee_rule": {
+                        "id": str(transport_fee_rule.id),
+                        "name": transport_fee_rule.name,
+
+                        "fee_type": {
+                            "id": str(
+                                transport_fee_rule.fee_type.id
+                            ),
+                            "name": (
+                                transport_fee_rule.fee_type.name
+                            ),
+                        },
+
+                        "billing_model": (
+                            transport_fee_rule.billing_model
+                        ),
+
+                        "billing_model_label": (
+                            transport_fee_rule
+                            .get_billing_model_display()
+                        ),
+
+                        "amount": str(
+                            transport_fee_rule.amount
+                        ),
+                    },
+
+                    "remarks": student_transport.remarks,
+                },
+            )
+
+        except Exception as e:
             application_logger.exception(
                 "student_transport_create_failed",
                 requested_by=str(request.user.id),
                 school_id=str(school.id),
-                student_id=str(student.id),
-                route_id=str(route.id),
-                transport_fee_rule_id=str(transport_fee_rule.id),
-
+                student_id=str(student_id),
+                route_id=str(route_id),
+                transport_fee_rule_id=str(
+                    transport_fee_rule_id
+                ),
                 reason="student_transport_creation_failed",
                 error=str(e),
             )
@@ -5620,97 +6295,6 @@ class CreateStudentTransportAPIView(APIView):
             return CustomResponse.errorResponse(
                 description=str(e),
             )
-
-        # =========================================================
-        # SUCCESS LOG
-        # =========================================================
-
-        application_logger.info(
-            "student_transport_created",
-            requested_by=str(request.user.id),
-            school_id=str(school.id),
-            student_transport_id=str(student_transport.id),
-            student_id=str(student.id),
-            route_id=str(route.id),
-            transport_fee_rule_id=str(transport_fee_rule.id),
-            vehicle_assignment_id=str(vehicle_assignment.id),
-        )
-
-        # =========================================================
-        # RESPONSE
-        # =========================================================
-
-        return CustomResponse.successResponse(
-            description="Student transport assigned successfully.",
-            data={
-                "id": str(student_transport.id),
-
-                "student": {
-                    "id": str(student.id),
-                    "name": student.name,
-                },
-
-                "vehicle": {
-                    "id": str(vehicle_assignment.vehicle.id),
-                    "vehicle_number": (
-                        vehicle_assignment.vehicle.vehicle_number
-                    ),
-                },
-
-                "route": {
-                    "id": str(route.id),
-                    "route_name": route.route_name,
-                },
-
-                "driver": {
-                    "id": str(vehicle_assignment.driver.id),
-                    "name": vehicle_assignment.driver.name,
-                },
-
-                "pickup_stop": (
-                    {
-                        "id": str(pickup_stop.id),
-                        "stop_name": pickup_stop.stop_name,
-                    }
-                    if pickup_stop
-                    else None
-                ),
-
-                "drop_stop": (
-                    {
-                        "id": str(drop_stop.id),
-                        "stop_name": drop_stop.stop_name,
-                    }
-                    if drop_stop
-                    else None
-                ),
-
-                "trip_type": student_transport.trip_type,
-                "status": student_transport.status,
-                "transport_fee_rule": {
-                    "id": str(transport_fee_rule.id),
-                    "name": transport_fee_rule.name,
-
-                    "fee_type": {
-                        "id": str(transport_fee_rule.fee_type.id),
-                        "name": transport_fee_rule.fee_type.name,
-                    },
-
-                    "billing_model": (
-                        transport_fee_rule.billing_model
-                    ),
-
-                    "billing_model_label": (
-                        transport_fee_rule.get_billing_model_display()
-                    ),
-
-                    "amount": str(transport_fee_rule.amount),
-                },
-                "remarks": student_transport.remarks,
-            },
-        )
-
-
 
 
 class StudentTransportListAPIView(APIView):

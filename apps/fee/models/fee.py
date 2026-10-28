@@ -267,6 +267,13 @@ class StudentFee(AuditModel):
         on_delete=models.PROTECT,
         related_name="student_fees",
     )
+    transport_fee_rule = models.ForeignKey(
+        "transport.TransportFeeRule",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="student_fees",
+    )
 
     concession = models.ForeignKey(
         "FeeConcession",
