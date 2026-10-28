@@ -485,7 +485,7 @@ class TimetableAPIView(APIView):
                         status=(
                             TimetableSubstitution
                             .Status
-                            .SCHEDULED
+                            .COMPLETED
                         ),
                     )
                     .select_related(
