@@ -9633,7 +9633,6 @@ class CreateTransportFeeRuleAPIView(APIView):
             route = Route.objects.filter(
                 id=route_id,
                 school=school,
-                is_active=True,
             ).first()
 
             if route is None:
@@ -9650,7 +9649,6 @@ class CreateTransportFeeRuleAPIView(APIView):
                 stop = Stop.objects.filter(
                     id=stop_id,
                     school=school,
-                    is_active=True,
                 ).first()
 
                 if stop is None:
