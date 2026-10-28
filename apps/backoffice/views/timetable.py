@@ -4901,14 +4901,12 @@ class DownloadTimetableTemplateAPIView(APIView):
             },
         )
 
-
 class TeacherScheduleListAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "teacher_schedule.view"
 
     def get(self, request):
         try:
-
 
             school = request.school
 
@@ -4937,7 +4935,9 @@ class TeacherScheduleListAPIView(APIView):
             department = request.GET.get("department")
             status = request.GET.get("status")
 
-            academic_year_id = request.GET.get("academic_year_id")
+            academic_year_id = request.GET.get(
+                "academic_year_id"
+            )
             grade_id = request.GET.get("grade_id")
             section_id = request.GET.get("section_id")
             branch_id = request.GET.get("branch_id")
@@ -4948,6 +4948,7 @@ class TeacherScheduleListAPIView(APIView):
 
             teachers = Staff.objects.filter(
                 school=school,
+                staff_type=Staff.StaffType.TEACHER,
             )
 
             # ----------------------------------------------------------
@@ -4955,7 +4956,6 @@ class TeacherScheduleListAPIView(APIView):
             # ----------------------------------------------------------
 
             if search:
-
                 teachers = teachers.filter(
                     Q(name__icontains=search)
                     | Q(employee_id__icontains=search)
@@ -5014,8 +5014,50 @@ class TeacherScheduleListAPIView(APIView):
                 ] = section_id
 
             if branch_id:
-                entry_filters["timetable__branch_id"] = branch_id
+                entry_filters[
+                    "timetable__branch_id"
+                ] = branch_id
 
+            # ----------------------------------------------------------
+            # BRANCH FILTER ON TEACHERS
+            #
+            # A teacher should appear only if the teacher has a
+            # timetable entry matching the requested filters.
+            # ----------------------------------------------------------
+
+            teacher_entry_filter = {
+                "timetable_entries__status": (
+                    TimetableEntry.Status.ACTIVE
+                ),
+            }
+
+            if academic_year_id:
+                teacher_entry_filter[
+                    "timetable_entries__timetable__academic_year_id"
+                ] = academic_year_id
+
+            if grade_id:
+                teacher_entry_filter[
+                    "timetable_entries__grade_id"
+                ] = grade_id
+
+            if section_id:
+                teacher_entry_filter[
+                    "timetable_entries__section_id"
+                ] = section_id
+
+            if branch_id:
+                teacher_entry_filter[
+                    "timetable_entries__timetable__branch_id"
+                ] = branch_id
+
+            # ----------------------------------------------------------
+            # APPLY TEACHER TIMETABLE FILTER
+            # ----------------------------------------------------------
+
+            teachers = teachers.filter(
+                **teacher_entry_filter
+            ).distinct()
 
             # ----------------------------------------------------------
             # PREFETCH TEACHER ENTRIES
@@ -5080,8 +5122,6 @@ class TeacherScheduleListAPIView(APIView):
 
                 # ------------------------------------------------------
                 # CLASS COUNT
-                #
-                # Distinct timetable / section combinations
                 # ------------------------------------------------------
 
                 class_count = len({
@@ -5101,7 +5141,7 @@ class TeacherScheduleListAPIView(APIView):
                 for entry in entries:
 
                     subjects[entry.subject_id] = {
-                        "id": entry.subject_id,
+                        "id": str(entry.subject_id),
                         "name": entry.subject.name,
                     }
 
@@ -5112,15 +5152,26 @@ class TeacherScheduleListAPIView(APIView):
                 if not entries:
                     schedule_status = "UNASSIGNED"
 
-                elif (
-                    hasattr(teacher, "status")
-                    and teacher.status
-                    != Staff.Status.ACTIVE
-                ):
+                elif teacher.status != Staff.Status.ACTIVE:
                     schedule_status = "DEACTIVATED"
 
                 else:
                     schedule_status = "SYNCED"
+
+                # ------------------------------------------------------
+                # BRANCH
+                # ------------------------------------------------------
+
+                branch = None
+
+                if entries:
+                    timetable_branch = entries[0].timetable.branch
+
+                    if timetable_branch:
+                        branch = {
+                            "id": str(timetable_branch.id),
+                            "name": timetable_branch.name,
+                        }
 
                 # ------------------------------------------------------
                 # TEACHER RESPONSE
@@ -5128,7 +5179,7 @@ class TeacherScheduleListAPIView(APIView):
 
                 data.append({
                     "teacher": {
-                        "id": teacher.id,
+                        "id": str(teacher.id),
                         "employee_id": getattr(
                             teacher,
                             "employee_id",
@@ -5136,16 +5187,17 @@ class TeacherScheduleListAPIView(APIView):
                         ),
                         "name": teacher.name,
                     },
-                    "branch": (
+
+                    "branch": branch,
+
+                    "department": (
                         {
-                            "id": str(entries[0].timetable.branch.id),
-                            "name": entries[0].timetable.branch.name,
+                            "value": teacher.department,
+                            "name": teacher.get_department_display(),
                         }
-                        if entries and entries[0].timetable.branch
+                        if teacher.department
                         else None
                     ),
-
-                    "department": teacher.department if teacher.department else None,
 
                     "subjects": list(
                         subjects.values()
@@ -5162,9 +5214,18 @@ class TeacherScheduleListAPIView(APIView):
                     "status": teacher.status,
                 })
 
+            # ----------------------------------------------------------
+            # RESPONSE
+            # ----------------------------------------------------------
 
-            return CustomResponse.successResponse(total=len(data),data=data,description="teachers data fetched successfully" )
+            return CustomResponse.successResponse(
+                total=len(data),
+                data=data,
+                description="Teachers data fetched successfully.",
+            )
+
         except Exception as exc:
+
             application_logger.exception(
                 "teacher_schedule_exception",
                 extra={
