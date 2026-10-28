@@ -260,6 +260,8 @@ class StudentFee(AuditModel):
         "FeeTemplate",
         on_delete=models.PROTECT,
         related_name="student_fees",
+        null=True,
+        blank=True,
     )
 
     fee_type = models.ForeignKey(
