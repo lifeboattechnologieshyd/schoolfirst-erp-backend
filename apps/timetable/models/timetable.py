@@ -70,6 +70,7 @@ class TimetableTerm(AuditModel):
             models.UniqueConstraint(
                 fields=[
                     "school",
+                    # "branch",
                     "academic_year",
                     "name",
                 ],

@@ -264,64 +264,7 @@ class TimetableAPIView(APIView):
                     description="Student not found."
                 )
 
-            # ==========================================================
-            # PARENT OWNERSHIP VALIDATION
-            # ==========================================================
 
-            # parent_mobile = getattr(
-            #     request.user,
-            #     "mobile",
-            #     None,
-            # )
-
-            # if not parent_mobile:
-
-            #     return CustomResponse.errorResponse(
-            #         description=(
-            #             "Parent mobile number is not available."
-            #         )
-            #     )
-
-            # parent_mobile = str(
-            #     parent_mobile
-            # ).strip()
-
-            # student_parent_match = (
-            #     Student.objects
-            #     .filter(
-            #         id=student.id,
-            #     )
-            #     .filter(
-            #         Q(father_mobile=parent_mobile)
-            #         | Q(mother_mobile=parent_mobile)
-            #         | Q(guardian_mobile=parent_mobile)
-            #     )
-            #     .exists()
-            # )
-
-            # if not student_parent_match:
-
-            #     application_logger.warning(
-            #         "student_timetable_unauthorized",
-            #         extra={
-            #             "requested_by": str(
-            #                 request.user.id
-            #             ),
-            #             "student_id": str(
-            #                 student.id
-            #             ),
-            #             "reason": (
-            #                 "student_not_linked_to_parent"
-            #             ),
-            #         },
-            #     )
-
-            #     return CustomResponse.errorResponse(
-            #         description=(
-            #             "You are not authorized to view "
-            #             "this student's timetable."
-            #         )
-            #     )
 
             # ==========================================================
             # TERM VALIDATION

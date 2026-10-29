@@ -2,6 +2,7 @@ import uuid
 
 from django.db import models
 
+from apps.calendar.models import AcademicCalendar
 from apps.school.models import School
 from apps.school.models.school import Branch, AcademicYear, Grade, Section, Student, Staff
 from shared.managers import SoftDeleteManager
@@ -40,6 +41,13 @@ class CalendarEvent(AuditModel):
         School,
         on_delete=models.CASCADE,
         related_name="calendar_events",
+    )
+    calendar = models.ForeignKey(
+        AcademicCalendar,
+        on_delete=models.CASCADE,
+        related_name="events",
+        null=True,
+        blank=True,
     )
 
     title = models.CharField(
@@ -109,26 +117,40 @@ class CalendarEvent(AuditModel):
         ]
 
         indexes = [
-
             models.Index(
                 fields=[
                     "school",
                     "event_date",
-                ]
+                ],
+                name="calendar_event_school_date_idx",
             ),
-
+            models.Index(
+                fields=[
+                    "calendar",
+                    "event_date",
+                ],
+                name="calendar_event_date_idx",
+            ),
+            models.Index(
+                fields=[
+                    "calendar",
+                    "event_type",
+                    "event_date",
+                ],
+                name="calendar_event_type_date_idx",
+            ),
             models.Index(
                 fields=[
                     "event_type",
-                ]
+                ],
+                name="calendar_event_type_idx",
             ),
-
             models.Index(
                 fields=[
                     "status",
-                ]
+                ],
+                name="calendar_event_status_idx",
             ),
-
         ]
 
     def __str__(self):

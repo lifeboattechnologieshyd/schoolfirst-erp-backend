@@ -10,6 +10,10 @@ from apps.backoffice.views.attendance import StaffAttendanceListAPIView, BulkMar
 from apps.backoffice.views.bulletin import BulletinCategoryListAPIView, BulletinCategoryCreateAPIView, \
     BulletinCategoryDeleteAPIView, BulletinCategoryUpdateAPIView, BulletinListAPIView, BulletinCreateAPIView, \
     BulletinUpdateAPIView, BulletinDeleteAPIView
+from apps.backoffice.views.calendar import AcademicCalendarWeekendRuleCreateAPIView, \
+    AcademicCalendarWeekendRuleLISTAPIView, AcademicCalendarWeekendRuleUpdateAPIView, \
+    AcademicCalendarWeekendRuleDeleteAPIView, AcademicCalendarAPIView, AcademicCalendarLISTAPIView, \
+    AcademicCalendarUpdateAPIView
 from apps.backoffice.views.contactus import AdminSupportTicketsAPIView, AdminSupportTicketDetailAPIView, \
     AdminReplySupportTicketAPIView, AdminUpdateSupportTicketStatusAPIView
 from apps.backoffice.views.events import CreateCalendarEventAPIView, CalendarEventListAPIView, \
@@ -693,6 +697,22 @@ urlpatterns = [
     path("bulletin/<uuid:bulletin_id>",BulletinUpdateAPIView.as_view(),),
 
     path("bulletin/<uuid:bulletin_id>/delete",BulletinDeleteAPIView.as_view(),),
+
+    path("calendar/create",AcademicCalendarAPIView.as_view()),
+
+    path("calendar",AcademicCalendarLISTAPIView.as_view(),),
+
+    path("calendar/<uuid:calendar_id>",AcademicCalendarUpdateAPIView.as_view(),),
+
+    path("calendar-weekend-rule/create",AcademicCalendarWeekendRuleCreateAPIView.as_view(),),
+
+    path("calendar-weekend-rule",AcademicCalendarWeekendRuleLISTAPIView.as_view(),),
+
+    path("calendar-weekend-rule/<uuid:rule_id>",AcademicCalendarWeekendRuleUpdateAPIView.as_view(),),
+
+    path("calendar-weekend-rule/<uuid:rule_id>/delete/",AcademicCalendarWeekendRuleDeleteAPIView.as_view(),),
+
+
 
 
 
