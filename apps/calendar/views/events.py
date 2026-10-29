@@ -2,12 +2,13 @@ from django.db.models import Prefetch, Q
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.calendar.models import CalendarEventTarget, CalendarEvent
-from shared.mixins import CustomResponse
+from apps.calendar.models import CalendarEventTarget, CalendarEvent, AcademicCalendar
+from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
 
-class AcademicCalendarDetailAPIView(APIView):
+
+class AcademicCalendarListAPIView(APIView):
 
     permission_classes = [
         IsAuthenticated,
@@ -21,25 +22,16 @@ class AcademicCalendarDetailAPIView(APIView):
         school = request.school
 
         application_logger.info(
-            "academic_calendar_detail_started",
+            "academic_calendar_list_started",
             user_id=str(request.user.id),
             school_id=str(school.id),
         )
 
-        calendar_id = request.query_params.get(
-            "calendar_id"
-        )
-
-        if not calendar_id:
-            return CustomResponse.errorResponse(
-                description="calendar_id is required.",
-            )
-
         # ----------------------------------------------------
-        # Get calendar
+        # Get calendars
         # ----------------------------------------------------
 
-        calendar = (
+        calendars = (
             AcademicCalendar.objects
             .select_related(
                 "school",
@@ -51,87 +43,85 @@ class AcademicCalendarDetailAPIView(APIView):
                 "weekend_rules",
             )
             .filter(
-                id=calendar_id,
                 school=school,
             )
-            .first()
+            .order_by(
+                "-academic_year",
+                "term__start_date",
+            )
         )
 
-        if not calendar:
-
-            application_logger.warning(
-                "academic_calendar_detail_failed",
-                user_id=str(request.user.id),
-                school_id=str(school.id),
-                calendar_id=str(calendar_id),
-                reason="calendar_not_found",
-            )
-
-            return CustomResponse.errorResponse(
-                description="Calendar not found.",
-            )
-
         # ----------------------------------------------------
-        # Weekend rules
+        # Pagination
         # ----------------------------------------------------
 
-        weekend_rules = []
+        paginator = CustomPageNumberPagination()
 
-        for rule in calendar.weekend_rules.all():
+        calendars = paginator.paginate_queryset(
+            calendars,
+            request,
+        )
 
-            weekend_rules.append({
-                "id": str(rule.id),
-                "day_of_week": rule.day_of_week,
-                "rule_type": rule.rule_type,
-                "week_numbers": rule.week_numbers or [],
+        # ----------------------------------------------------
+        # Response data
+        # ----------------------------------------------------
+
+        data = []
+
+        for calendar in calendars:
+
+            weekend_rules = []
+
+            for rule in calendar.weekend_rules.all():
+
+                weekend_rules.append({
+                    "id": str(rule.id),
+                    "day_of_week": rule.day_of_week,
+                    "rule_type": rule.rule_type,
+                    "week_numbers": rule.week_numbers or [],
+                })
+
+            data.append({
+                "id": str(calendar.id),
+                "name": calendar.name,
+                "status": calendar.status,
+
+                "school": {
+                    "id": str(calendar.school.id),
+                    "name": calendar.school.name,
+                } if calendar.school else None,
+
+                "branch": {
+                    "id": str(calendar.branch.id),
+                    "name": calendar.branch.name,
+                } if calendar.branch else None,
+
+                "academic_year": {
+                    "id": str(calendar.academic_year.id),
+                    "name": calendar.academic_year.name,
+                } if calendar.academic_year else None,
+
+                "term": {
+                    "id": str(calendar.term.id),
+                    "name": calendar.term.name,
+                    "start_date": calendar.term.start_date,
+                    "end_date": calendar.term.end_date,
+                } if calendar.term else None,
+
+                "weekend_rules": weekend_rules,
             })
 
-        # ----------------------------------------------------
-        # Response
-        # ----------------------------------------------------
-
-        data = {
-            "id": str(calendar.id),
-            "name": calendar.name,
-            "status": calendar.status,
-
-            "school": {
-                "id": str(calendar.school.id),
-                "name": calendar.school.name,
-            } if calendar.school else None,
-
-            "branch": {
-                "id": str(calendar.branch.id),
-                "name": calendar.branch.name,
-            } if calendar.branch else None,
-
-            "academic_year": {
-                "id": str(calendar.academic_year.id),
-                "name": calendar.academic_year.name,
-            } if calendar.academic_year else None,
-
-            "term": {
-                "id": str(calendar.term.id),
-                "name": calendar.term.name,
-                "start_date": calendar.term.start_date,
-                "end_date": calendar.term.end_date,
-            } if calendar.term else None,
-
-            "weekend_rules": weekend_rules,
-        }
-
         application_logger.info(
-            "academic_calendar_detail_fetched",
+            "academic_calendar_list_fetched",
             user_id=str(request.user.id),
             school_id=str(school.id),
-            calendar_id=str(calendar.id),
+            total_count=len(data),
         )
 
         return CustomResponse.successResponse(
-            description="Academic calendar fetched successfully.",
+            description="Academic calendars fetched successfully.",
             data=data,
         )
-
 
 class CalendarEventListAPIView(APIView):
 
