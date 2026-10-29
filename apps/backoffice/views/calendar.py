@@ -210,6 +210,7 @@ class AcademicCalendarUpdateAPIView(APIView):
 
     def put(self, request, calendar_id):
         try:
+            school = request.school
             try:
                 calendar_id = uuid.UUID(str(calendar_id))
             except ValueError:
@@ -219,7 +220,7 @@ class AcademicCalendarUpdateAPIView(APIView):
 
             calendar = AcademicCalendar.objects.filter(
                 id=calendar_id,
-                school=request.user.school,
+                school=school,
             ).first()
 
             if not calendar:
@@ -257,6 +258,7 @@ class AcademicCalendarWeekendRuleCreateAPIView(APIView):
 
     def post(self, request):
         try:
+            school = request.school
             calendar_id = request.data.get("calendar_id")
             day_of_week = request.data.get("day_of_week")
             rule_type = request.data.get("rule_type")
@@ -286,7 +288,7 @@ class AcademicCalendarWeekendRuleCreateAPIView(APIView):
 
             calendar = AcademicCalendar.objects.filter(
                 id=calendar_id,
-                school=request.user.school,
+                school=school,
             ).first()
 
             if not calendar:
@@ -382,6 +384,7 @@ class AcademicCalendarWeekendRuleLISTAPIView(APIView):
 
     def get(self, request):
         try:
+            school = request.school
             calendar_id = request.GET.get("calendar_id")
 
             if not calendar_id:
@@ -398,7 +401,7 @@ class AcademicCalendarWeekendRuleLISTAPIView(APIView):
 
             calendar = AcademicCalendar.objects.filter(
                 id=calendar_id,
-                school=request.user.school,
+                school=school,
             ).first()
 
             if not calendar:
@@ -444,6 +447,7 @@ class AcademicCalendarWeekendRuleUpdateAPIView(APIView):
 
     def put(self, request, rule_id):
         try:
+            school = request.school
             rule_type = request.data.get("rule_type")
             week_numbers = request.data.get("week_numbers", [])
 
@@ -464,7 +468,7 @@ class AcademicCalendarWeekendRuleUpdateAPIView(APIView):
                 .select_related("calendar")
                 .filter(
                     id=rule_id,
-                    calendar__school=request.user.school,
+                    calendar__school=school,
                 )
                 .first()
             )
@@ -553,6 +557,7 @@ class AcademicCalendarWeekendRuleDeleteAPIView(APIView):
 
     def delete(self, request,rule_id):
         try:
+            school = request.school
 
             if not rule_id:
                 return CustomResponse.errorResponse(
@@ -571,7 +576,7 @@ class AcademicCalendarWeekendRuleDeleteAPIView(APIView):
                 .select_related("calendar")
                 .filter(
                     id=rule_id,
-                    calendar__school=request.user.school,
+                    calendar__school=school,
                 )
                 .first()
             )
