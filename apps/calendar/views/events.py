@@ -3,6 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.calendar.models import CalendarEventTarget, CalendarEvent, AcademicCalendar
+from apps.school.models.school import Student
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
@@ -134,36 +135,86 @@ class CalendarEventListAPIView(APIView):
 
     def get(self, request):
 
-
         school = request.school
 
         application_logger.info(
-            "calendar_event_list_started",
+            "student_calendar_event_list_started",
             user_id=str(request.user.id),
             school_id=str(school.id),
         )
 
-        events = CalendarEvent.objects.filter(
-            school=school,
+        # ----------------------------------------------------
+        # Student
+        # ----------------------------------------------------
+
+        student_id = request.query_params.get(
+            "student_id"
         )
+
+        if not student_id:
+            return CustomResponse.errorResponse(
+                description="student_id is required.",
+            )
+
+        student = (
+            Student.objects
+            .select_related(
+                "academic_year",
+                "branch",
+                "grade",
+                "section",
+            )
+            .filter(
+                id=student_id,
+                school=school,
+            )
+            .first()
+        )
+
+        if not student:
+            return CustomResponse.errorResponse(
+                description="Student not found.",
+            )
+
+        # ----------------------------------------------------
+        # Query parameters
+        # ----------------------------------------------------
 
         calendar_id = request.query_params.get(
             "calendar_id"
         )
 
-        event_type = request.query_params.get("event_type")
-        status = request.query_params.get("status")
-        event_date = request.query_params.get("event_date")
-        from_date = request.query_params.get("from_date")
-        to_date = request.query_params.get("to_date")
-        target_type = request.query_params.get("target_type")
-        academic_year_id = request.query_params.get("academic_year_id")
-        branch_id = request.query_params.get("branch_id")
-        grade_id = request.query_params.get("grade_id")
-        section_id = request.query_params.get("section_id")
-        student_id = request.query_params.get("student_id")
-        staff_id = request.query_params.get("staff_id")
-        search = request.query_params.get("search")
+        event_type = request.query_params.get(
+            "event_type"
+        )
+
+        status = request.query_params.get(
+            "status"
+        )
+
+        event_date = request.query_params.get(
+            "event_date"
+        )
+
+        from_date = request.query_params.get(
+            "from_date"
+        )
+
+        to_date = request.query_params.get(
+            "to_date"
+        )
+
+        search = request.query_params.get(
+            "search"
+        )
+
+        # ----------------------------------------------------
+        # Base events
+        # ----------------------------------------------------
+
+        events = CalendarEvent.objects.filter(
+            school=school,
+        )
 
         # ----------------------------------------------------
         # Calendar
@@ -184,6 +235,50 @@ class CalendarEventListAPIView(APIView):
             events = events.filter(
                 calendar=calendar,
             )
+
+        # ----------------------------------------------------
+        # Student applicable targets
+        # ----------------------------------------------------
+
+        events = events.filter(
+            Q(
+                targets__target_type=CalendarEventTarget.TargetType.SCHOOL,
+            )
+            |
+            Q(
+                targets__target_type=CalendarEventTarget.TargetType.BRANCH,
+                targets__branch=student.branch,
+            )
+            |
+            Q(
+                targets__target_type=CalendarEventTarget.TargetType.GRADE,
+                targets__grade=student.grade,
+            )
+            |
+            Q(
+                targets__target_type=CalendarEventTarget.TargetType.SECTION,
+                targets__section=student.section,
+            )
+            |
+            Q(
+                targets__target_type=CalendarEventTarget.TargetType.STUDENT,
+                targets__student=student,
+            )
+        )
+
+        # ----------------------------------------------------
+        # Academic year
+        # ----------------------------------------------------
+
+        events = events.filter(
+            Q(
+                targets__academic_year__isnull=True,
+            )
+            |
+            Q(
+                targets__academic_year=student.academic_year,
+            )
+        )
 
         # ----------------------------------------------------
         # Filters
@@ -214,45 +309,11 @@ class CalendarEventListAPIView(APIView):
                 event_date__lte=to_date,
             )
 
-        if target_type:
-            events = events.filter(
-                targets__target_type=target_type,
-            )
-
-        if academic_year_id:
-            events = events.filter(
-                targets__academic_year_id=academic_year_id,
-            )
-
-        if branch_id:
-            events = events.filter(
-                targets__branch_id=branch_id,
-            )
-
-        if grade_id:
-            events = events.filter(
-                targets__grade_id=grade_id,
-            )
-
-        if section_id:
-            events = events.filter(
-                targets__section_id=section_id,
-            )
-
-        if student_id:
-            events = events.filter(
-                targets__student_id=student_id,
-            )
-
-        if staff_id:
-            events = events.filter(
-                targets__staff_id=staff_id,
-            )
-
         if search:
             events = events.filter(
                 Q(title__icontains=search)
-                | Q(description__icontains=search)
+                |
+                Q(description__icontains=search)
             )
 
         # ----------------------------------------------------
@@ -273,7 +334,7 @@ class CalendarEventListAPIView(APIView):
                         "student",
                         "staff",
                     ),
-                )
+                ),
             )
             .order_by(
                 "event_date",
@@ -293,51 +354,12 @@ class CalendarEventListAPIView(APIView):
         )
 
         # ----------------------------------------------------
-        # Response data
+        # Response
         # ----------------------------------------------------
 
         data = []
 
         for event in events:
-
-            targets = []
-
-            for target in event.targets.all():
-
-                targets.append({
-                    "id": str(target.id),
-                    "target_type": target.target_type,
-
-                    "academic_year": {
-                        "id": str(target.academic_year.id),
-                        "name": target.academic_year.name,
-                    } if target.academic_year else None,
-
-                    "branch": {
-                        "id": str(target.branch.id),
-                        "name": target.branch.name,
-                    } if target.branch else None,
-
-                    "grade": {
-                        "id": str(target.grade.id),
-                        "name": target.grade.name,
-                    } if target.grade else None,
-
-                    "section": {
-                        "id": str(target.section.id),
-                        "name": target.section.name,
-                    } if target.section else None,
-
-                    "student": {
-                        "id": str(target.student.id),
-                        "name": target.student.name,
-                    } if target.student else None,
-
-                    "staff": {
-                        "id": str(target.staff.id),
-                        "name": target.staff.name,
-                    } if target.staff else None,
-                })
 
             data.append({
                 "id": str(event.id),
@@ -355,13 +377,13 @@ class CalendarEventListAPIView(APIView):
                     if event.reference_id
                     else None
                 ),
-                "targets": targets,
             })
 
         application_logger.info(
-            "calendar_event_list_fetched",
+            "student_calendar_event_list_fetched",
             user_id=str(request.user.id),
             school_id=str(school.id),
+            student_id=str(student.id),
             total_count=len(data),
         )
 
