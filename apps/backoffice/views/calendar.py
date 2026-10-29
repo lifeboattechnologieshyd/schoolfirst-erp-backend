@@ -113,7 +113,7 @@ class AcademicCalendarAPIView(APIView):
 
     def post(self, request):
         try:
-            school = request.user.school
+            school = request.school
 
             term_id = request.data.get("term_id")
             branch_id = request.data.get("branch_id")
