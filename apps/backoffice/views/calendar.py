@@ -18,7 +18,7 @@ class AcademicCalendarLISTAPIView(APIView):
 
     def get(self, request):
         try:
-            school = request.user.school
+            school = request.school
 
             branch_id = request.GET.get("branch_id")
             academic_year_id = request.GET.get("academic_year_id")
