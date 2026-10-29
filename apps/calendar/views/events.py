@@ -134,6 +134,7 @@ class CalendarEventListAPIView(APIView):
 
     def get(self, request):
 
+
         school = request.school
 
         application_logger.info(
@@ -284,7 +285,7 @@ class CalendarEventListAPIView(APIView):
         # Pagination
         # ----------------------------------------------------
 
-        paginator = CustomPagination()
+        paginator = CustomPageNumberPagination()
 
         events = paginator.paginate_queryset(
             events,
