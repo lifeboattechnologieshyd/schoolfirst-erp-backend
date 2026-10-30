@@ -1079,42 +1079,41 @@ class UpdateFeeTemplateItemAPIView(APIView):
 
     required_permission = "fee_template_item.update"
 
-    def put(
-        self,
-        request,
-        fee_template_item_id,
-    ):
+    def put(self,request,fee_template_item_id,):
+        try:
 
-        school = request.school
+            school = request.school
 
-        item = FeeTemplateItem.objects.select_related(
-            "fee_template",
-        ).filter(
-            id=fee_template_item_id,
-            fee_template__school=school,
-        ).first()
+            item = FeeTemplateItem.objects.select_related(
+                "fee_template",
+            ).filter(
+                id=fee_template_item_id,
+                fee_template__school=school,
+            ).first()
 
-        if item is None:
+            if item is None:
 
-            return CustomResponse.errorResponse(
-                description="Fee template item not found.",
+                return CustomResponse.errorResponse(
+                    description="Fee template item not found.",
+                )
+
+            item.amount = request.data.get(
+                "amount",
+                item.amount,
             )
 
-        item.amount = request.data.get(
-            "amount",
-            item.amount,
-        )
+            item.is_mandatory = request.data.get(
+                "is_mandatory",
+                item.is_mandatory,
+            )
 
-        item.is_mandatory = request.data.get(
-            "is_mandatory",
-            item.is_mandatory,
-        )
+            item.save()
 
-        item.save()
-
-        return CustomResponse.successResponse(
-            description="Fee template item updated successfully.",
-        )
+            return CustomResponse.successResponse(
+                description="Fee template item updated successfully.",
+            )
+        except Exception as e:
+            return CustomResponse.errorResponse(description="Fee template item update failed.")
 
 class DeleteFeeTemplateItemAPIView(APIView):
 
@@ -4182,7 +4181,7 @@ class StudentFeeListAPIView(APIView):
 
                             "fee_template": {
                                 "id": str(
-                                    fee.fee_template.id
+                                    fee.fee_template.id if fee.fee_template else None
                                 ),
                                 "name": (
                                     fee.fee_template.name
