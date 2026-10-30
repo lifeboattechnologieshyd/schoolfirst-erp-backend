@@ -2934,39 +2934,38 @@ class UpdateFeeInstallmentItemAPIView(APIView):
 
     required_permission = "fee_installment_item.update"
 
-    def put(
-        self,
-        request,
-        installment_item_id,
-    ):
+    def put(self,request,installment_item_id,):
+        try:
 
-        school = request.school
+            school = request.school
 
-        item = FeeInstallmentItem.objects.select_related(
-            "installment",
-            "installment__collection_plan",
-            "installment__collection_plan__fee_template",
-        ).filter(
-            id=installment_item_id,
-            installment__collection_plan__fee_template__school=school,
-        ).first()
+            item = FeeInstallmentItem.objects.select_related(
+                "installment",
+                "installment__collection_plan",
+                "installment__collection_plan__fee_template",
+            ).filter(
+                id=installment_item_id,
+                installment__collection_plan__fee_template__school=school,
+            ).first()
 
-        if item is None:
+            if item is None:
 
-            return CustomResponse.errorResponse(
-                description="Fee installment item not found.",
+                return CustomResponse.errorResponse(
+                    description="Fee installment item not found.",
+                )
+
+            item.amount = request.data.get(
+                "amount",
+                item.amount,
             )
 
-        item.amount = request.data.get(
-            "amount",
-            item.amount,
-        )
+            item.save()
 
-        item.save()
-
-        return CustomResponse.successResponse(
-            description="Fee installment item updated successfully.",
-        )
+            return CustomResponse.successResponse(
+                description="Fee installment item updated successfully.",
+            )
+        except Exception as e:
+            return CustomResponse.errorResponse(description="Fee installment item update failed.",)
 
 class CreateLateFeeRuleAPIView(APIView):
 

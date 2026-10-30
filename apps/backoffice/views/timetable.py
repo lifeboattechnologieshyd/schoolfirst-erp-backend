@@ -4052,9 +4052,7 @@ class BulkUploadTimetableAPIView(APIView):
                                     f"'{period_value}'."
                                 )
 
-                            period = periods.get(
-                                period_number
-                            )
+                            period = periods.get(period_number)
 
                             if not period:
 
@@ -4064,6 +4062,28 @@ class BulkUploadTimetableAPIView(APIView):
                                     f"not found in "
                                     f"Periods sheet."
                                 )
+                            # BREAK
+                            if period.is_break:
+                                entry, created = TimetableEntry.objects.update_or_create(
+                                    timetable=timetable,
+                                    section=section,
+                                    day_of_week=day_of_week,
+                                    period=period,
+                                    defaults={
+                                        "grade": grade,
+                                        "subject": None,
+                                        "teacher": None,
+                                        "notes": period.name,
+                                        "status": TimetableEntry.Status.ACTIVE,
+                                    },
+                                )
+
+                                if created:
+                                    success_count += 1
+                                else:
+                                    updated_count += 1
+
+                                continue
 
                             # ------------------------------------------
                             # SUBJECT
