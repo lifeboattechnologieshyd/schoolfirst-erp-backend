@@ -4070,6 +4070,8 @@ class StudentFeeListAPIView(APIView):
                 # Response
                 # -------------------------------------------------
 
+
+
                 data = []
 
                 for fee in page:
@@ -4079,6 +4081,7 @@ class StudentFeeListAPIView(APIView):
                     # ---------------------------------------------
 
                     concession_data = None
+                    fee.fee_template = None
 
                     if fee.concession:
 
@@ -4180,23 +4183,32 @@ class StudentFeeListAPIView(APIView):
                             # =============================
 
                             "fee_template": {
-                                "id": str(
-                                    fee.fee_template.id if fee.fee_template else None
-                                ),
-                                "name": (
-                                    fee.fee_template.name
-                                ),
-                                "academic_year_id": str(
-                                    fee.fee_template
-                                    .academic_year_id
-                                ),
-                                "grade_id": str(
-                                    fee.fee_template.grade_id
-                                ),
-                                "is_active": (
-                                    fee.fee_template.is_active
-                                ),
-                            },
+                                        "id": (
+                                            str(fee.fee_template.id)
+                                            if fee.fee_template
+                                            else None
+                                        ),
+                                        "name": (
+                                            fee.fee_template.name
+                                            if fee.fee_template
+                                            else None
+                                        ),
+                                        "academic_year_id": (
+                                            str(fee.fee_template.academic_year_id)
+                                            if fee.fee_template and fee.fee_template.academic_year_id
+                                            else None
+                                        ),
+                                        "grade_id": (
+                                            str(fee.fee_template.grade_id)
+                                            if fee.fee_template and fee.fee_template.grade_id
+                                            else None
+                                        ),
+                                        "is_active": (
+                                            fee.fee_template.is_active
+                                            if fee.fee_template
+                                            else None
+                                        ),
+                                    },
 
                             # =============================
                             # Fee Type
