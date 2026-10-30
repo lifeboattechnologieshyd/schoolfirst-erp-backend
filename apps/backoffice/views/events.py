@@ -24,177 +24,180 @@ class CreateCalendarEventAPIView(APIView):
 
     @transaction.atomic
     def post(self, request):
+        try:
 
-        user = request.user
-        school = request.school
+            user = request.user
+            school = request.school
 
-        application_logger.info(
-            "calendar_event_create_started",
-            user_id=str(user.id),
-            school_id=str(school.id),
-        )
-
-        title = request.data.get("title")
-        event_type = request.data.get("event_type")
-        event_date = request.data.get("event_date")
-        target_type = request.data.get("target_type")
-        calendar_id = request.data.get("calendar_id")
-
-        # ----------------------------------------------------
-        # Required fields
-        # ----------------------------------------------------
-
-        if not title:
-            return CustomResponse.errorResponse(
-                description="title is required."
+            application_logger.info(
+                "calendar_event_create_started",
+                user_id=str(user.id),
+                school_id=str(school.id),
             )
 
-        if not event_type:
-            return CustomResponse.errorResponse(
-                description="event_type is required."
-            )
+            title = request.data.get("title")
+            event_type = request.data.get("event_type")
+            event_date = request.data.get("event_date")
+            target_type = request.data.get("target_type")
+            calendar_id = request.data.get("calendar_id")
 
-        if event_type not in CalendarEvent.EventType.values:
-            return CustomResponse.errorResponse(
-                description="Invalid event type."
-            )
+            # ----------------------------------------------------
+            # Required fields
+            # ----------------------------------------------------
 
-        if not event_date:
-            return CustomResponse.errorResponse(
-                description="event_date is required."
-            )
-
-        if not calendar_id:
-            return CustomResponse.errorResponse(
-                description="calendar_id is required."
-            )
-
-        if target_type not in CalendarEventTarget.TargetType.values:
-            return CustomResponse.errorResponse(
-                description="Invalid target type."
-            )
-
-        # ----------------------------------------------------
-        # Parse event date
-        # ----------------------------------------------------
-
-        event_date = parse_event_date(event_date)
-
-        if event_date is None:
-            return CustomResponse.errorResponse(
-                description="Invalid event date. Use YYYY-MM-DD format."
-            )
-
-        # ----------------------------------------------------
-        # Get calendar
-        # ----------------------------------------------------
-
-        calendar = (
-            AcademicCalendar.objects
-            .select_related("term")
-            .filter(
-                id=calendar_id,
-                school=school,
-            )
-            .first()
-        )
-
-        if not calendar:
-            return CustomResponse.errorResponse(
-                description="Calendar not found."
-            )
-
-        # ----------------------------------------------------
-        # Validate event date
-        # ----------------------------------------------------
-
-        error = validate_event_date(
-            calendar=calendar,
-            event_date=event_date,
-            event_type=event_type,
-        )
-
-        if error:
-            return CustomResponse.errorResponse(
-                description=error
-            )
-
-        # ----------------------------------------------------
-        # Academic year
-        # ----------------------------------------------------
-
-        academic_year = None
-
-        academic_year_id = request.data.get(
-            "academic_year_id"
-        )
-
-        if academic_year_id:
-
-            academic_year = AcademicYear.objects.filter(
-                id=academic_year_id,
-                school=school,
-            ).first()
-
-            if academic_year is None:
+            if not title:
                 return CustomResponse.errorResponse(
-                    description="Academic year not found."
+                    description="title is required."
                 )
 
-        # ----------------------------------------------------
-        # Create event
-        # ----------------------------------------------------
+            if not event_type:
+                return CustomResponse.errorResponse(
+                    description="event_type is required."
+                )
 
-        event = CalendarEvent.objects.create(
-            school=school,
-            calendar=calendar,
-            title=title,
-            description=request.data.get("description"),
-            event_type=event_type,
-            event_date=event_date,
-            start_time=request.data.get("start_time"),
-            end_time=request.data.get("end_time"),
-            is_all_day=request.data.get(
-                "is_all_day",
-                False,
-            ),
-        )
+            if event_type not in CalendarEvent.EventType.values:
+                return CustomResponse.errorResponse(
+                    description="Invalid event type."
+                )
 
-        # ----------------------------------------------------
-        # Create targets
-        # ----------------------------------------------------
+            if not event_date:
+                return CustomResponse.errorResponse(
+                    description="event_date is required."
+                )
 
-        targets = build_event_targets(
-            event=event,
-            target_type=target_type,
-            school=school,
-            academic_year=academic_year,
-            data=request.data,
-        )
+            if not calendar_id:
+                return CustomResponse.errorResponse(
+                    description="calendar_id is required."
+                )
 
-        CalendarEventTarget.objects.bulk_create(
-            targets
-        )
+            if target_type not in CalendarEventTarget.TargetType.values:
+                return CustomResponse.errorResponse(
+                    description="Invalid target type."
+                )
 
-        # ----------------------------------------------------
-        # Audit log
-        # ----------------------------------------------------
+            # ----------------------------------------------------
+            # Parse event date
+            # ----------------------------------------------------
 
-        audit_logger.info(
-            "calendar_event_created",
-            user_id=str(user.id),
-            school_id=str(school.id),
-            event_id=str(event.id),
-            target_type=target_type,
-            target_count=len(targets),
-        )
+            event_date = parse_event_date(event_date)
 
-        return CustomResponse.successResponse(
-            description="Calendar event created successfully.",
-            data={
-                "id": str(event.id),
-            },
-        )
+            if event_date is None:
+                return CustomResponse.errorResponse(
+                    description="Invalid event date. Use YYYY-MM-DD format."
+                )
+
+            # ----------------------------------------------------
+            # Get calendar
+            # ----------------------------------------------------
+
+            calendar = (
+                AcademicCalendar.objects
+                .select_related("term")
+                .filter(
+                    id=calendar_id,
+                    school=school,
+                )
+                .first()
+            )
+
+            if not calendar:
+                return CustomResponse.errorResponse(
+                    description="Calendar not found."
+                )
+
+            # ----------------------------------------------------
+            # Validate event date
+            # ----------------------------------------------------
+
+            error = validate_event_date(
+                calendar=calendar,
+                event_date=event_date,
+                event_type=event_type,
+            )
+
+            if error:
+                return CustomResponse.errorResponse(
+                    description=error
+                )
+
+            # ----------------------------------------------------
+            # Academic year
+            # ----------------------------------------------------
+
+            academic_year = None
+
+            academic_year_id = request.data.get(
+                "academic_year_id"
+            )
+
+            if academic_year_id:
+
+                academic_year = AcademicYear.objects.filter(
+                    id=academic_year_id,
+                    school=school,
+                ).first()
+
+                if academic_year is None:
+                    return CustomResponse.errorResponse(
+                        description="Academic year not found."
+                    )
+
+            # ----------------------------------------------------
+            # Create event
+            # ----------------------------------------------------
+
+            event = CalendarEvent.objects.create(
+                school=school,
+                calendar=calendar,
+                title=title,
+                description=request.data.get("description"),
+                event_type=event_type,
+                event_date=event_date,
+                start_time=request.data.get("start_time"),
+                end_time=request.data.get("end_time"),
+                is_all_day=request.data.get(
+                    "is_all_day",
+                    False,
+                ),
+            )
+
+            # ----------------------------------------------------
+            # Create targets
+            # ----------------------------------------------------
+
+            targets = build_event_targets(
+                event=event,
+                target_type=target_type,
+                school=school,
+                academic_year=academic_year,
+                data=request.data,
+            )
+
+            CalendarEventTarget.objects.bulk_create(
+                targets
+            )
+
+            # ----------------------------------------------------
+            # Audit log
+            # ----------------------------------------------------
+
+            audit_logger.info(
+                "calendar_event_created",
+                user_id=str(user.id),
+                school_id=str(school.id),
+                event_id=str(event.id),
+                target_type=target_type,
+                target_count=len(targets),
+            )
+
+            return CustomResponse.successResponse(
+                description="Calendar event created successfully.",
+                data={
+                    "id": str(event.id),
+                },
+            )
+        except Exception as e:
+            return CustomResponse.errorResponse(description=str(e))
 
 class CalendarEventListAPIView(APIView):
 
