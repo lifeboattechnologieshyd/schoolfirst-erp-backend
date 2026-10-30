@@ -3882,418 +3882,418 @@ class StudentFeeAssignmentListAPIView(APIView):
 
 class StudentFeeListAPIView(APIView):
 
-    permission_classes = [
-        IsAuthenticated,
-        HasPermission,
-    ]
+    permission_classes = [IsAuthenticated,HasPermission,]
 
     required_permission = "student_fee.view"
 
     pagination_class = CustomPageNumberPagination
 
     def get(self, request):
+        try:
 
-        school = request.school
+            school = request.school
 
-        application_logger.info(
-            "student_fee_list_requested",
-            extra={
-                "school_id": str(school.id) if school else None,
-                "requested_by": str(request.user.id),
-            },
-        )
-
-        if not school:
-            application_logger.warning(
-                "student_fee_list_school_missing",
+            application_logger.info(
+                "student_fee_list_requested",
                 extra={
+                    "school_id": str(school.id) if school else None,
                     "requested_by": str(request.user.id),
                 },
             )
 
-            return CustomResponse.errorResponse(
-                description="School is required."
-            )
-
-        try:
-            # -------------------------------------------------
-            # Query Parameters
-            # -------------------------------------------------
-
-            student_id = request.query_params.get(
-                "student_id"
-            )
-
-            status = request.query_params.get(
-                "status"
-            )
-
-            grade_id = request.query_params.get(
-                "grade_id"
-            )
-
-            fee_template_id = request.query_params.get(
-                "fee_template_id"
-            )
-
-            fee_type_id = request.query_params.get(
-                "fee_type_id"
-            )
-
-            search = request.query_params.get(
-                "search",
-                "",
-            ).strip()
-
-            application_logger.info(
-                "Fetching student fees",
-                school_id=str(school.id) if school else None,
-                student_id=student_id,
-                status=status,
-                grade_id=grade_id,
-                fee_template_id=fee_template_id,
-                fee_type_id=fee_type_id,
-                search=search,
-            )
-
-            # -------------------------------------------------
-            # Base Query
-            # -------------------------------------------------
-
-            queryset = (
-                StudentFee.objects
-                .select_related(
-                    "student",
-                    "fee_template",
-                    "fee_template__academic_year",
-                    "fee_template__grade",
-                    "fee_type",
-                    "concession",
+            if not school:
+                application_logger.warning(
+                    "student_fee_list_school_missing",
+                    extra={
+                        "requested_by": str(request.user.id),
+                    },
                 )
-                .prefetch_related(
-                    "payments",
-                )
-                .filter(
-                    school=school,
-                )
-            )
 
-            # -------------------------------------------------
-            # Filters
-            # -------------------------------------------------
+                return CustomResponse.errorResponse(
+                    description="School is required."
+                )
 
-            if student_id:
-                queryset = queryset.filter(
+            try:
+                # -------------------------------------------------
+                # Query Parameters
+                # -------------------------------------------------
+
+                student_id = request.query_params.get(
+                    "student_id"
+                )
+
+                status = request.query_params.get(
+                    "status"
+                )
+
+                grade_id = request.query_params.get(
+                    "grade_id"
+                )
+
+                fee_template_id = request.query_params.get(
+                    "fee_template_id"
+                )
+
+                fee_type_id = request.query_params.get(
+                    "fee_type_id"
+                )
+
+                search = request.query_params.get(
+                    "search",
+                    "",
+                ).strip()
+
+                application_logger.info(
+                    "Fetching student fees",
+                    school_id=str(school.id) if school else None,
                     student_id=student_id,
+                    status=status,
+                    grade_id=grade_id,
+                    fee_template_id=fee_template_id,
+                    fee_type_id=fee_type_id,
+                    search=search,
                 )
 
-            if status:
-                valid_statuses = [
-                    choice[0]
-                    for choice in StudentFee.Status.choices
-                ]
+                # -------------------------------------------------
+                # Base Query
+                # -------------------------------------------------
 
-                if status not in valid_statuses:
-                    return CustomResponse.errorResponse(
-                        description=(
-                            f"Invalid status. "
-                            f"Allowed values: "
-                            f"{', '.join(valid_statuses)}."
+                queryset = (
+                    StudentFee.objects
+                    .select_related(
+                        "student",
+                        "fee_template",
+                        "fee_template__academic_year",
+                        "fee_template__grade",
+                        "fee_type",
+                        "concession",
+                    )
+                    .prefetch_related(
+                        "payments",
+                    )
+                    .filter(
+                        school=school,
+                    )
+                )
+
+                # -------------------------------------------------
+                # Filters
+                # -------------------------------------------------
+
+                if student_id:
+                    queryset = queryset.filter(
+                        student_id=student_id,
+                    )
+
+                if status:
+                    valid_statuses = [
+                        choice[0]
+                        for choice in StudentFee.Status.choices
+                    ]
+
+                    if status not in valid_statuses:
+                        return CustomResponse.errorResponse(
+                            description=(
+                                f"Invalid status. "
+                                f"Allowed values: "
+                                f"{', '.join(valid_statuses)}."
+                            )
+                        )
+
+                    queryset = queryset.filter(
+                        status=status,
+                    )
+
+                if grade_id:
+                    queryset = queryset.filter(
+                        fee_template__grade_id=grade_id,
+                    )
+
+                if fee_template_id:
+                    queryset = queryset.filter(
+                        fee_template_id=fee_template_id,
+                    )
+
+                if fee_type_id:
+                    queryset = queryset.filter(
+                        fee_type_id=fee_type_id,
+                    )
+
+                # -------------------------------------------------
+                # Search
+                # -------------------------------------------------
+
+                if search:
+                    queryset = queryset.filter(
+                        Q(
+                            student__name__icontains=search
+                        )
+                        |
+                        Q(
+                            student__admission_number__icontains=search
+                        )
+                        |
+                        Q(
+                            fee_type__name__icontains=search
+                        )
+                        |
+                        Q(
+                            fee_template__name__icontains=search
                         )
                     )
 
-                queryset = queryset.filter(
-                    status=status,
+                # -------------------------------------------------
+                # Ordering
+                # -------------------------------------------------
+
+                queryset = queryset.order_by(
+                    "due_date",
+                    "student__name",
                 )
 
-            if grade_id:
-                queryset = queryset.filter(
-                    fee_template__grade_id=grade_id,
+                # -------------------------------------------------
+                # Total
+                # -------------------------------------------------
+
+                total_count = queryset.count()
+
+                # -------------------------------------------------
+                # Pagination
+                # -------------------------------------------------
+
+                paginator = self.pagination_class()
+
+                page = paginator.paginate_queryset(
+                    queryset,
+                    request,
                 )
 
-            if fee_template_id:
-                queryset = queryset.filter(
-                    fee_template_id=fee_template_id,
-                )
+                # -------------------------------------------------
+                # Response
+                # -------------------------------------------------
 
-            if fee_type_id:
-                queryset = queryset.filter(
-                    fee_type_id=fee_type_id,
-                )
+                data = []
 
-            # -------------------------------------------------
-            # Search
-            # -------------------------------------------------
+                for fee in page:
 
-            if search:
-                queryset = queryset.filter(
-                    Q(
-                        student__name__icontains=search
+                    # ---------------------------------------------
+                    # Concession
+                    # ---------------------------------------------
+
+                    concession_data = None
+
+                    if fee.concession:
+
+                        concession_data = {
+                            "id": str(
+                                fee.concession.id
+                            ),
+                            "name": fee.concession.name,
+                            "type": (
+                                fee.concession.concession_type
+                            ),
+                            "value": fee.concession.value,
+                        }
+
+                    # ---------------------------------------------
+                    # Payments
+                    # ---------------------------------------------
+
+                    payments_data = []
+
+                    for payment in fee.payments.all():
+
+                        payments_data.append(
+                            {
+                                "id": str(payment.id),
+                                "receipt_number": (
+                                    payment.receipt_number
+                                ),
+                                "amount": payment.amount,
+                                "payment_mode": (
+                                    payment.payment_mode
+                                ),
+                                "payment_date": (
+                                    payment.payment_date
+                                ),
+                                "transaction_id": (
+                                    payment.transaction_id
+                                ),
+                                "gateway_name": (
+                                    payment.gateway_name
+                                ),
+                                "remarks": payment.remarks,
+                                "collected_by": (
+                                    str(
+                                        payment.collected_by_id
+                                    )
+                                    if payment.collected_by_id
+                                    else None
+                                ),
+                                "is_cancelled": (
+                                    payment.is_cancelled
+                                ),
+                            }
+                        )
+
+                    # ---------------------------------------------
+                    # Balance
+                    # ---------------------------------------------
+
+                    balance = (
+                        fee.total_amount
+                        - fee.concession_amount
+                        + fee.late_fee
+                        - fee.paid_amount
                     )
-                    |
-                    Q(
-                        student__admission_number__icontains=search
-                    )
-                    |
-                    Q(
-                        fee_type__name__icontains=search
-                    )
-                    |
-                    Q(
-                        fee_template__name__icontains=search
-                    )
-                )
 
-            # -------------------------------------------------
-            # Ordering
-            # -------------------------------------------------
+                    # ---------------------------------------------
+                    # Final Response
+                    # ---------------------------------------------
 
-            queryset = queryset.order_by(
-                "due_date",
-                "student__name",
-            )
-
-            # -------------------------------------------------
-            # Total
-            # -------------------------------------------------
-
-            total_count = queryset.count()
-
-            # -------------------------------------------------
-            # Pagination
-            # -------------------------------------------------
-
-            paginator = self.pagination_class()
-
-            page = paginator.paginate_queryset(
-                queryset,
-                request,
-            )
-
-            # -------------------------------------------------
-            # Response
-            # -------------------------------------------------
-
-            data = []
-
-            for fee in page:
-
-                # ---------------------------------------------
-                # Concession
-                # ---------------------------------------------
-
-                concession_data = None
-
-                if fee.concession:
-
-                    concession_data = {
-                        "id": str(
-                            fee.concession.id
-                        ),
-                        "name": fee.concession.name,
-                        "type": (
-                            fee.concession.concession_type
-                        ),
-                        "value": fee.concession.value,
-                    }
-
-                # ---------------------------------------------
-                # Payments
-                # ---------------------------------------------
-
-                payments_data = []
-
-                for payment in fee.payments.all():
-
-                    payments_data.append(
+                    data.append(
                         {
-                            "id": str(payment.id),
-                            "receipt_number": (
-                                payment.receipt_number
-                            ),
-                            "amount": payment.amount,
-                            "payment_mode": (
-                                payment.payment_mode
-                            ),
-                            "payment_date": (
-                                payment.payment_date
-                            ),
-                            "transaction_id": (
-                                payment.transaction_id
-                            ),
-                            "gateway_name": (
-                                payment.gateway_name
-                            ),
-                            "remarks": payment.remarks,
-                            "collected_by": (
-                                str(
-                                    payment.collected_by_id
-                                )
-                                if payment.collected_by_id
-                                else None
-                            ),
-                            "is_cancelled": (
-                                payment.is_cancelled
-                            ),
+                            # =============================
+                            # Student
+                            # =============================
+
+                            "student": {
+                                "id": str(
+                                    fee.student.id
+                                ),
+                                "name": fee.student.name,
+                                "admission_number": (
+                                    fee.student.admission_number
+                                ),
+                                "grade_name": (
+                                    fee.fee_template.grade.name
+                                    if fee.fee_template and fee.fee_template.grade
+                                    else None
+                                ),
+                                "section_name": (
+                                    fee.student.section.name
+                                    if fee.student.section
+                                    else None
+                                ),
+                            },
+
+                            # =============================
+                            # Fee Template
+                            # =============================
+
+                            "fee_template": {
+                                "id": str(
+                                    fee.fee_template.id
+                                ),
+                                "name": (
+                                    fee.fee_template.name
+                                ),
+                                "academic_year_id": str(
+                                    fee.fee_template
+                                    .academic_year_id
+                                ),
+                                "grade_id": str(
+                                    fee.fee_template.grade_id
+                                ),
+                                "is_active": (
+                                    fee.fee_template.is_active
+                                ),
+                            },
+
+                            # =============================
+                            # Fee Type
+                            # =============================
+
+                            "fee_type": {
+                                "id": str(
+                                    fee.fee_type.id
+                                ),
+                                "name": fee.fee_type.name,
+                                "is_optional": (
+                                    fee.fee_type.is_optional
+                                ),
+                                "note": fee.fee_type.note,
+                                "refund_type": (
+                                    fee.fee_type.refund_type
+                                ),
+                            },
+
+                            # =============================
+                            # Student Fee
+                            # =============================
+
+                            "student_fee": {
+                                "id": str(fee.id),
+                                "due_date": fee.due_date,
+                                "total_amount": (
+                                    fee.total_amount
+                                ),
+                                "concession_amount": (
+                                    fee.concession_amount
+                                ),
+                                "late_fee": fee.late_fee,
+                                "paid_amount": (
+                                    fee.paid_amount
+                                ),
+                                "balance": balance,
+                                "status": fee.status,
+                                "remarks": fee.remarks,
+                            },
+
+                            # =============================
+                            # Concession
+                            # =============================
+
+                            "concession": concession_data,
+
+                            # =============================
+                            # Payments
+                            # =============================
+
+                            "payments": payments_data,
                         }
                     )
 
-                # ---------------------------------------------
-                # Balance
-                # ---------------------------------------------
-
-                balance = (
-                    fee.total_amount
-                    - fee.concession_amount
-                    + fee.late_fee
-                    - fee.paid_amount
+                application_logger.info(
+                    "student_fee_list_completed",
+                    extra={
+                        "school_id": str(school.id),
+                        "requested_by": str(request.user.id),
+                        "total_count": total_count,
+                        "returned_count": len(data),
+                        "student_id": student_id,
+                        "status": status,
+                        "grade_id": grade_id,
+                        "fee_template_id": fee_template_id,
+                        "fee_type_id": fee_type_id,
+                        "search": search,
+                    },
                 )
 
-                # ---------------------------------------------
-                # Final Response
-                # ---------------------------------------------
-
-                data.append(
-                    {
-                        # =============================
-                        # Student
-                        # =============================
-
-                        "student": {
-                            "id": str(
-                                fee.student.id
-                            ),
-                            "name": fee.student.name,
-                            "admission_number": (
-                                fee.student.admission_number
-                            ),
-                            "grade_name": (
-                                fee.fee_template.grade.name
-                                if fee.fee_template and fee.fee_template.grade
-                                else None
-                            ),
-                            "section_name": (
-                                fee.student.section.name
-                                if fee.student.section
-                                else None
-                            ),
-                        },
-
-                        # =============================
-                        # Fee Template
-                        # =============================
-
-                        "fee_template": {
-                            "id": str(
-                                fee.fee_template.id
-                            ),
-                            "name": (
-                                fee.fee_template.name
-                            ),
-                            "academic_year_id": str(
-                                fee.fee_template
-                                .academic_year_id
-                            ),
-                            "grade_id": str(
-                                fee.fee_template.grade_id
-                            ),
-                            "is_active": (
-                                fee.fee_template.is_active
-                            ),
-                        },
-
-                        # =============================
-                        # Fee Type
-                        # =============================
-
-                        "fee_type": {
-                            "id": str(
-                                fee.fee_type.id
-                            ),
-                            "name": fee.fee_type.name,
-                            "is_optional": (
-                                fee.fee_type.is_optional
-                            ),
-                            "note": fee.fee_type.note,
-                            "refund_type": (
-                                fee.fee_type.refund_type
-                            ),
-                        },
-
-                        # =============================
-                        # Student Fee
-                        # =============================
-
-                        "student_fee": {
-                            "id": str(fee.id),
-                            "due_date": fee.due_date,
-                            "total_amount": (
-                                fee.total_amount
-                            ),
-                            "concession_amount": (
-                                fee.concession_amount
-                            ),
-                            "late_fee": fee.late_fee,
-                            "paid_amount": (
-                                fee.paid_amount
-                            ),
-                            "balance": balance,
-                            "status": fee.status,
-                            "remarks": fee.remarks,
-                        },
-
-                        # =============================
-                        # Concession
-                        # =============================
-
-                        "concession": concession_data,
-
-                        # =============================
-                        # Payments
-                        # =============================
-
-                        "payments": payments_data,
-                    }
+                return CustomResponse.successResponse(
+                    data=data,
+                    total=total_count,
+                    description=(
+                        "Student fees fetched successfully."
+                    ),
                 )
 
-            application_logger.info(
-                "student_fee_list_completed",
-                extra={
-                    "school_id": str(school.id),
-                    "requested_by": str(request.user.id),
-                    "total_count": total_count,
-                    "returned_count": len(data),
-                    "student_id": student_id,
-                    "status": status,
-                    "grade_id": grade_id,
-                    "fee_template_id": fee_template_id,
-                    "fee_type_id": fee_type_id,
-                    "search": search,
-                },
-            )
+            except Exception as e:
 
-            return CustomResponse.successResponse(
-                data=data,
-                total=total_count,
-                description=(
-                    "Student fees fetched successfully."
-                ),
-            )
+                application_logger.exception(
+                    "student_fee_list_failed",
+                    extra={
+                        "school_id": str(school.id),
+                        "requested_by": str(request.user.id),
+                        "error": str(e),
+                    },
+                )
 
+                return CustomResponse.errorResponse(
+                    description="Internal server error."
+                )
         except Exception as e:
-
-            application_logger.exception(
-                "student_fee_list_failed",
-                extra={
-                    "school_id": str(school.id),
-                    "requested_by": str(request.user.id),
-                    "error": str(e),
-                },
-            )
-
-            return CustomResponse.errorResponse(
-                description="Internal server error."
-            )
+            return CustomResponse.errorResponse(description="unable to fetch student fees.")
 
 
 
