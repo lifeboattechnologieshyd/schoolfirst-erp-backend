@@ -224,9 +224,7 @@ class FeeTypeListAPIView(APIView):
                 "is_active": obj.is_active,
             })
 
-        return paginator.get_paginated_response(
-            data,
-        )
+        return CustomResponse.successResponse(data=data,description="Fee type list updated successfully.",)
 
 
 class UpdateFeeTypeAPIView(APIView):
