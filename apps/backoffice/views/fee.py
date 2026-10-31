@@ -174,15 +174,29 @@ class FeeTypeListAPIView(APIView):
                 refund_type=refund_type,
             )
 
-        # if is_optional is not None:
-        #     queryset = queryset.filter(
-        #         is_optional=is_optional.lower() == "true",
-        #     )
-        #
-        # if is_active is not None:
-        #     queryset = queryset.filter(
-        #         is_active=is_active.lower() == "true",
-        #     )
+        if is_optional:
+            is_optional_value = is_optional.lower()
+
+            if is_optional_value not in ["true", "false"]:
+                return CustomResponse.errorResponse(
+                    description="is_optional must be true or false.",
+                )
+
+            queryset = queryset.filter(
+                is_optional=is_optional_value == "true",
+            )
+
+        if is_active:
+            is_active_value = is_active.lower()
+
+            if is_active_value not in ["true", "false"]:
+                return CustomResponse.errorResponse(
+                    description="is_active must be true or false.",
+                )
+
+            queryset = queryset.filter(
+                is_active=is_active_value == "true",
+            )
         application_logger.info(
             "fee_type_debug",
             extra={
