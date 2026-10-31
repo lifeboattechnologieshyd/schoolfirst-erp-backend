@@ -210,12 +210,12 @@ class FeeTypeListAPIView(APIView):
             },
         )
 
-        paginator = CustomPageNumberPagination()
-
-        queryset = paginator.paginate_queryset(
-            queryset.order_by("name"),
-            request,
-        )
+        # paginator = CustomPageNumberPagination()
+        #
+        # queryset = paginator.paginate_queryset(
+        #     queryset.order_by("name"),
+        #     request,
+        # )
 
         data = []
 
