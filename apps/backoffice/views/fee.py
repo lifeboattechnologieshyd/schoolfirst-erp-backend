@@ -120,10 +120,7 @@ class CreateFeeTypeAPIView(APIView):
 
 class FeeTypeListAPIView(APIView):
 
-    permission_classes = [
-        IsAuthenticated,
-        HasPermission,
-    ]
+    permission_classes = [IsAuthenticated,HasPermission,]
 
     required_permission = "fee_type.view"
 
@@ -186,6 +183,32 @@ class FeeTypeListAPIView(APIView):
             queryset = queryset.filter(
                 is_active=is_active.lower() == "true",
             )
+        application_logger.info(
+            "fee_type_debug",
+            extra={
+                "request_school_id": str(school.id),
+                "all_fee_types": list(
+                    FeeType.all_objects.values(
+                        "id",
+                        "name",
+                        "school_id",
+                        "academic_year_id",
+                        "is_active",
+                    )
+                ),
+                "school_fee_types": list(
+                    FeeType.all_objects.filter(
+                        school_id=school.id
+                    ).values(
+                        "id",
+                        "name",
+                        "school_id",
+                        "academic_year_id",
+                        "is_active",
+                    )
+                ),
+            },
+        )
 
         paginator = CustomPageNumberPagination()
 
