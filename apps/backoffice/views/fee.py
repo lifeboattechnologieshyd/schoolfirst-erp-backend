@@ -1012,6 +1012,7 @@ class FeeTemplateItemListAPIView(APIView):
             data=data,
 
             total=queryset.count(),
+            description="Fee template items listed successfully.",
 
         )
 class FeeTemplateItemDetailAPIView(APIView):
