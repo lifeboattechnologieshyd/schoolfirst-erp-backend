@@ -3707,7 +3707,7 @@ class StaffBulkUploadTemplateAPIView(APIView):
             # -------------------------------------------------
             sample_row = [
                 "EMP001",
-                Staff.StaffType.TEACHING,
+                Staff.StaffType.TEACHER,
                 "Rahul Kumar",
                 Staff.Gender.MALE,
                 "9876543210",
