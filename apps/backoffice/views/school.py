@@ -3648,13 +3648,28 @@ class CreateStaffAPIView(APIView):
             },
         )
 
+
 class StaffBulkUploadTemplateAPIView(APIView):
+
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "staff.bulk_upload"
 
     def get(self, request):
 
+        school = request.school
+
+        application_logger.info(
+            "staff_template_download_started",
+            requested_by=str(request.user.id),
+            school_id=str(school.id) if school else None,
+        )
+
         try:
+
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "Staff"
+
             headers = [
                 "employee_id",
                 "staff_type",
@@ -3674,109 +3689,185 @@ class StaffBulkUploadTemplateAPIView(APIView):
                 "emergency_contact_mobile",
             ]
 
-            workbook = Workbook()
-            worksheet = workbook.active
-            worksheet.title = "Staff"
-
-            worksheet.append(headers)
-
-            # Header styling
-            for cell in worksheet[1]:
-                cell.font = Font(bold=True, color="FFFFFF")
-                cell.fill = PatternFill(
-                    start_color="1F4E78",
-                    end_color="1F4E78",
-                    fill_type="solid",
-                )
-                cell.alignment = Alignment(
-                    horizontal="center"
+            # -------------------------------------------------
+            # HEADERS
+            # -------------------------------------------------
+            for column_number, header in enumerate(
+                headers,
+                start=1,
+            ):
+                sheet.cell(
+                    row=1,
+                    column=column_number,
+                    value=header,
                 )
 
-            # Set column widths
-            for column in worksheet.columns:
+            # -------------------------------------------------
+            # SAMPLE ROW
+            # -------------------------------------------------
+            sample_row = [
+                "EMP001",
+                Staff.StaffType.TEACHING,
+                "Rahul Kumar",
+                Staff.Gender.MALE,
+                "9876543210",
+                "2025-06-01",
+                Staff.Department.ACADEMICS,
+                "",
+                "rahul@gmail.com",
+                "1995-05-10",
+                "M.Sc B.Ed",
+                5,
+                Staff.Status.ACTIVE,
+                "Hyderabad",
+                "Ramesh Kumar",
+                "9876543211",
+            ]
+
+            for column_number, value in enumerate(
+                sample_row,
+                start=1,
+            ):
+                sheet.cell(
+                    row=2,
+                    column=column_number,
+                    value=value,
+                )
+
+            # -------------------------------------------------
+            # COLUMN WIDTHS
+            # -------------------------------------------------
+            for column in sheet.columns:
                 column_letter = column[0].column_letter
-                worksheet.column_dimensions[
+                sheet.column_dimensions[
                     column_letter
                 ].width = 25
 
-            # Keep mobile columns as text
-            worksheet.column_dimensions["E"].number_format = "@"
-            worksheet.column_dimensions["P"].number_format = "@"
+            # Mobile columns as text
+            sheet["E2"].number_format = "@"
+            sheet["P2"].number_format = "@"
 
-            # Instructions sheet
-            instructions = workbook.create_sheet("Instructions")
-
-            instructions.append(["Field", "Allowed values / instructions"])
-            instructions.append([
-                "staff_type",
-                ", ".join(Staff.StaffType.values),
-            ])
-            instructions.append([
-                "gender",
-                ", ".join(Staff.Gender.values),
-            ])
-            instructions.append([
-                "department",
-                ", ".join(Staff.Department.values),
-            ])
-            instructions.append([
-                "status",
-                ", ".join(Staff.Status.values),
-            ])
-            instructions.append([
-                "joining_date",
-                "Use YYYY-MM-DD format",
-            ])
-            instructions.append([
-                "date_of_birth",
-                "Use YYYY-MM-DD format",
-            ])
-            instructions.append([
-                "branch_id",
-                "Enter a valid branch UUID belonging to this school",
-            ])
-            instructions.append([
-                "mobile",
-                "Enter a 10-digit mobile number. Format this column as Text.",
-            ])
-
-            for cell in instructions[1]:
-                cell.font = Font(bold=True, color="FFFFFF")
-                cell.fill = PatternFill(
-                    start_color="1F4E78",
-                    end_color="1F4E78",
-                    fill_type="solid",
-                )
-
-            instructions.column_dimensions["A"].width = 25
-            instructions.column_dimensions["B"].width = 80
-
-            output = BytesIO()
-            workbook.save(output)
-            output.seek(0)
-
-            response = HttpResponse(
-                output.getvalue(),
-                content_type=(
-                    "application/vnd.openxmlformats-officedocument."
-                    "spreadsheetml.sheet"
-                ),
+            # -------------------------------------------------
+            # INSTRUCTIONS SHEET
+            # -------------------------------------------------
+            instructions = workbook.create_sheet(
+                "Instructions"
             )
 
-            response["Content-Disposition"] = (
-                'attachment; filename="staff_bulk_upload_template.xlsx"'
+            instruction_rows = [
+                ["Field", "Allowed values / instructions"],
+                [
+                    "employee_id",
+                    "Unique employee ID within the school",
+                ],
+                [
+                    "staff_type",
+                    ", ".join(Staff.StaffType.values),
+                ],
+                [
+                    "gender",
+                    ", ".join(Staff.Gender.values),
+                ],
+                [
+                    "department",
+                    ", ".join(Staff.Department.values),
+                ],
+                [
+                    "status",
+                    ", ".join(Staff.Status.values),
+                ],
+                [
+                    "mobile",
+                    "Required. Enter a valid 10-digit mobile number.",
+                ],
+                [
+                    "joining_date",
+                    "Required. Use YYYY-MM-DD format.",
+                ],
+                [
+                    "date_of_birth",
+                    "Optional. Use YYYY-MM-DD format.",
+                ],
+                [
+                    "branch_id",
+                    "Optional. Enter a valid branch UUID belonging to this school.",
+                ],
+                [
+                    "email",
+                    "Optional. Must be unique within the school.",
+                ],
+                [
+                    "experience",
+                    "Optional. Enter a non-negative number.",
+                ],
+                [
+                    "qualification",
+                    "Optional. Enter staff qualification.",
+                ],
+                [
+                    "emergency_contact_mobile",
+                    "Optional. Enter a valid mobile number.",
+                ],
+            ]
+
+            for row in instruction_rows:
+                instructions.append(row)
+
+            instructions.column_dimensions["A"].width = 30
+            instructions.column_dimensions["B"].width = 85
+
+            # -------------------------------------------------
+            # SAVE EXCEL FILE
+            # -------------------------------------------------
+            excel_file = BytesIO()
+            workbook.save(excel_file)
+            excel_file.seek(0)
+
+            file_name = "templates/staff_template.xlsx"
+
+            file_path = default_storage.save(
+                file_name,
+                ContentFile(excel_file.getvalue()),
             )
 
-            return response
+            file_url = settings.MEDIA_URL + file_path
 
-        except Exception:
+        except Exception as e:
+
             application_logger.exception(
-                "staff_bulk_upload_template_failed",
-                extra={
-                    "requested_by": str(request.user.id),
-                },
+                "staff_template_download_failed",
+                requested_by=str(request.user.id),
+                school_id=str(school.id) if school else None,
+                reason="template_generation_failed",
+                error=str(e),
             )
 
+            return CustomResponse.errorResponse(
+                description=str(e),
+            )
+
+        # -----------------------------------------------------
+        # SUCCESS LOG
+        # -----------------------------------------------------
+        application_logger.info(
+            "staff_template_generated",
+            requested_by=str(request.user.id),
+            school_id=str(school.id) if school else None,
+            file_path=file_path,
+            file_url=file_url,
+            total_columns=len(headers),
+        )
+
+        # -----------------------------------------------------
+        # RESPONSE
+        # -----------------------------------------------------
+        return CustomResponse.successResponse(
+            description="Staff template generated successfully.",
+            data={
+                "file_url": file_url,
+                "file_path": file_path,
+            },
+        )
 
 
 
