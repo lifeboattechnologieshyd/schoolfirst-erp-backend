@@ -1230,3 +1230,4 @@ class StudentProfileAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Something went wrong while updating student profile.",
             )
+
