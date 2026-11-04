@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from datetime import datetime, date
@@ -3664,33 +3666,34 @@ class StaffBulkUploadTemplateAPIView(APIView):
             school_id=str(school.id) if school else None,
         )
 
-        try:
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
 
+        try:
             workbook = Workbook()
             sheet = workbook.active
             sheet.title = "Staff"
 
+            # -------------------------------------------------
+            # EXCEL HEADERS
+            # Choice fields and branch are passed through params
+            # -------------------------------------------------
             headers = [
                 "employee_id",
-                "staff_type",
                 "name",
-                "gender",
                 "mobile",
                 "joining_date",
-                "department",
                 "email",
                 "date_of_birth",
                 "qualification",
                 "experience",
-                "status",
                 "address",
                 "emergency_contact_name",
                 "emergency_contact_mobile",
             ]
 
-            # -------------------------------------------------
-            # HEADERS
-            # -------------------------------------------------
             for column_number, header in enumerate(
                 headers,
                 start=1,
@@ -3706,18 +3709,13 @@ class StaffBulkUploadTemplateAPIView(APIView):
             # -------------------------------------------------
             sample_row = [
                 "EMP001",
-                Staff.StaffType.TEACHER,
                 "Rahul Kumar",
-                Staff.Gender.MALE,
                 "9876543210",
                 "2025-06-01",
-                Staff.Department.ACADEMICS,
-                "",
                 "rahul@gmail.com",
                 "1995-05-10",
                 "M.Sc B.Ed",
-                5,
-                Staff.Status.ACTIVE,
+                5.0,
                 "Hyderabad",
                 "Ramesh Kumar",
                 "9876543211",
@@ -3743,8 +3741,8 @@ class StaffBulkUploadTemplateAPIView(APIView):
                 ].width = 25
 
             # Mobile columns as text
-            sheet["E2"].number_format = "@"
-            sheet["P2"].number_format = "@"
+            sheet["C2"].number_format = "@"
+            sheet["K2"].number_format = "@"
 
             # -------------------------------------------------
             # INSTRUCTIONS SHEET
@@ -3754,63 +3752,122 @@ class StaffBulkUploadTemplateAPIView(APIView):
             )
 
             instruction_rows = [
-                ["Field", "Allowed values / instructions"],
+                [
+                    "Field",
+                    "Field Type",
+                    "Required",
+                    "Max Length",
+                    "Instructions",
+                ],
                 [
                     "employee_id",
-                    "Unique employee ID within the school",
+                    "CharField",
+                    "Yes",
+                    50,
+                    "Unique employee ID within the school.",
                 ],
                 [
-                    "staff_type",
-                    ", ".join(Staff.StaffType.values),
-                ],
-                [
-                    "gender",
-                    ", ".join(Staff.Gender.values),
-                ],
-                [
-                    "department",
-                    ", ".join(Staff.Department.values),
-                ],
-                [
-                    "status",
-                    ", ".join(Staff.Status.values),
+                    "name",
+                    "CharField",
+                    "Yes",
+                    255,
+                    "Enter staff full name.",
                 ],
                 [
                     "mobile",
-                    "Required. Enter a valid 10-digit mobile number.",
+                    "CharField",
+                    "Yes",
+                    15,
+                    "Enter a valid 10-digit mobile number.",
                 ],
                 [
                     "joining_date",
-                    "Required. Use YYYY-MM-DD format.",
+                    "DateField",
+                    "Yes",
+                    "-",
+                    "Use YYYY-MM-DD format.",
+                ],
+                [
+                    "email",
+                    "CharField",
+                    "No",
+                    254,
+                    "Must be unique within the school.",
                 ],
                 [
                     "date_of_birth",
-                    "Optional. Use YYYY-MM-DD format.",
-                ],
-
-                [
-                    "email",
-                    "Optional. Must be unique within the school.",
-                ],
-                [
-                    "experience",
-                    "Optional. Enter a non-negative number.",
+                    "DateField",
+                    "No",
+                    "-",
+                    "Use YYYY-MM-DD format.",
                 ],
                 [
                     "qualification",
-                    "Optional. Enter staff qualification.",
+                    "CharField",
+                    "No",
+                    255,
+                    "Enter staff qualification.",
+                ],
+                [
+                    "experience",
+                    "DecimalField",
+                    "No",
+                    "5 digits, 1 decimal place",
+                    "Enter a non-negative number. Example: 5.0",
+                ],
+                [
+                    "address",
+                    "CharField",
+                    "No",
+                    "No fixed limit",
+                    "Enter staff address.",
+                ],
+                [
+                    "emergency_contact_name",
+                    "CharField",
+                    "No",
+                    255,
+                    "Enter emergency contact name.",
                 ],
                 [
                     "emergency_contact_mobile",
-                    "Optional. Enter a valid mobile number.",
+                    "CharField",
+                    "No",
+                    15,
+                    "Enter emergency contact mobile number.",
                 ],
+
+
+
+
+
             ]
 
             for row in instruction_rows:
                 instructions.append(row)
 
+            # -------------------------------------------------
+            # INSTRUCTIONS STYLING
+            # -------------------------------------------------
+            for cell in instructions[1]:
+                cell.font = Font(
+                    bold=True,
+                    color="FFFFFF",
+                )
+                cell.fill = PatternFill(
+                    start_color="1F4E78",
+                    end_color="1F4E78",
+                    fill_type="solid",
+                )
+                cell.alignment = Alignment(
+                    horizontal="center"
+                )
+
             instructions.column_dimensions["A"].width = 30
-            instructions.column_dimensions["B"].width = 85
+            instructions.column_dimensions["B"].width = 20
+            instructions.column_dimensions["C"].width = 15
+            instructions.column_dimensions["D"].width = 25
+            instructions.column_dimensions["E"].width = 75
 
             # -------------------------------------------------
             # SAVE EXCEL FILE
@@ -3833,30 +3890,23 @@ class StaffBulkUploadTemplateAPIView(APIView):
             application_logger.exception(
                 "staff_template_download_failed",
                 requested_by=str(request.user.id),
-                school_id=str(school.id) if school else None,
-                reason="template_generation_failed",
+                school_id=str(school.id),
                 error=str(e),
             )
 
             return CustomResponse.errorResponse(
-                description=str(e),
+                description="Failed to generate staff template."
             )
 
-        # -----------------------------------------------------
-        # SUCCESS LOG
-        # -----------------------------------------------------
         application_logger.info(
             "staff_template_generated",
             requested_by=str(request.user.id),
-            school_id=str(school.id) if school else None,
+            school_id=str(school.id),
             file_path=file_path,
             file_url=file_url,
             total_columns=len(headers),
         )
 
-        # -----------------------------------------------------
-        # RESPONSE
-        # -----------------------------------------------------
         return CustomResponse.successResponse(
             description="Staff template generated successfully.",
             data={
@@ -3864,7 +3914,6 @@ class StaffBulkUploadTemplateAPIView(APIView):
                 "file_path": file_path,
             },
         )
-
 
 
 class BulkUploadStaffAPIView(APIView):
@@ -3921,29 +3970,6 @@ class BulkUploadStaffAPIView(APIView):
 
         school = request.school
         file = request.FILES.get("file")
-        branch_id = request.query_params.get("branch_id")
-
-        branch = None
-
-        if branch_id:
-            branch = Branch.objects.filter(
-                id=branch_id,
-                school=school,
-            ).first()
-
-            if branch is None:
-                return CustomResponse.errorResponse(
-                    description="Invalid branch ID."
-                )
-
-        application_logger.info(
-            "staff_bulk_upload_requested",
-            extra={
-                "requested_by": str(request.user.id),
-                "school_id": str(school.id) if school else None,
-                "file_name": file.name if file else None,
-            },
-        )
 
         # -----------------------------------------------------
         # VALIDATE SCHOOL
@@ -3952,6 +3978,29 @@ class BulkUploadStaffAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="School not found."
             )
+
+        # -----------------------------------------------------
+        # GET QUERY PARAMETERS
+        # -----------------------------------------------------
+        branch_id = request.query_params.get("branch_id")
+
+        staff_type = request.query_params.get("staff_type")
+        gender = request.query_params.get("gender")
+        department = request.query_params.get("department")
+
+        status = request.query_params.get("status",Staff.Status.ACTIVE,)
+
+        application_logger.info(
+            "staff_bulk_upload_requested",
+            requested_by=str(request.user.id),
+            school_id=str(school.id),
+            file_name=file.name if file else None,
+            branch_id=branch_id,
+            staff_type=staff_type,
+            gender=gender,
+            department=department,
+            status=status,
+        )
 
         # -----------------------------------------------------
         # VALIDATE FILE
@@ -3967,28 +4016,85 @@ class BulkUploadStaffAPIView(APIView):
             )
 
         # -----------------------------------------------------
+        # VALIDATE STAFF TYPE
+        # -----------------------------------------------------
+        if staff_type not in Staff.StaffType.values:
+            return CustomResponse.errorResponse(
+                description="Invalid staff type."
+            )
+
+        # -----------------------------------------------------
+        # VALIDATE GENDER
+        # -----------------------------------------------------
+        if gender not in Staff.Gender.values:
+            return CustomResponse.errorResponse(
+                description="Invalid gender."
+            )
+
+        # -----------------------------------------------------
+        # VALIDATE DEPARTMENT
+        # -----------------------------------------------------
+        if department not in Staff.Department.values:
+            return CustomResponse.errorResponse(
+                description="Invalid department."
+            )
+
+        # -----------------------------------------------------
+        # VALIDATE STATUS
+        # -----------------------------------------------------
+        if status not in Staff.Status.values:
+            return CustomResponse.errorResponse(
+                description="Invalid staff status."
+            )
+
+        # -----------------------------------------------------
+        # VALIDATE BRANCH
+        # -----------------------------------------------------
+        branch = None
+
+        if branch_id:
+
+            branch = Branch.objects.filter(
+                id=branch_id,
+                school=school,
+            ).first()
+
+            if branch is None:
+                return CustomResponse.errorResponse(
+                    description="Invalid branch ID."
+                )
+
+        # -----------------------------------------------------
+        # VALIDATE ROLE CONFIGURATION
+        # -----------------------------------------------------
+        role = Roles.objects.filter(
+            role_name=staff_type
+        ).first()
+
+        if role is None:
+            return CustomResponse.errorResponse(
+                description=f"{staff_type.title()} role not configured."
+            )
+
+        # -----------------------------------------------------
         # INITIALIZE COUNTERS
         # -----------------------------------------------------
         success_count = 0
         failed_count = 0
         errors = []
 
-        # Track duplicates inside the uploaded file
         uploaded_employee_ids = set()
         uploaded_mobiles = set()
         uploaded_emails = set()
 
         # -----------------------------------------------------
-        # EXPECTED HEADERS
+        # EXPECTED EXCEL HEADERS
         # -----------------------------------------------------
         required_headers = [
             "employee_id",
-            "staff_type",
             "name",
-            "gender",
             "mobile",
             "joining_date",
-            "department",
         ]
 
         try:
@@ -4001,7 +4107,12 @@ class BulkUploadStaffAPIView(APIView):
                 data_only=True,
             )
 
-            worksheet = workbook["Staff"] if "Staff" in workbook.sheetnames else workbook.active
+            if "Staff" not in workbook.sheetnames:
+                return CustomResponse.errorResponse(
+                    description="Excel sheet 'Staff' not found."
+                )
+
+            worksheet = workbook["Staff"]
 
             headers = [
                 str(cell.value).strip().lower()
@@ -4010,14 +4121,55 @@ class BulkUploadStaffAPIView(APIView):
                 for cell in worksheet[1]
             ]
 
-            if not headers or any(
-                header not in headers
+            # Remove trailing empty header cells
+            while headers and not headers[-1]:
+                headers.pop()
+
+            if not headers:
+                return CustomResponse.errorResponse(
+                    description="Excel headers are missing."
+                )
+
+            if len(headers) != len(set(headers)):
+                return CustomResponse.errorResponse(
+                    description="Duplicate column headers found in Excel."
+                )
+
+            missing_headers = [
+                header
                 for header in required_headers
-            ):
+                if header not in headers
+            ]
+
+            if missing_headers:
                 return CustomResponse.errorResponse(
                     description=(
-                        "Invalid Excel template. "
-                        "Please download and use the staff template."
+                        "Missing required Excel columns: "
+                        + ", ".join(missing_headers)
+                    )
+                )
+
+            # Choice fields must not be in Excel
+            choice_fields = {
+                "staff_type",
+                "gender",
+                "department",
+                "status",
+                "branch_id",
+            }
+
+            invalid_columns = [
+                header
+                for header in headers
+                if header in choice_fields
+            ]
+
+            if invalid_columns:
+                return CustomResponse.errorResponse(
+                    description=(
+                        "Remove these fields from Excel. "
+                        "They must be sent as query parameters: "
+                        + ", ".join(invalid_columns)
                     )
                 )
 
@@ -4030,11 +4182,14 @@ class BulkUploadStaffAPIView(APIView):
             # PROCESS EACH ROW
             # -------------------------------------------------
             for row_number, row in enumerate(
-                worksheet.iter_rows(min_row=2, values_only=True),
+                worksheet.iter_rows(
+                    min_row=2,
+                    values_only=True,
+                ),
                 start=2,
             ):
 
-                # Skip completely empty rows
+                # Skip empty rows
                 if not any(
                     value is not None and str(value).strip()
                     for value in row
@@ -4050,81 +4205,96 @@ class BulkUploadStaffAPIView(APIView):
                     for header, index in header_indexes.items()
                 }
 
+                employee_id = str(
+                    data.get("employee_id") or ""
+                ).strip()
+
                 try:
 
                     # -----------------------------------------
                     # READ VALUES
                     # -----------------------------------------
-                    employee_id = str(
-                        data.get("employee_id") or ""
-                    ).strip()
-
-                    staff_type = str(
-                        data.get("staff_type") or ""
-                    ).strip()
-
                     name = str(
                         data.get("name") or ""
-                    ).strip()
-
-                    gender = str(
-                        data.get("gender") or ""
                     ).strip()
 
                     mobile = self.parse_mobile(
                         data.get("mobile")
                     )
 
-                    department = str(
-                        data.get("department") or ""
-                    ).strip()
-
                     email = str(
                         data.get("email") or ""
                     ).strip().lower() or None
 
+                    qualification = str(
+                        data.get("qualification") or ""
+                    ).strip() or None
+
+                    address = str(
+                        data.get("address") or ""
+                    ).strip() or None
+
+                    emergency_contact_name = str(
+                        data.get("emergency_contact_name") or ""
+                    ).strip() or None
+
+                    emergency_contact_mobile = (
+                        self.parse_mobile(
+                            data.get("emergency_contact_mobile")
+                        ) or None
+                    )
 
                     # -----------------------------------------
                     # REQUIRED FIELD VALIDATION
                     # -----------------------------------------
                     required_values = {
                         "employee_id": employee_id,
-                        "staff_type": staff_type,
                         "name": name,
-                        "gender": gender,
                         "mobile": mobile,
                         "joining_date": data.get("joining_date"),
-                        "department": department,
                     }
 
                     for field, value in required_values.items():
+
                         if value is None or str(value).strip() == "":
                             raise ValueError(
                                 f"{field} is required."
                             )
 
                     # -----------------------------------------
-                    # STAFF TYPE VALIDATION
+                    # MAX LENGTH VALIDATION
                     # -----------------------------------------
-                    if staff_type not in Staff.StaffType.values:
-                        raise ValueError(
-                            f"Invalid staff type: {staff_type}."
-                        )
+                    max_lengths = {
+                        "employee_id": 50,
+                        "name": 255,
+                        "mobile": 15,
+                        "qualification": 255,
+                        "emergency_contact_name": 255,
+                        "emergency_contact_mobile": 15,
+                    }
 
-                    # -----------------------------------------
-                    # GENDER VALIDATION
-                    # -----------------------------------------
-                    if gender not in Staff.Gender.values:
-                        raise ValueError(
-                            f"Invalid gender: {gender}."
-                        )
+                    values_to_check = {
+                        "employee_id": employee_id,
+                        "name": name,
+                        "mobile": mobile,
+                        "qualification": qualification,
+                        "emergency_contact_name": emergency_contact_name,
+                        "emergency_contact_mobile": emergency_contact_mobile,
+                    }
 
-                    # -----------------------------------------
-                    # DEPARTMENT VALIDATION
-                    # -----------------------------------------
-                    if department not in Staff.Department.values:
+                    for field, max_length in max_lengths.items():
+
+                        value = values_to_check.get(field)
+
+                        if value and len(value) > max_length:
+                            raise ValueError(
+                                f"{field} cannot exceed "
+                                f"{max_length} characters."
+                            )
+
+                    if address and len(address) > 100000:
                         raise ValueError(
-                            f"Invalid department: {department}."
+                            "Address is too long."
                         )
 
                     # -----------------------------------------
@@ -4134,6 +4304,24 @@ class BulkUploadStaffAPIView(APIView):
                         raise ValueError(
                             "Enter a valid 10-digit mobile number."
                         )
+
+                    if emergency_contact_mobile:
+                        if (
+                            not emergency_contact_mobile.isdigit()
+                            or len(emergency_contact_mobile) != 10
+                        ):
+                            raise ValueError(
+                                "Enter a valid emergency contact mobile number."
+                            )
+
+                    # -----------------------------------------
+                    # EMAIL VALIDATION
+                    # -----------------------------------------
+                    if email:
+                        if len(email) > 254 or "@" not in email:
+                            raise ValueError(
+                                "Enter a valid email address."
+                            )
 
                     # -----------------------------------------
                     # DATE VALIDATION
@@ -4148,28 +4336,34 @@ class BulkUploadStaffAPIView(APIView):
 
                     # -----------------------------------------
                     # EXPERIENCE VALIDATION
+                    # DecimalField(max_digits=5, decimal_places=1)
                     # -----------------------------------------
-                    experience_value = data.get("experience") or 0
+                    experience_value = data.get("experience")
 
-                    try:
-                        experience = float(experience_value)
-                        if experience < 0:
-                            raise ValueError
-                    except (ValueError, TypeError):
+                    if experience_value in (None, ""):
+                        experience = Decimal("0.0")
+                    else:
+                        try:
+                            experience = Decimal(
+                                str(experience_value)
+                            )
+                        except (InvalidOperation, ValueError):
+                            raise ValueError(
+                                "Experience must be a valid number."
+                            )
+
+                    if not experience.is_finite() or experience < 0:
                         raise ValueError(
                             "Experience must be a non-negative number."
                         )
 
-                    # -----------------------------------------
-                    # STATUS VALIDATION
-                    # -----------------------------------------
-                    status = str(
-                        data.get("status") or Staff.Status.ACTIVE
-                    ).strip()
-
-                    if status not in Staff.Status.values:
+                    if (
+                        experience.as_tuple().exponent < -1
+                        or experience >= Decimal("10000")
+                    ):
                         raise ValueError(
-                            f"Invalid staff status: {status}."
+                            "Experience supports maximum 5 digits "
+                            "with 1 decimal place."
                         )
 
                     # -----------------------------------------
@@ -4224,39 +4418,23 @@ class BulkUploadStaffAPIView(APIView):
                         )
 
                     # -----------------------------------------
-                    # VALIDATE BRANCH
-                    # -----------------------------------------
-
-
-                    # -----------------------------------------
-                    # VALIDATE ROLE
-                    # -----------------------------------------
-                    role = Roles.objects.filter(
-                        role_name=staff_type
-                    ).first()
-
-                    if role is None:
-                        raise ValueError(
-                            f"{staff_type.title()} role not configured."
-                        )
-
-                    # -----------------------------------------
                     # CREATE USER AND STAFF
                     # -----------------------------------------
                     with transaction.atomic():
 
-                        # Find global user by mobile
+                        # Find existing global user by mobile
                         user = UserMaster.objects.filter(
                             username=mobile
                         ).first()
 
                         if user:
 
-                            # Check existing staff in this school
-                            if Staff.objects.filter(
+                            existing_staff = Staff.objects.filter(
                                 user=user,
                                 school=school,
-                            ).exists():
+                            ).exists()
+
+                            if existing_staff:
                                 raise ValueError(
                                     "This user is already registered "
                                     "as staff in this school."
@@ -4274,6 +4452,9 @@ class BulkUploadStaffAPIView(APIView):
                                 is_active=True,
                             )
 
+                        # -------------------------------------
+                        # CREATE STAFF
+                        # -------------------------------------
                         staff = Staff.objects.create(
                             user=user,
                             school=school,
@@ -4286,22 +4467,18 @@ class BulkUploadStaffAPIView(APIView):
                             date_of_birth=date_of_birth,
                             mobile=mobile,
                             email=email,
-                            qualification=data.get("qualification"),
+                            qualification=qualification,
                             experience=experience,
                             joining_date=joining_date,
                             status=status,
-                            address=data.get("address"),
-                            emergency_contact_name=data.get(
-                                "emergency_contact_name"
-                            ),
-                            emergency_contact_mobile=(
-                                self.parse_mobile(
-                                    data.get("emergency_contact_mobile")
-                                ) or None
-                            ),
+                            address=address,
+                            emergency_contact_name=emergency_contact_name,
+                            emergency_contact_mobile=emergency_contact_mobile,
                         )
 
-                        # Assign school-specific role
+                        # -------------------------------------
+                        # ASSIGN SCHOOL ROLE
+                        # -------------------------------------
                         UserRoles.objects.get_or_create(
                             user=user,
                             school=school,
@@ -4321,13 +4498,11 @@ class BulkUploadStaffAPIView(APIView):
 
                     application_logger.info(
                         "staff_bulk_upload_row_created",
-                        extra={
-                            "requested_by": str(request.user.id),
-                            "school_id": str(school.id),
-                            "staff_id": str(staff.id),
-                            "employee_id": employee_id,
-                            "row_number": row_number,
-                        },
+                        requested_by=str(request.user.id),
+                        school_id=str(school.id),
+                        staff_id=str(staff.id),
+                        employee_id=employee_id,
+                        row_number=row_number,
                     )
 
                 except IntegrityError as exc:
@@ -4336,7 +4511,7 @@ class BulkUploadStaffAPIView(APIView):
 
                     errors.append({
                         "row": row_number,
-                        "employee_id": data.get("employee_id"),
+                        "employee_id": employee_id,
                         "message": (
                             "Duplicate staff record or database "
                             "constraint violation."
@@ -4345,12 +4520,10 @@ class BulkUploadStaffAPIView(APIView):
 
                     application_logger.exception(
                         "staff_bulk_upload_row_integrity_error",
-                        extra={
-                            "requested_by": str(request.user.id),
-                            "school_id": str(school.id),
-                            "row_number": row_number,
-                            "error": str(exc),
-                        },
+                        requested_by=str(request.user.id),
+                        school_id=str(school.id),
+                        row_number=row_number,
+                        error=str(exc),
                     )
 
                 except Exception as exc:
@@ -4359,19 +4532,17 @@ class BulkUploadStaffAPIView(APIView):
 
                     errors.append({
                         "row": row_number,
-                        "employee_id": data.get("employee_id"),
+                        "employee_id": employee_id,
                         "message": str(exc),
                     })
 
                     application_logger.warning(
                         "staff_bulk_upload_row_failed",
-                        extra={
-                            "requested_by": str(request.user.id),
-                            "school_id": str(school.id),
-                            "row_number": row_number,
-                            "employee_id": data.get("employee_id"),
-                            "error": str(exc),
-                        },
+                        requested_by=str(request.user.id),
+                        school_id=str(school.id),
+                        row_number=row_number,
+                        employee_id=employee_id,
+                        error=str(exc),
                     )
 
             # -------------------------------------------------
@@ -4379,12 +4550,10 @@ class BulkUploadStaffAPIView(APIView):
             # -------------------------------------------------
             application_logger.info(
                 "staff_bulk_upload_completed",
-                extra={
-                    "requested_by": str(request.user.id),
-                    "school_id": str(school.id),
-                    "created_count": success_count,
-                    "failed_count": failed_count,
-                },
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                created_count=success_count,
+                failed_count=failed_count,
             )
 
             return CustomResponse.successResponse(
@@ -4401,12 +4570,10 @@ class BulkUploadStaffAPIView(APIView):
 
             application_logger.exception(
                 "staff_bulk_upload_failed",
-                extra={
-                    "requested_by": str(request.user.id),
-                    "school_id": str(school.id),
-                    "file_name": file.name,
-                    "error": str(exc),
-                },
+                requested_by=str(request.user.id),
+                school_id=str(school.id),
+                file_name=file.name,
+                error=str(exc),
             )
 
             return CustomResponse.errorResponse(
@@ -4415,6 +4582,11 @@ class BulkUploadStaffAPIView(APIView):
                     "Please check the template and try again."
                 )
             )
+
+
+
+
+
 
 
 class GetStaffAPIView(APIView):
