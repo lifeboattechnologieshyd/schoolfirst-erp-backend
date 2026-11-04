@@ -3678,7 +3678,6 @@ class StaffBulkUploadTemplateAPIView(APIView):
                 "mobile",
                 "joining_date",
                 "department",
-                "branch_id",
                 "email",
                 "date_of_birth",
                 "qualification",
@@ -3788,10 +3787,7 @@ class StaffBulkUploadTemplateAPIView(APIView):
                     "date_of_birth",
                     "Optional. Use YYYY-MM-DD format.",
                 ],
-                [
-                    "branch_id",
-                    "Optional. Enter a valid branch UUID belonging to this school.",
-                ],
+
                 [
                     "email",
                     "Optional. Must be unique within the school.",
@@ -3925,6 +3921,20 @@ class BulkUploadStaffAPIView(APIView):
 
         school = request.school
         file = request.FILES.get("file")
+        branch_id = request.query_params.get("branch_id")
+
+        branch = None
+
+        if branch_id:
+            branch = Branch.objects.filter(
+                id=branch_id,
+                school=school,
+            ).first()
+
+            if branch is None:
+                return CustomResponse.errorResponse(
+                    description="Invalid branch ID."
+                )
 
         application_logger.info(
             "staff_bulk_upload_requested",
@@ -4073,7 +4083,6 @@ class BulkUploadStaffAPIView(APIView):
                         data.get("email") or ""
                     ).strip().lower() or None
 
-                    branch_id = data.get("branch_id")
 
                     # -----------------------------------------
                     # REQUIRED FIELD VALIDATION
@@ -4217,18 +4226,7 @@ class BulkUploadStaffAPIView(APIView):
                     # -----------------------------------------
                     # VALIDATE BRANCH
                     # -----------------------------------------
-                    branch = None
 
-                    if branch_id:
-                        branch = Branch.objects.filter(
-                            id=str(branch_id).strip(),
-                            school=school,
-                        ).first()
-
-                        if branch is None:
-                            raise ValueError(
-                                "Invalid branch ID."
-                            )
 
                     # -----------------------------------------
                     # VALIDATE ROLE
