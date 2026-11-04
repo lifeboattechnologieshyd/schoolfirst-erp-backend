@@ -37,25 +37,15 @@ jobs:
             git checkout main
             git pull --ff-only origin main
 
-            # Build production Docker image
-            docker buildx build \
-              --platform linux/arm64 \
-              -t schoolfirst-erp-backend:main-latest \
-              --load .
+            # Create Docker network if it doesn't exist
+            docker network create schoolfirst-erp-network || true
 
-            # Stop and remove existing ERP backend container
-            docker stop schoolfirst-erp-backend || true
-            docker rm schoolfirst-erp-backend || true
-
-            # Start updated ERP backend
-            docker run -d \
-              --name schoolfirst-erp-backend \
-              --restart always \
-              --env-file .env \
-              -p 8000:8000 \
-              schoolfirst-erp-backend:main-latest
+            # Deploy only required production services
+            docker compose \
+              -f ./deploy/compose/docker-compose.yaml \
+              --env-file .env.docker \
+              up -d --build --remove-orphans postgres backend
 
             # Remove dangling images
             docker image prune -f
-
           EOF
