@@ -1897,11 +1897,59 @@ class CreateStudentAPIView(APIView):
         )
 
 
+
+
+
 class BulkUploadStudentAPIView(APIView):
 
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "student.bulk_upload"
     parser_classes = [MultiPartParser]
+
+    # --------------------------------------------------
+    # HELPER FUNCTIONS
+    # --------------------------------------------------
+
+    def parse_date(self, value):
+
+        if not value:
+            return None
+
+        if isinstance(value, datetime):
+            return value.date()
+
+        if isinstance(value, date):
+            return value
+
+        return datetime.strptime(
+            str(value).strip(),
+            "%Y-%m-%d"
+        ).date()
+
+    def parse_decimal(self, value):
+
+        if value in (None, ""):
+            return None
+
+        try:
+            return Decimal(str(value).strip())
+
+        except (InvalidOperation, ValueError):
+            raise ValueError("Invalid decimal value.")
+
+    def parse_mobile(self, value):
+
+        if value in (None, ""):
+            return None
+
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
+
+        return str(value).strip()
+
+    # --------------------------------------------------
+    # POST - BULK UPLOAD STUDENTS
+    # --------------------------------------------------
 
     def post(self, request):
 
@@ -1913,52 +1961,127 @@ class BulkUploadStudentAPIView(APIView):
             school_id=str(school.id) if school else None,
         )
 
+        # --------------------------------------------------
+        # SCHOOL VALIDATION
+        # --------------------------------------------------
+
         if school is None:
-            audit_logger.warning(
-                "student_bulk_upload_failed",
-                performed_by=str(request.user.id),
-                reason="school_not_found",
+            return CustomResponse.errorResponse(
+                description="School not found."
             )
-            return CustomResponse.errorResponse(description="School not found.")
+
+        # --------------------------------------------------
+        # QUERY PARAMETERS
+        # --------------------------------------------------
+
+        branch_id = request.query_params.get("branch_id")
+        academic_year_id = request.query_params.get("academic_year_id")
+
+        def is_valid_uuid(value):
+            try:
+                uuid.UUID(str(value))
+                return True
+            except (ValueError, TypeError, AttributeError):
+                return False
+
+        if not branch_id or not is_valid_uuid(branch_id):
+            return CustomResponse.errorResponse(
+                description="Valid branch_id is required."
+            )
+
+        if not academic_year_id or not is_valid_uuid(academic_year_id):
+            return CustomResponse.errorResponse(
+                description="Valid academic_year_id is required."
+            )
+
+        branch = Branch.objects.filter(
+            id=branch_id,
+            school=school
+        ).first()
+
+        if not branch:
+            return CustomResponse.errorResponse(
+                description="Branch not found."
+            )
+
+        academic_year = AcademicYear.objects.filter(
+            id=academic_year_id,
+            school=school
+        ).first()
+
+        if not academic_year:
+            return CustomResponse.errorResponse(
+                description="Academic year not found."
+            )
+
+        # --------------------------------------------------
+        # FILE VALIDATION
+        # --------------------------------------------------
 
         file = request.FILES.get("file")
 
-        if file is None:
-            audit_logger.warning(
-                "student_bulk_upload_failed",
-                performed_by=str(request.user.id),
-                school_id=str(school.id),
-                reason="excel_file_missing",
+        if not file:
+            return CustomResponse.errorResponse(
+                description="Excel file is required."
             )
-            return CustomResponse.errorResponse(description="Excel file is required.")
 
-        audit_logger.info(
-            "student_bulk_upload_file_received",
-            performed_by=str(request.user.id),
-            school_id=str(school.id),
-            file_name=file.name,
-            file_size=file.size,
-        )
+        if not file.name.lower().endswith(".xlsx"):
+            return CustomResponse.errorResponse(
+                description="Only .xlsx files are supported."
+            )
 
         try:
-            workbook = load_workbook(file)
-            sheet = workbook.active
+
+            workbook = load_workbook(
+                file,
+                data_only=True
+            )
+
+            if "Students" not in workbook.sheetnames:
+                return CustomResponse.errorResponse(
+                    description="Students sheet not found."
+                )
+
+            sheet = workbook["Students"]
 
         except Exception as e:
+
             audit_logger.exception(
                 "student_bulk_upload_failed",
                 performed_by=str(request.user.id),
                 school_id=str(school.id),
-                file_name=file.name,
                 reason="invalid_excel_file",
                 error=str(e),
             )
-            return CustomResponse.errorResponse(description="Invalid Excel file.")
 
-        headers = [cell.value for cell in sheet[1]]
+            return CustomResponse.errorResponse(
+                description="Invalid Excel file."
+            )
+
+        # --------------------------------------------------
+        # READ HEADERS
+        # --------------------------------------------------
+
+        headers = [
+            str(cell.value).strip()
+            if cell.value is not None else ""
+            for cell in sheet[1]
+        ]
+
+        while headers and headers[-1] == "":
+            headers.pop()
+
+        if not headers:
+            return CustomResponse.errorResponse(
+                description="Excel file has no headers."
+            )
+
+        if len(headers) != len(set(headers)):
+            return CustomResponse.errorResponse(
+                description="Duplicate column headers found."
+            )
 
         required_headers = [
-            "Academic Year",
             "Grade",
             "Section",
             "Admission Number",
@@ -1970,192 +2093,505 @@ class BulkUploadStudentAPIView(APIView):
             "Fee Concession",
         ]
 
-        for header in required_headers:
-            if header not in headers:
-                audit_logger.warning(
-                    "student_bulk_upload_failed",
-                    performed_by=str(request.user.id),
-                    school_id=str(school.id),
-                    file_name=file.name,
-                    missing_header=header,
-                    reason="required_column_missing",
+        missing_headers = [
+            header for header in required_headers
+            if header not in headers
+        ]
+
+        if missing_headers:
+            return CustomResponse.errorResponse(
+                description="Required columns are missing.",
+                data={
+                    "missing_headers": missing_headers
+                }
+            )
+
+        # These values must come from query parameters.
+        if "Branch" in headers or "Academic Year" in headers:
+            return CustomResponse.errorResponse(
+                description=(
+                    "Do not include Branch or Academic Year in Excel. "
+                    "Pass branch_id and academic_year_id through query parameters."
                 )
-                return CustomResponse.errorResponse(description=f"{header} column is missing.")
+            )
+
+        # Removed fields from the current template.
+        removed_headers = [
+            "Pickup Point",
+            "Transport Required",
+            "Hostel Type",
+            "Hostel Required",
+        ]
+
+        if any(header in headers for header in removed_headers):
+            return CustomResponse.errorResponse(
+                description=(
+                    "Pickup Point, Transport Required, Hostel Type "
+                    "and Hostel Required are not supported in this template."
+                )
+            )
+
+        # --------------------------------------------------
+        # COUNTERS
+        # --------------------------------------------------
 
         success_count = 0
         failed_count = 0
+
+        fee_generated_count = 0
+        fee_not_configured_count = 0
+        fee_failed_count = 0
+
         errors = []
+        fee_errors = []
 
-        valid_blood_groups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
+        valid_blood_groups = [
+            "A+", "A-", "B+", "B-",
+            "AB+", "AB-", "O+", "O-"
+        ]
 
-        for row_number, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
+        # --------------------------------------------------
+        # PROCESS EXCEL ROWS
+        # --------------------------------------------------
+
+        for row_number, row in enumerate(
+            sheet.iter_rows(min_row=2, values_only=True),
+            start=2
+        ):
+
+            if not any(value is not None for value in row):
+                continue
+
+            data = {}
 
             try:
+
                 data = dict(zip(headers, row))
 
-                academic_year = AcademicYear.objects.filter(
-                    school=school,
-                    name=data.get("Academic Year"),
-                ).first()
+                # ------------------------------------------
+                # BASIC DETAILS
+                # ------------------------------------------
 
-                if academic_year is None:
-                    raise Exception("Academic year not found.")
+                grade_name = str(
+                    data.get("Grade") or ""
+                ).strip()
+
+                section_name = str(
+                    data.get("Section") or ""
+                ).strip()
+
+                admission_number = str(
+                    data.get("Admission Number") or ""
+                ).strip()
+
+                name = str(
+                    data.get("Name") or ""
+                ).strip()
+
+                gender = str(
+                    data.get("Gender") or ""
+                ).strip().upper()
+
+                roll_number = data.get("Roll Number")
+
+                # ------------------------------------------
+                # REQUIRED FIELD VALIDATION
+                # ------------------------------------------
+
+                if not grade_name:
+                    raise ValueError("Grade is required.")
+
+                if not section_name:
+                    raise ValueError("Section is required.")
+
+                if not admission_number:
+                    raise ValueError("Admission number is required.")
+
+                if not name:
+                    raise ValueError("Student name is required.")
+
+                if not gender:
+                    raise ValueError("Gender is required.")
+
+                if roll_number in (None, ""):
+                    raise ValueError("Roll number is required.")
+
+                try:
+                    roll_number = int(roll_number)
+
+                    if roll_number <= 0:
+                        raise ValueError
+
+                except (ValueError, TypeError, OverflowError):
+                    raise ValueError(
+                        "Roll number must be a positive integer."
+                    )
+
+                if gender not in Student.Gender.values:
+                    raise ValueError(
+                        "Invalid gender. Allowed values: MALE, FEMALE, OTHER."
+                    )
+
+                # ------------------------------------------
+                # GRADE VALIDATION
+                # ------------------------------------------
 
                 grade = Grade.objects.filter(
                     school=school,
-                    name=data.get("Grade"),
+                    name__iexact=grade_name
                 ).first()
 
-                if grade is None:
-                    raise Exception("Grade not found.")
+                if not grade:
+                    raise ValueError(
+                        f"Grade '{grade_name}' not found."
+                    )
 
-                branch = None
-                branch_name = str(data.get("Branch") or "").strip()
-
-                if branch_name:
-                    branch = Branch.objects.filter(
-                        school=school,
-                        name__iexact=branch_name,
-                    ).first()
-
-                    if branch is None:
-                        raise Exception(f"Branch '{branch_name}' not found.")
+                # ------------------------------------------
+                # SECTION VALIDATION
+                # ------------------------------------------
 
                 section = Section.objects.filter(
                     grade=grade,
                     branch=branch,
-                    name__iexact=str(data.get("Section")).strip(),
+                    name__iexact=section_name
                 ).first()
 
-                if section is None:
-                    raise Exception("Section not found.")
+                if not section:
+                    raise ValueError(
+                        f"Section '{section_name}' not found "
+                        f"for grade '{grade_name}' and selected branch."
+                    )
 
-                gender = str(data.get("Gender")).upper()
+                # ------------------------------------------
+                # BOARD VALIDATION
+                # ------------------------------------------
 
-                if gender not in Student.Gender.values:
-                    raise Exception("Invalid gender.")
-
-                board = str(data.get("Board", Student.Board.STATE)).upper()
+                board = str(
+                    data.get("Board") or Student.Board.STATE
+                ).strip().upper()
 
                 if board not in Student.Board.values:
-                    raise Exception("Invalid board.")
+                    raise ValueError(
+                        "Invalid board. Allowed values: "
+                        + ", ".join(Student.Board.values)
+                    )
 
-                blood_group = data.get("Blood Group")
+                # ------------------------------------------
+                # ENROLLMENT TYPE VALIDATION
+                # ------------------------------------------
+
+                enrollment_type = str(
+                    data.get("Enrollment Type")
+                    or Student.EnrollmentType.NEW
+                ).strip().upper()
+
+                if enrollment_type not in Student.EnrollmentType.values:
+                    raise ValueError(
+                        "Invalid enrollment type. Allowed values: "
+                        + ", ".join(Student.EnrollmentType.values)
+                    )
+
+                # ------------------------------------------
+                # DATE VALIDATION
+                # ------------------------------------------
+
+                date_of_birth = self.parse_date(
+                    data.get("Date Of Birth")
+                )
+
+                admission_date = self.parse_date(
+                    data.get("Admission Date")
+                )
+
+                if not date_of_birth:
+                    raise ValueError("Date of birth is required.")
+
+                if not admission_date:
+                    raise ValueError("Admission date is required.")
+
+                # ------------------------------------------
+                # BLOOD GROUP VALIDATION
+                # ------------------------------------------
+
+                blood_group = str(
+                    data.get("Blood Group") or ""
+                ).strip().upper() or None
 
                 if blood_group and blood_group not in valid_blood_groups:
-                    raise Exception("Invalid blood group.")
+                    raise ValueError("Invalid blood group.")
 
-                admission_number = str(data.get("Admission Number")).strip()
-                roll_number = data.get("Roll Number")
+                # ------------------------------------------
+                # EMAIL VALIDATION
+                # ------------------------------------------
+
+                email = str(
+                    data.get("Email") or ""
+                ).strip().lower() or None
+
+                if email:
+                    try:
+                        validate_email(email)
+                    except ValidationError:
+                        raise ValueError("Invalid email address.")
+
+                # ------------------------------------------
+                # MOBILE NUMBERS
+                # ------------------------------------------
+
+                emergency_contact_mobile = self.parse_mobile(
+                    data.get("Emergency Contact Mobile")
+                )
+
+                father_mobile = self.parse_mobile(
+                    data.get("Father Mobile")
+                )
+
+                mother_mobile = self.parse_mobile(
+                    data.get("Mother Mobile")
+                )
+
+                guardian_mobile = self.parse_mobile(
+                    data.get("Guardian Mobile")
+                )
+
+                for field_name, mobile in [
+                    ("Emergency contact mobile", emergency_contact_mobile),
+                    ("Father mobile", father_mobile),
+                    ("Mother mobile", mother_mobile),
+                    ("Guardian mobile", guardian_mobile),
+                ]:
+
+                    if mobile and (
+                        not mobile.isdigit() or len(mobile) != 10
+                    ):
+                        raise ValueError(
+                            f"{field_name} must contain exactly 10 digits."
+                        )
+
+                # ------------------------------------------
+                # AADHAAR VALIDATION
+                # ------------------------------------------
+
+                aadhaar_number = self.parse_mobile(
+                    data.get("Aadhaar Number")
+                )
+
+                if aadhaar_number:
+                    if (
+                        not aadhaar_number.isdigit()
+                        or len(aadhaar_number) != 12
+                    ):
+                        raise ValueError(
+                            "Aadhaar number must contain exactly 12 digits."
+                        )
+
+                # ------------------------------------------
+                # DECIMAL VALIDATION
+                # ------------------------------------------
+
+                previous_exam_percentage = self.parse_decimal(
+                    data.get("Previous Exam Percentage")
+                )
+
+                if previous_exam_percentage is not None:
+                    if (
+                        previous_exam_percentage < 0
+                        or previous_exam_percentage > 100
+                    ):
+                        raise ValueError(
+                            "Previous exam percentage must be between 0 and 100."
+                        )
+
+                # ------------------------------------------
+                # DUPLICATE ADMISSION NUMBER
+                # ------------------------------------------
 
                 if Student.objects.filter(
                     school=school,
-                    admission_number=admission_number,
+                    admission_number=admission_number
                 ).exists():
-                    raise Exception("Admission number already exists.")
+
+                    raise ValueError(
+                        f"Admission number '{admission_number}' already exists."
+                    )
+
+                # ------------------------------------------
+                # DUPLICATE ROLL NUMBER
+                # ------------------------------------------
 
                 if Student.objects.filter(
                     section=section,
-                    roll_number=roll_number,
+                    roll_number=roll_number
                 ).exists():
-                    raise Exception("Roll number already exists.")
 
-                enrollment_type = str(
-                    data.get("Enrollment Type", Student.EnrollmentType.NEW)
-                ).upper()
+                    raise ValueError(
+                        f"Roll number '{roll_number}' already exists "
+                        f"in section '{section_name}'."
+                    )
 
-                if enrollment_type not in Student.EnrollmentType.values:
-                    raise Exception("Invalid enrollment type.")
-
-                hostel_type = str(
-                    data.get("Hostel Type", Student.HostelType.DAY_SCHOLAR)
-                ).upper()
-
-                if hostel_type not in Student.HostelType.values:
-                    raise Exception("Invalid hostel type.")
+                # ------------------------------------------
+                # CREATE STUDENT
+                # ------------------------------------------
 
                 with transaction.atomic():
 
                     student = Student.objects.create(
                         school=school,
                         branch=branch,
-                        board=board,
                         academic_year=academic_year,
                         grade=grade,
                         section=section,
+
+                        board=board,
+
                         admission_number=admission_number,
                         roll_number=roll_number,
-                        name=str(data.get("Name")).strip(),
+                        name=name,
                         gender=gender,
-                        date_of_birth=data.get("Date Of Birth"),
-                        admission_date=data.get("Admission Date"),
+
+                        date_of_birth=date_of_birth,
+                        admission_date=admission_date,
                         enrollment_type=enrollment_type,
+
                         place_of_birth=data.get("Place Of Birth"),
                         blood_group=blood_group,
-                        nationality=data.get("Nationality", "Indian"),
+                        nationality=data.get("Nationality") or "Indian",
                         mother_tongue=data.get("Mother Tongue"),
-                        aadhaar_number=data.get("Aadhaar Number"),
+
+                        aadhaar_number=aadhaar_number,
                         religion=data.get("Religion"),
                         caste=data.get("Caste"),
                         sub_caste=data.get("Sub Caste"),
                         student_category=data.get("Student Category"),
-                        email=data.get("Email"),
+                        identification_marks=data.get("Identification Marks"),
+
+                        email=email,
                         address=data.get("Address"),
+
+                        emergency_contact_name=data.get(
+                            "Emergency Contact Name"
+                        ),
+                        emergency_contact_mobile=emergency_contact_mobile,
+
                         father_name=data.get("Father Name"),
-                        father_mobile=data.get("Father Mobile"),
+                        father_mobile=father_mobile,
                         father_occupation=data.get("Father Occupation"),
+
                         mother_name=data.get("Mother Name"),
-                        mother_mobile=data.get("Mother Mobile"),
+                        mother_mobile=mother_mobile,
                         mother_occupation=data.get("Mother Occupation"),
+
                         guardian_name=data.get("Guardian Name"),
-                        guardian_mobile=data.get("Guardian Mobile"),
+                        guardian_mobile=guardian_mobile,
                         guardian_occupation=data.get("Guardian Occupation"),
+
                         previous_school_name=data.get("Previous School"),
-                        previous_exam_percentage=data.get("Previous Exam Percentage"),
-                        transport_required=bool(data.get("Transport Required", False)),
-                        pickup_point=data.get("Pickup Point"),
-                        hostel_type=hostel_type,
+                        previous_school_tc_number=data.get(
+                            "Previous School TC Number"
+                        ),
+                        previous_exam_percentage=previous_exam_percentage,
+
                         status=Student.Status.ACTIVE,
                     )
 
-                    fee_concession_name = str(data.get("Fee Concession", "")).strip()
-                    concession = None
-
-                    if fee_concession_name:
-                        concession = FeeConcession.objects.filter(
-                            school=school,
-                            name__iexact=fee_concession_name,
-                        ).first()
-
-                        if concession is None:
-                            raise Exception(f"Fee concession '{fee_concession_name}' not found.")
-
-                    fee_template = FeeTemplate.objects.filter(
-                        school=school,
-                        academic_year=academic_year,
-                        grade=grade,
-                        is_active=True,
-                    ).first()
-
-                    if fee_template is None:
-                        raise Exception(f"Fee template not configured for grade '{grade.name}'.")
-
-                    # StudentFeeAssignment.objects.get_or_create(
-                    #     student=student,
-                    #     fee_template=fee_template,
-                    #     defaults={
-                    #         "concession": concession,
-                    #         "assigned_by": request.user,
-                    #     },
-                    # )
-
-                    generate_student_fees(
-                        student=student,
-                        fee_template=fee_template,
-                        concession=concession,
-                    )
+                # Student transaction has committed here.
+                # Fee errors must not roll back student creation.
 
                 success_count += 1
+
+                audit_logger.info(
+                    "student_bulk_upload_student_created",
+                    performed_by=str(request.user.id),
+                    school_id=str(school.id),
+                    student_id=str(student.id),
+                    admission_number=admission_number,
+                    grade_id=str(grade.id),
+                    section_id=str(section.id),
+                )
+
+                # ------------------------------------------
+                # OPTIONAL FEE GENERATION
+                # ------------------------------------------
+
+                fee_template = FeeTemplate.objects.filter(
+                    school=school,
+                    academic_year=academic_year,
+                    grade=grade,
+                    is_active=True,
+                ).first()
+
+                if not fee_template:
+
+                    fee_not_configured_count += 1
+
+                    audit_logger.warning(
+                        "student_fee_template_not_configured",
+                        student_id=str(student.id),
+                        school_id=str(school.id),
+                        academic_year_id=str(academic_year.id),
+                        grade_id=str(grade.id),
+                        admission_number=admission_number,
+                    )
+
+                else:
+
+                    try:
+
+                        fee_concession_name = str(
+                            data.get("Fee Concession") or ""
+                        ).strip()
+
+                        concession = None
+
+                        if fee_concession_name:
+
+                            concession = FeeConcession.objects.filter(
+                                school=school,
+                                name__iexact=fee_concession_name,
+                            ).first()
+
+                            if not concession:
+                                raise ValueError(
+                                    f"Fee concession '{fee_concession_name}' "
+                                    "not found."
+                                )
+
+                        # Separate transaction for fee generation.
+                        with transaction.atomic():
+
+                            generate_student_fees(
+                                student=student,
+                                fee_template=fee_template,
+                                concession=concession,
+                            )
+
+                        fee_generated_count += 1
+
+                        audit_logger.info(
+                            "student_fee_generation_completed",
+                            student_id=str(student.id),
+                            school_id=str(school.id),
+                            fee_template_id=str(fee_template.id),
+                        )
+
+                    except Exception as fee_error:
+
+                        fee_failed_count += 1
+
+                        fee_errors.append({
+                            "row": row_number,
+                            "admission_number": admission_number,
+                            "student_id": str(student.id),
+                            "message": str(fee_error),
+                        })
+
+                        audit_logger.exception(
+                            "student_fee_generation_failed",
+                            student_id=str(student.id),
+                            school_id=str(school.id),
+                            fee_template_id=str(fee_template.id),
+                            error=str(fee_error),
+                        )
 
             except Exception as e:
 
@@ -2163,22 +2599,27 @@ class BulkUploadStudentAPIView(APIView):
 
                 errors.append({
                     "row": row_number,
+                    "admission_number": data.get("Admission Number"),
+                    "student_name": data.get("Name"),
                     "message": str(e),
                 })
 
-                audit_logger.warning(
+                audit_logger.exception(
                     "student_bulk_upload_row_failed",
                     performed_by=str(request.user.id),
                     school_id=str(school.id),
                     file_name=file.name,
                     row_number=row_number,
-                    admission_number=str(data.get("Admission Number")) if "data" in locals() else None,
-                    student_name=str(data.get("Name")) if "data" in locals() else None,
-                    branch_name=str(data.get("Branch")) if "data" in locals() else None,
-                    grade_name=str(data.get("Grade")) if "data" in locals() else None,
-                    section_name=str(data.get("Section")) if "data" in locals() else None,
+                    admission_number=data.get("Admission Number"),
+                    student_name=data.get("Name"),
+                    grade_name=data.get("Grade"),
+                    section_name=data.get("Section"),
                     error=str(e),
                 )
+
+        # --------------------------------------------------
+        # FINAL LOG
+        # --------------------------------------------------
 
         audit_logger.info(
             "student_bulk_upload_completed",
@@ -2188,7 +2629,14 @@ class BulkUploadStudentAPIView(APIView):
             total_records=success_count + failed_count,
             success_count=success_count,
             failed_count=failed_count,
+            fee_generated_count=fee_generated_count,
+            fee_not_configured_count=fee_not_configured_count,
+            fee_failed_count=fee_failed_count,
         )
+
+        # --------------------------------------------------
+        # FINAL RESPONSE
+        # --------------------------------------------------
 
         return CustomResponse.successResponse(
             description="Student bulk upload completed.",
@@ -2196,9 +2644,17 @@ class BulkUploadStudentAPIView(APIView):
                 "total_records": success_count + failed_count,
                 "success_count": success_count,
                 "failed_count": failed_count,
+
+                "fee_generated_count": fee_generated_count,
+                "fee_not_configured_count": fee_not_configured_count,
+                "fee_failed_count": fee_failed_count,
+
                 "errors": errors,
+                "fee_errors": fee_errors,
             },
         )
+
+
 
 
 class DownloadStudentTemplateAPIView(APIView):
@@ -2218,13 +2674,17 @@ class DownloadStudentTemplateAPIView(APIView):
 
         try:
 
+
+
+            # --------------------------------------------------
+            # CREATE WORKBOOK
+            # --------------------------------------------------
             workbook = Workbook()
+
             sheet = workbook.active
             sheet.title = "Students"
 
             headers = [
-                "Academic Year",
-                "Branch",
                 "Grade",
                 "Section",
                 "Board",
@@ -2261,18 +2721,20 @@ class DownloadStudentTemplateAPIView(APIView):
                 "Previous School",
                 "Previous School TC Number",
                 "Previous Exam Percentage",
-                "Transport Required",
-                "Pickup Point",
-                "Hostel Type",
                 "Fee Concession",
             ]
 
             for column_number, header in enumerate(headers, start=1):
-                sheet.cell(row=1, column=column_number, value=header)
+                sheet.cell(
+                    row=1,
+                    column=column_number,
+                    value=header
+                )
 
+            # --------------------------------------------------
+            # SAMPLE ROW
+            # --------------------------------------------------
             sample_row = [
-                "2025-2026",
-                "Main Branch",
                 "Grade 1",
                 "A",
                 "CBSE",
@@ -2309,23 +2771,131 @@ class DownloadStudentTemplateAPIView(APIView):
                 "ABC School",
                 "TC123",
                 92.5,
-                True,
-                "Miyapur",
-                "DAY_SCHOLAR",
+                "",
             ]
 
             for column_number, value in enumerate(sample_row, start=1):
-                sheet.cell(row=2, column=column_number, value=value)
+                sheet.cell(
+                    row=2,
+                    column=column_number,
+                    value=value
+                )
 
+            # Header styling
+            for cell in sheet[1]:
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill(
+                    start_color="366092",
+                    end_color="366092",
+                    fill_type="solid"
+                )
+                cell.alignment = Alignment(horizontal="center")
+
+            # Column widths
+            for column in sheet.columns:
+                max_length = max(
+                    len(str(cell.value or ""))
+                    for cell in column
+                )
+
+                sheet.column_dimensions[
+                    column[0].column_letter
+                ].width = max_length + 5
+
+            # Mobile and Aadhaar fields as text
+            for cell_reference in [
+                "O2", "X2", "Z2", "AC2", "AF2"
+            ]:
+                sheet[cell_reference].number_format = "@"
+
+            # --------------------------------------------------
+            # INSTRUCTIONS SHEET
+            # --------------------------------------------------
+            instruction_sheet = workbook.create_sheet("Instructions")
+
+            instructions = [
+                [
+                    "Field",
+                    "Type",
+                    "Required",
+                    "Max Length",
+                    "Allowed Values / Instructions"
+                ],
+                ["Grade", "String", "Yes", "-", "Enter an existing grade name"],
+                ["Section", "String", "Yes", "-", "Enter an existing section name under the selected grade"],
+                ["Board", "Choice", "Yes", "20", "STATE, CBSE, ICSE, IB, IGCSE, NIOS, OTHER"],
+                ["Admission Number", "String", "Yes", "50", "Must be unique within the school"],
+                ["Roll Number", "Integer", "Yes", "-", "Must be a positive integer and unique within the section"],
+                ["Name", "String", "Yes", "100", "Student full name"],
+                ["Gender", "Choice", "Yes", "20", "MALE, FEMALE, OTHER"],
+                ["Date Of Birth", "Date", "Yes", "-", "Format: YYYY-MM-DD"],
+                ["Admission Date", "Date", "Yes", "-", "Format: YYYY-MM-DD"],
+                ["Enrollment Type", "Choice", "Yes", "20", "NEW, TRANSFER, RE_ADMISSION"],
+                ["Place Of Birth", "String", "No", "100", "Place of birth"],
+                ["Blood Group", "String", "No", "10", "Example: O+, A+, B-"],
+                ["Nationality", "String", "No", "100", "Defaults to Indian if not provided"],
+                ["Mother Tongue", "String", "No", "100", "Mother tongue"],
+                ["Aadhaar Number", "String", "No", "12", "Enter 12 digits"],
+                ["Religion", "String", "No", "100", "Religion"],
+                ["Caste", "String", "No", "100", "Caste"],
+                ["Sub Caste", "String", "No", "100", "Sub caste"],
+                ["Student Category", "String", "No", "100", "Student category"],
+                ["Identification Marks", "Text", "No", "-", "Student identification marks"],
+                ["Email", "Email", "No", "-", "Enter a valid email address"],
+                ["Address", "Text", "No", "-", "Student address"],
+                ["Emergency Contact Name", "String", "No", "100", "Emergency contact name"],
+                ["Emergency Contact Mobile", "String", "No", "20", "Emergency contact mobile"],
+                ["Father Name", "String", "No", "100", "Father name"],
+                ["Father Mobile", "String", "No", "20", "Father mobile"],
+                ["Father Occupation", "String", "No", "100", "Father occupation"],
+                ["Mother Name", "String", "No", "100", "Mother name"],
+                ["Mother Mobile", "String", "No", "20", "Mother mobile"],
+                ["Mother Occupation", "String", "No", "100", "Mother occupation"],
+                ["Guardian Name", "String", "No", "100", "Guardian name"],
+                ["Guardian Mobile", "String", "No", "20", "Guardian mobile"],
+                ["Guardian Occupation", "String", "No", "100", "Guardian occupation"],
+                ["Previous School", "String", "No", "255", "Previous school name"],
+                ["Previous School TC Number", "String", "No", "100", "Transfer certificate number"],
+                ["Previous Exam Percentage", "Decimal", "No", "-", "Example: 92.50"],
+                ["Fee Concession", "Decimal", "No", "-", "Enter concession amount"],
+            ]
+
+            for row in instructions:
+                instruction_sheet.append(row)
+
+            for cell in instruction_sheet[1]:
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill(
+                    start_color="366092",
+                    end_color="366092",
+                    fill_type="solid"
+                )
+
+            for column in instruction_sheet.columns:
+                max_length = max(
+                    len(str(cell.value or ""))
+                    for cell in column
+                )
+
+                instruction_sheet.column_dimensions[
+                    column[0].column_letter
+                ].width = min(max_length + 5, 65)
+
+            # --------------------------------------------------
+            # SAVE EXCEL FILE
+            # --------------------------------------------------
             excel_file = BytesIO()
             workbook.save(excel_file)
             excel_file.seek(0)
 
             file_name = "templates/student_template.xlsx"
 
+            if default_storage.exists(file_name):
+                default_storage.delete(file_name)
+
             file_path = default_storage.save(
                 file_name,
-                ContentFile(excel_file.getvalue()),
+                ContentFile(excel_file.getvalue())
             )
 
             file_url = settings.MEDIA_URL + file_path
@@ -2360,6 +2930,8 @@ class DownloadStudentTemplateAPIView(APIView):
                 "file_path": file_path,
             },
         )
+
+
 
 class StudentListAPIView(APIView):
 
@@ -3753,7 +4325,6 @@ class DownloadStaffTemplateAPIView(APIView):
                 ["address", "String", "No", "-", "Staff address"],
                 ["emergency_contact_name", "String", "No", "255", "Emergency contact name"],
                 ["emergency_contact_mobile", "String", "No", "15", "Emergency contact mobile number"],
-                ["branch_id", "Query Parameter", "No", "-", "Pass branch_id in the API query parameters. Do not add it to Excel."],
                 ["status", "Fixed Value", "-", "-", "All uploaded staff will be created with ACTIVE status."],
             ]
 
