@@ -4,7 +4,7 @@ name: Production
 on:
   push:
     branches:
-      - production
+      - main
     paths-ignore:
       - "postman/**"
       - "docs/**"
@@ -30,18 +30,32 @@ jobs:
           ssh ${{ secrets.PRODUCTION_EC2_USER }}@${{ secrets.PRODUCTION_EC2_HOST }} << 'EOF'
             set -e
 
-            cd schoolfirst-erp-backend
+            cd ~/schoolfirst-erp-backend
 
-            git checkout production
-            git pull origin production
+            # Update production code
+            git fetch origin
+            git checkout main
+            git pull --ff-only origin main
 
-            docker network create schoolfirst-erp-network || true
+            # Build production Docker image
+            docker buildx build \
+              --platform linux/arm64 \
+              -t schoolfirst-erp-backend:main-latest \
+              --load .
 
-            docker compose \
-              -f ./deploy/compose/docker-compose.yaml \
-              --env-file .env.docker \
-              up -d --build --remove-orphans postgres backend
+            # Stop and remove existing ERP backend container
+            docker stop schoolfirst-erp-backend || true
+            docker rm schoolfirst-erp-backend || true
 
-            # Clean up dangling images
+            # Start updated ERP backend
+            docker run -d \
+              --name schoolfirst-erp-backend \
+              --restart always \
+              --env-file .env \
+              -p 8000:8000 \
+              schoolfirst-erp-backend:main-latest
+
+            # Remove dangling images
             docker image prune -f
+
           EOF
