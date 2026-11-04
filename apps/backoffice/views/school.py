@@ -3793,7 +3793,7 @@ class DownloadStaffTemplateAPIView(APIView):
                 ContentFile(file_buffer.getvalue())
             )
 
-            file_url = default_storage.url(saved_path)
+            file_url = settings.MEDIA_URL + file_path
 
             return CustomResponse.successResponse(
                 message="Staff template downloaded successfully",
