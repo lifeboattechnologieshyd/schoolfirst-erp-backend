@@ -1,8 +1,14 @@
+import uuid
 from decimal import Decimal, InvalidOperation
 
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from datetime import datetime, date
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
+
+
+from django.core.validators import validate_email
 from django.db.models import Q, Prefetch, Count
 from apps.core.models import Roles, UserMaster, UserRoles
 from apps.fee.models import FeeTemplate, StudentFeeAssignment, FeeConcession
@@ -3651,40 +3657,27 @@ class CreateStaffAPIView(APIView):
         )
 
 
-class StaffBulkUploadTemplateAPIView(APIView):
-
-    permission_classes = [IsAuthenticated, HasPermission]
-    required_permission = "staff.bulk_upload"
+class DownloadStaffTemplateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
-
-        school = request.school
-
-        application_logger.info(
-            "staff_template_download_started",
-            requested_by=str(request.user.id),
-            school_id=str(school.id) if school else None,
-        )
-
-        if school is None:
-            return CustomResponse.errorResponse(
-                description="School not found."
-            )
-
         try:
             workbook = Workbook()
+
+            # --------------------------------------------------
+            # STAFF SHEET
+            # --------------------------------------------------
             sheet = workbook.active
             sheet.title = "Staff"
 
-            # -------------------------------------------------
-            # EXCEL HEADERS
-            # Choice fields and branch are passed through params
-            # -------------------------------------------------
             headers = [
                 "employee_id",
+                "staff_type",
                 "name",
+                "gender",
                 "mobile",
                 "joining_date",
+                "department",
                 "email",
                 "date_of_birth",
                 "qualification",
@@ -3694,24 +3687,17 @@ class StaffBulkUploadTemplateAPIView(APIView):
                 "emergency_contact_mobile",
             ]
 
-            for column_number, header in enumerate(
-                headers,
-                start=1,
-            ):
-                sheet.cell(
-                    row=1,
-                    column=column_number,
-                    value=header,
-                )
+            sheet.append(headers)
 
-            # -------------------------------------------------
-            # SAMPLE ROW
-            # -------------------------------------------------
-            sample_row = [
+            # Sample row
+            sample_data = [
                 "EMP001",
+                "TEACHER",
                 "Rahul Kumar",
+                "MALE",
                 "9876543210",
                 "2025-06-01",
+                "ACADEMICS",
                 "rahul@gmail.com",
                 "1995-05-10",
                 "M.Sc B.Ed",
@@ -3721,215 +3707,124 @@ class StaffBulkUploadTemplateAPIView(APIView):
                 "9876543211",
             ]
 
-            for column_number, value in enumerate(
-                sample_row,
-                start=1,
-            ):
-                sheet.cell(
-                    row=2,
-                    column=column_number,
-                    value=value,
+            sheet.append(sample_data)
+
+            # Header styling
+            for cell in sheet[1]:
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill(
+                    start_color="366092",
+                    end_color="366092",
+                    fill_type="solid"
                 )
+                cell.alignment = Alignment(horizontal="center")
 
-            # -------------------------------------------------
-            # COLUMN WIDTHS
-            # -------------------------------------------------
+            # Column widths
             for column in sheet.columns:
-                column_letter = column[0].column_letter
+                max_length = max(
+                    len(str(cell.value or "")) for cell in column
+                )
                 sheet.column_dimensions[
-                    column_letter
-                ].width = 25
+                    column[0].column_letter
+                ].width = max_length + 5
 
-            # Mobile columns as text
-            sheet["C2"].number_format = "@"
-            sheet["K2"].number_format = "@"
+            # Keep mobile numbers as text
+            sheet["E2"].number_format = "@"
+            sheet["N2"].number_format = "@"
 
-            # -------------------------------------------------
+            # --------------------------------------------------
             # INSTRUCTIONS SHEET
-            # -------------------------------------------------
-            instructions = workbook.create_sheet(
-                "Instructions"
-            )
+            # --------------------------------------------------
+            instruction_sheet = workbook.create_sheet("Instructions")
 
-            instruction_rows = [
-                [
-                    "Field",
-                    "Field Type",
-                    "Required",
-                    "Max Length",
-                    "Instructions",
-                ],
-                [
-                    "employee_id",
-                    "CharField",
-                    "Yes",
-                    50,
-                    "Unique employee ID within the school.",
-                ],
-                [
-                    "name",
-                    "CharField",
-                    "Yes",
-                    255,
-                    "Enter staff full name.",
-                ],
-                [
-                    "mobile",
-                    "CharField",
-                    "Yes",
-                    15,
-                    "Enter a valid 10-digit mobile number.",
-                ],
-                [
-                    "joining_date",
-                    "DateField",
-                    "Yes",
-                    "-",
-                    "Use YYYY-MM-DD format.",
-                ],
-                [
-                    "email",
-                    "CharField",
-                    "No",
-                    254,
-                    "Must be unique within the school.",
-                ],
-                [
-                    "date_of_birth",
-                    "DateField",
-                    "No",
-                    "-",
-                    "Use YYYY-MM-DD format.",
-                ],
-                [
-                    "qualification",
-                    "CharField",
-                    "No",
-                    255,
-                    "Enter staff qualification.",
-                ],
-                [
-                    "experience",
-                    "DecimalField",
-                    "No",
-                    "5 digits, 1 decimal place",
-                    "Enter a non-negative number. Example: 5.0",
-                ],
-                [
-                    "address",
-                    "CharField",
-                    "No",
-                    "No fixed limit",
-                    "Enter staff address.",
-                ],
-                [
-                    "emergency_contact_name",
-                    "CharField",
-                    "No",
-                    255,
-                    "Enter emergency contact name.",
-                ],
-                [
-                    "emergency_contact_mobile",
-                    "CharField",
-                    "No",
-                    15,
-                    "Enter emergency contact mobile number.",
-                ],
-
-
-
-
-
+            instructions = [
+                ["Field", "Type", "Required", "Max Length", "Allowed Values / Instructions"],
+                ["employee_id", "String", "Yes", "50", "Unique employee ID within the school"],
+                ["staff_type", "Choice", "Yes", "30", "TEACHER, DRIVER, BUS_ATTENDANT, PRINCIPAL, ADMIN"],
+                ["name", "String", "Yes", "255", "Staff full name"],
+                ["gender", "Choice", "Yes", "10", "MALE, FEMALE, OTHER"],
+                ["mobile", "String", "Yes", "15", "Enter a valid 10-digit mobile number"],
+                ["joining_date", "Date", "-", "-", "Format: YYYY-MM-DD"],
+                ["department", "Choice", "Yes", "30", "ACADEMICS, ADMINISTRATION, ACCOUNTS, TRANSPORT, HUMAN_RESOURCES, IT, LIBRARY, SECURITY, MAINTENANCE"],
+                ["email", "Email", "No", "-", "Valid email address"],
+                ["date_of_birth", "Date", "No", "-", "Format: YYYY-MM-DD"],
+                ["qualification", "String", "No", "255", "Staff qualification"],
+                ["experience", "Decimal", "No", "-", "Example: 5.0"],
+                ["address", "String", "No", "-", "Staff address"],
+                ["emergency_contact_name", "String", "No", "255", "Emergency contact name"],
+                ["emergency_contact_mobile", "String", "No", "15", "Emergency contact mobile number"],
+                ["branch_id", "Query Parameter", "No", "-", "Pass branch_id in the API query parameters. Do not add it to Excel."],
+                ["status", "Fixed Value", "-", "-", "All uploaded staff will be created with ACTIVE status."],
             ]
 
-            for row in instruction_rows:
-                instructions.append(row)
+            for row in instructions:
+                instruction_sheet.append(row)
 
-            # -------------------------------------------------
-            # INSTRUCTIONS STYLING
-            # -------------------------------------------------
-            for cell in instructions[1]:
-                cell.font = Font(
-                    bold=True,
-                    color="FFFFFF",
-                )
+            for cell in instruction_sheet[1]:
+                cell.font = Font(bold=True, color="FFFFFF")
                 cell.fill = PatternFill(
-                    start_color="1F4E78",
-                    end_color="1F4E78",
-                    fill_type="solid",
-                )
-                cell.alignment = Alignment(
-                    horizontal="center"
+                    start_color="366092",
+                    end_color="366092",
+                    fill_type="solid"
                 )
 
-            instructions.column_dimensions["A"].width = 30
-            instructions.column_dimensions["B"].width = 20
-            instructions.column_dimensions["C"].width = 15
-            instructions.column_dimensions["D"].width = 25
-            instructions.column_dimensions["E"].width = 75
+            for column in instruction_sheet.columns:
+                max_length = max(
+                    len(str(cell.value or "")) for cell in column
+                )
+                instruction_sheet.column_dimensions[
+                    column[0].column_letter
+                ].width = min(max_length + 5, 60)
 
-            # -------------------------------------------------
-            # SAVE EXCEL FILE
-            # -------------------------------------------------
-            excel_file = BytesIO()
-            workbook.save(excel_file)
-            excel_file.seek(0)
+            # --------------------------------------------------
+            # SAVE FILE
+            # --------------------------------------------------
+            file_buffer = BytesIO()
+            workbook.save(file_buffer)
+            file_buffer.seek(0)
 
-            file_name = "templates/staff_template.xlsx"
+            file_path = "templates/staff_template.xlsx"
 
-            file_path = default_storage.save(
-                file_name,
-                ContentFile(excel_file.getvalue()),
+            if default_storage.exists(file_path):
+                default_storage.delete(file_path)
+
+            saved_path = default_storage.save(
+                file_path,
+                ContentFile(file_buffer.getvalue())
             )
 
-            file_url = settings.MEDIA_URL + file_path
+            file_url = default_storage.url(saved_path)
+
+            return CustomResponse.successResponse(
+                message="Staff template downloaded successfully",
+                data={
+                    "file_url": file_url,
+                    "file_path": saved_path,
+                }
+            )
 
         except Exception as e:
-
             application_logger.exception(
-                "staff_template_download_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                error=str(e),
+                f"Staff template download failed: {str(e)}"
             )
-
             return CustomResponse.errorResponse(
-                description="Failed to generate staff template."
+                message="Unable to generate staff template",
+                data={"error": str(e)}
             )
-
-        application_logger.info(
-            "staff_template_generated",
-            requested_by=str(request.user.id),
-            school_id=str(school.id),
-            file_path=file_path,
-            file_url=file_url,
-            total_columns=len(headers),
-        )
-
-        return CustomResponse.successResponse(
-            description="Staff template generated successfully.",
-            data={
-                "file_url": file_url,
-                "file_path": file_path,
-            },
-        )
 
 
 class BulkUploadStaffAPIView(APIView):
-
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "staff.bulk_upload"
 
     parser_classes = [MultiPartParser, FormParser]
 
-    # ---------------------------------------------------------
-    # DATE CONVERSION
-    # ---------------------------------------------------------
-    @staticmethod
-    def parse_date(value):
+    # --------------------------------------------------
+    # HELPER FUNCTIONS
+    # --------------------------------------------------
 
-        if value is None or str(value).strip() == "":
+    def parse_date(self, value):
+        if not value:
             return None
 
         if isinstance(value, datetime):
@@ -3938,297 +3833,244 @@ class BulkUploadStaffAPIView(APIView):
         if isinstance(value, date):
             return value
 
-        try:
-            return datetime.strptime(
-                str(value).strip(),
-                "%Y-%m-%d",
-            ).date()
+        return datetime.strptime(
+            str(value).strip(),
+            "%Y-%m-%d"
+        ).date()
 
-        except ValueError:
-            raise ValueError(
-                "Invalid date format. Use YYYY-MM-DD."
-            )
 
-    # ---------------------------------------------------------
-    # MOBILE CONVERSION
-    # ---------------------------------------------------------
-    @staticmethod
-    def parse_mobile(value):
 
+
+    def parse_mobile(self, value):
         if value is None:
             return ""
 
         if isinstance(value, float) and value.is_integer():
-            return str(int(value))
+            value = int(value)
 
         return str(value).strip()
 
-    # ---------------------------------------------------------
-    # POST
-    # ---------------------------------------------------------
-    def post(self, request):
-
-        school = request.school
-        file = request.FILES.get("file")
-
-        # -----------------------------------------------------
-        # VALIDATE SCHOOL
-        # -----------------------------------------------------
-        if school is None:
-            return CustomResponse.errorResponse(
-                description="School not found."
-            )
-
-        # -----------------------------------------------------
-        # GET QUERY PARAMETERS
-        # -----------------------------------------------------
-        branch_id = request.query_params.get("branch_id")
-
-        staff_type = request.query_params.get("staff_type")
-        gender = request.query_params.get("gender")
-        department = request.query_params.get("department")
-
-        status = request.query_params.get("status",Staff.Status.ACTIVE,)
-
-        application_logger.info(
-            "staff_bulk_upload_requested",
-            requested_by=str(request.user.id),
-            school_id=str(school.id),
-            file_name=file.name if file else None,
-            branch_id=branch_id,
-            staff_type=staff_type,
-            gender=gender,
-            department=department,
-            status=status,
-        )
-
-        # -----------------------------------------------------
-        # VALIDATE FILE
-        # -----------------------------------------------------
-        if not file:
-            return CustomResponse.errorResponse(
-                description="Please upload an Excel file."
-            )
-
-        if not file.name.lower().endswith(".xlsx"):
-            return CustomResponse.errorResponse(
-                description="Only .xlsx files are supported."
-            )
-
-        # -----------------------------------------------------
-        # VALIDATE STAFF TYPE
-        # -----------------------------------------------------
-        if staff_type not in Staff.StaffType.values:
-            return CustomResponse.errorResponse(
-                description="Invalid staff type."
-            )
-
-        # -----------------------------------------------------
-        # VALIDATE GENDER
-        # -----------------------------------------------------
-        if gender not in Staff.Gender.values:
-            return CustomResponse.errorResponse(
-                description="Invalid gender."
-            )
-
-        # -----------------------------------------------------
-        # VALIDATE DEPARTMENT
-        # -----------------------------------------------------
-        if department not in Staff.Department.values:
-            return CustomResponse.errorResponse(
-                description="Invalid department."
-            )
-
-        # -----------------------------------------------------
-        # VALIDATE STATUS
-        # -----------------------------------------------------
-        if status not in Staff.Status.values:
-            return CustomResponse.errorResponse(
-                description="Invalid staff status."
-            )
-
-        # -----------------------------------------------------
-        # VALIDATE BRANCH
-        # -----------------------------------------------------
-        branch = None
-
-        if branch_id:
-
-            branch = Branch.objects.filter(
-                id=branch_id,
-                school=school,
-            ).first()
-
-            if branch is None:
-                return CustomResponse.errorResponse(
-                    description="Invalid branch ID."
-                )
-
-        # -----------------------------------------------------
-        # VALIDATE ROLE CONFIGURATION
-        # -----------------------------------------------------
-        role = Roles.objects.filter(
-            role_name=staff_type
-        ).first()
-
-        if role is None:
-            return CustomResponse.errorResponse(
-                description=f"{staff_type.title()} role not configured."
-            )
-
-        # -----------------------------------------------------
-        # INITIALIZE COUNTERS
-        # -----------------------------------------------------
-        success_count = 0
-        failed_count = 0
-        errors = []
-
-        uploaded_employee_ids = set()
-        uploaded_mobiles = set()
-        uploaded_emails = set()
-
-        # -----------------------------------------------------
-        # EXPECTED EXCEL HEADERS
-        # -----------------------------------------------------
-        required_headers = [
-            "employee_id",
-            "name",
-            "mobile",
-            "joining_date",
-        ]
+    def parse_experience(self, value):
+        if value in (None, ""):
+            return Decimal("0.0")
 
         try:
+            experience = Decimal(str(value).strip())
 
-            # -------------------------------------------------
-            # READ EXCEL
-            # -------------------------------------------------
+            if experience < 0:
+                raise ValueError("Experience cannot be negative")
+
+            if experience.as_tuple().exponent < -1:
+                raise ValueError(
+                    "Experience can have maximum one decimal place"
+                )
+
+            if experience > Decimal("9999.9"):
+                raise ValueError("Experience exceeds maximum allowed value")
+
+            return experience
+
+        except InvalidOperation:
+            raise ValueError("Invalid experience value")
+
+    # --------------------------------------------------
+    # POST - BULK UPLOAD
+    # --------------------------------------------------
+
+    def post(self, request):
+        try:
+            school = request.user.school
+
+            # --------------------------------------------------
+            # QUERY PARAMETERS
+            # --------------------------------------------------
+            branch_id = request.query_params.get("branch_id")
+
+            branch = None
+
+            def is_valid_uuid(value):
+                try:
+                    uuid.UUID(str(value))
+                    return True
+                except (ValueError, TypeError, AttributeError):
+                    return False
+
+            if branch_id:
+                if not is_valid_uuid(branch_id):
+                    return CustomResponse.errorResponse(
+                        message="Invalid branch_id"
+                    )
+
+                branch = Branch.objects.filter(
+                    id=branch_id,
+                    school=school
+                ).first()
+
+                if not branch:
+                    return CustomResponse.errorResponse(
+                        message="Branch not found"
+                    )
+
+            # Status is always ACTIVE
+            status = Staff.Status.ACTIVE
+
+            # --------------------------------------------------
+            # FILE VALIDATION
+            # --------------------------------------------------
+            excel_file = request.FILES.get("file")
+
+            if not excel_file:
+                return CustomResponse.errorResponse(
+                    message="Please upload an Excel file"
+                )
+
+            if not excel_file.name.lower().endswith(".xlsx"):
+                return CustomResponse.errorResponse(
+                    message="Only .xlsx files are supported"
+                )
+
             workbook = load_workbook(
-                filename=BytesIO(file.read()),
-                data_only=True,
+                excel_file,
+                data_only=True
             )
 
             if "Staff" not in workbook.sheetnames:
                 return CustomResponse.errorResponse(
-                    description="Excel sheet 'Staff' not found."
+                    message="Staff sheet not found in Excel file"
                 )
 
-            worksheet = workbook["Staff"]
+            sheet = workbook["Staff"]
 
+            # --------------------------------------------------
+            # READ HEADERS
+            # --------------------------------------------------
             headers = [
                 str(cell.value).strip().lower()
-                if cell.value is not None
-                else ""
-                for cell in worksheet[1]
+                if cell.value is not None else ""
+                for cell in sheet[1]
             ]
 
-            # Remove trailing empty header cells
-            while headers and not headers[-1]:
+            while headers and headers[-1] == "":
                 headers.pop()
 
             if not headers:
                 return CustomResponse.errorResponse(
-                    description="Excel headers are missing."
+                    message="Excel file has no headers"
                 )
 
             if len(headers) != len(set(headers)):
                 return CustomResponse.errorResponse(
-                    description="Duplicate column headers found in Excel."
+                    message="Duplicate column headers found"
                 )
 
+            required_headers = [
+                "employee_id",
+                "staff_type",
+                "name",
+                "gender",
+                "mobile",
+                "joining_date",
+                "department",
+            ]
+
             missing_headers = [
-                header
-                for header in required_headers
-                if header not in headers
+                field for field in required_headers
+                if field not in headers
             ]
 
             if missing_headers:
                 return CustomResponse.errorResponse(
-                    description=(
-                        "Missing required Excel columns: "
-                        + ", ".join(missing_headers)
-                    )
+                    message="Missing required columns",
+                    data={"missing_headers": missing_headers}
                 )
 
-            # Choice fields must not be in Excel
-            choice_fields = {
-                "staff_type",
-                "gender",
-                "department",
-                "status",
-                "branch_id",
-            }
-
-            invalid_columns = [
-                header
-                for header in headers
-                if header in choice_fields
-            ]
-
-            if invalid_columns:
+            # branch_id and status must not be in Excel
+            if "branch_id" in headers or "status" in headers:
                 return CustomResponse.errorResponse(
-                    description=(
-                        "Remove these fields from Excel. "
-                        "They must be sent as query parameters: "
-                        + ", ".join(invalid_columns)
-                    )
+                    message="Do not include branch_id or status in Excel. "
+                            "Pass branch_id through query parameters. "
+                            "Status will always be ACTIVE."
                 )
 
-            header_indexes = {
-                header: index
-                for index, header in enumerate(headers)
-            }
+            # --------------------------------------------------
+            # COUNTERS
+            # --------------------------------------------------
+            created_count = 0
+            failed_count = 0
+            errors = []
 
-            # -------------------------------------------------
-            # PROCESS EACH ROW
-            # -------------------------------------------------
+            uploaded_employee_ids = set()
+            uploaded_mobiles = set()
+            uploaded_emails = set()
+
+            # --------------------------------------------------
+            # CHOICE VALUES
+            # --------------------------------------------------
+            valid_staff_types = set(Staff.StaffType.values)
+            valid_genders = set(Staff.Gender.values)
+            valid_departments = set(Staff.Department.values)
+
+            # --------------------------------------------------
+            # PROCESS ROWS
+            # --------------------------------------------------
             for row_number, row in enumerate(
-                worksheet.iter_rows(
-                    min_row=2,
-                    values_only=True,
-                ),
-                start=2,
+                sheet.iter_rows(min_row=2, values_only=True),
+                start=2
             ):
-
-                # Skip empty rows
-                if not any(
-                    value is not None and str(value).strip()
-                    for value in row
-                ):
+                if not any(value is not None for value in row):
                     continue
 
-                data = {
-                    header: (
-                        row[index]
-                        if index < len(row)
-                        else None
-                    )
-                    for header, index in header_indexes.items()
-                }
-
-                employee_id = str(
-                    data.get("employee_id") or ""
-                ).strip()
-
                 try:
+                    data = dict(
+                        zip(headers, row)
+                    )
 
-                    # -----------------------------------------
-                    # READ VALUES
-                    # -----------------------------------------
+                    # ------------------------------------------
+                    # BASIC FIELD EXTRACTION
+                    # ------------------------------------------
+                    employee_id = str(
+                        data.get("employee_id") or ""
+                    ).strip()
+
+                    staff_type = str(
+                        data.get("staff_type") or ""
+                    ).strip().upper()
+
                     name = str(
                         data.get("name") or ""
                     ).strip()
+
+                    gender = str(
+                        data.get("gender") or ""
+                    ).strip().upper()
 
                     mobile = self.parse_mobile(
                         data.get("mobile")
                     )
 
+                    joining_date = self.parse_date(
+                        data.get("joining_date")
+                    )
+
+                    department = str(
+                        data.get("department") or ""
+                    ).strip().upper()
+
                     email = str(
                         data.get("email") or ""
                     ).strip().lower() or None
 
+                    date_of_birth = self.parse_date(
+                        data.get("date_of_birth")
+                    )
+
                     qualification = str(
                         data.get("qualification") or ""
                     ).strip() or None
+
+                    experience = self.parse_experience(
+                        data.get("experience")
+                    )
 
                     address = str(
                         data.get("address") or ""
@@ -4238,71 +4080,77 @@ class BulkUploadStaffAPIView(APIView):
                         data.get("emergency_contact_name") or ""
                     ).strip() or None
 
-                    emergency_contact_mobile = (
-                        self.parse_mobile(
-                            data.get("emergency_contact_mobile")
-                        ) or None
-                    )
+                    emergency_contact_mobile = self.parse_mobile(
+                        data.get("emergency_contact_mobile")
+                    ) or None
 
-                    # -----------------------------------------
+                    # ------------------------------------------
                     # REQUIRED FIELD VALIDATION
-                    # -----------------------------------------
-                    required_values = {
-                        "employee_id": employee_id,
-                        "name": name,
-                        "mobile": mobile,
-                        "joining_date": data.get("joining_date"),
-                    }
+                    # ------------------------------------------
+                    if not employee_id:
+                        raise ValueError("Employee ID is required")
 
-                    for field, value in required_values.items():
+                    if not staff_type:
+                        raise ValueError("Staff type is required")
 
-                        if value is None or str(value).strip() == "":
-                            raise ValueError(
-                                f"{field} is required."
-                            )
+                    if not name:
+                        raise ValueError("Name is required")
 
-                    # -----------------------------------------
+                    if not gender:
+                        raise ValueError("Gender is required")
+
+                    if not mobile:
+                        raise ValueError("Mobile number is required")
+
+                    if not joining_date:
+                        raise ValueError("Joining date is required")
+
+                    if not department:
+                        raise ValueError("Department is required")
+
+                    # ------------------------------------------
                     # MAX LENGTH VALIDATION
-                    # -----------------------------------------
-                    max_lengths = {
-                        "employee_id": 50,
-                        "name": 255,
-                        "mobile": 15,
-                        "qualification": 255,
-                        "emergency_contact_name": 255,
-                        "emergency_contact_mobile": 15,
-                    }
-
-                    values_to_check = {
-                        "employee_id": employee_id,
-                        "name": name,
-                        "mobile": mobile,
-                        "qualification": qualification,
-                        "emergency_contact_name": emergency_contact_name,
-                        "emergency_contact_mobile": emergency_contact_mobile,
-                    }
-
-                    for field, max_length in max_lengths.items():
-
-                        value = values_to_check.get(field)
-
-                        if value and len(value) > max_length:
-                            raise ValueError(
-                                f"{field} cannot exceed "
-                                f"{max_length} characters."
-                            )
-
-                    if address and len(address) > 100000:
+                    # ------------------------------------------
+                    if len(employee_id) > 50:
                         raise ValueError(
-                            "Address is too long."
+                            "Employee ID maximum length is 50"
                         )
 
-                    # -----------------------------------------
+                    if len(name) > 255:
+                        raise ValueError(
+                            "Name maximum length is 255"
+                        )
+
+                    if len(mobile) > 15:
+                        raise ValueError(
+                            "Mobile maximum length is 15"
+                        )
+
+                    if qualification and len(qualification) > 255:
+                        raise ValueError(
+                            "Qualification maximum length is 255"
+                        )
+
+                    if emergency_contact_name and len(
+                        emergency_contact_name
+                    ) > 255:
+                        raise ValueError(
+                            "Emergency contact name maximum length is 255"
+                        )
+
+                    if emergency_contact_mobile and len(
+                        emergency_contact_mobile
+                    ) > 15:
+                        raise ValueError(
+                            "Emergency contact mobile maximum length is 15"
+                        )
+
+                    # ------------------------------------------
                     # MOBILE VALIDATION
-                    # -----------------------------------------
+                    # ------------------------------------------
                     if not mobile.isdigit() or len(mobile) != 10:
                         raise ValueError(
-                            "Enter a valid 10-digit mobile number."
+                            "Mobile number must contain exactly 10 digits"
                         )
 
                     if emergency_contact_mobile:
@@ -4311,278 +4159,211 @@ class BulkUploadStaffAPIView(APIView):
                             or len(emergency_contact_mobile) != 10
                         ):
                             raise ValueError(
-                                "Enter a valid emergency contact mobile number."
+                                "Emergency contact mobile must contain "
+                                "exactly 10 digits"
                             )
 
-                    # -----------------------------------------
+                    # ------------------------------------------
+                    # CHOICE VALIDATION
+                    # ------------------------------------------
+                    if staff_type not in valid_staff_types:
+                        raise ValueError(
+                            f"Invalid staff_type '{staff_type}'. "
+                            f"Allowed values: {', '.join(valid_staff_types)}"
+                        )
+
+                    if gender not in valid_genders:
+                        raise ValueError(
+                            f"Invalid gender '{gender}'. "
+                            f"Allowed values: {', '.join(valid_genders)}"
+                        )
+
+                    if department not in valid_departments:
+                        raise ValueError(
+                            f"Invalid department '{department}'. "
+                            f"Allowed values: {', '.join(valid_departments)}"
+                        )
+
+                    # ------------------------------------------
                     # EMAIL VALIDATION
-                    # -----------------------------------------
+                    # ------------------------------------------
                     if email:
-                        if len(email) > 254 or "@" not in email:
-                            raise ValueError(
-                                "Enter a valid email address."
-                            )
-
-                    # -----------------------------------------
-                    # DATE VALIDATION
-                    # -----------------------------------------
-                    joining_date = self.parse_date(
-                        data.get("joining_date")
-                    )
-
-                    date_of_birth = self.parse_date(
-                        data.get("date_of_birth")
-                    )
-
-                    # -----------------------------------------
-                    # EXPERIENCE VALIDATION
-                    # DecimalField(max_digits=5, decimal_places=1)
-                    # -----------------------------------------
-                    experience_value = data.get("experience")
-
-                    if experience_value in (None, ""):
-                        experience = Decimal("0.0")
-                    else:
                         try:
-                            experience = Decimal(
-                                str(experience_value)
-                            )
-                        except (InvalidOperation, ValueError):
-                            raise ValueError(
-                                "Experience must be a valid number."
-                            )
+                            validate_email(email)
+                        except ValidationError:
+                            raise ValueError("Invalid email address")
 
-                    if not experience.is_finite() or experience < 0:
-                        raise ValueError(
-                            "Experience must be a non-negative number."
-                        )
-
-                    if (
-                        experience.as_tuple().exponent < -1
-                        or experience >= Decimal("10000")
-                    ):
-                        raise ValueError(
-                            "Experience supports maximum 5 digits "
-                            "with 1 decimal place."
-                        )
-
-                    # -----------------------------------------
-                    # CHECK DUPLICATES IN EXCEL
-                    # -----------------------------------------
+                    # ------------------------------------------
+                    # DUPLICATE CHECKS WITHIN EXCEL
+                    # ------------------------------------------
                     if employee_id in uploaded_employee_ids:
                         raise ValueError(
-                            "Duplicate employee ID in uploaded file."
+                            f"Duplicate employee_id '{employee_id}' "
+                            "in Excel file"
                         )
 
                     if mobile in uploaded_mobiles:
                         raise ValueError(
-                            "Duplicate mobile number in uploaded file."
+                            f"Duplicate mobile '{mobile}' in Excel file"
                         )
 
                     if email and email in uploaded_emails:
                         raise ValueError(
-                            "Duplicate email in uploaded file."
+                            f"Duplicate email '{email}' in Excel file"
                         )
 
-                    # -----------------------------------------
-                    # CHECK EMPLOYEE ID IN DATABASE
-                    # -----------------------------------------
+                    # ------------------------------------------
+                    # DUPLICATE CHECKS IN DATABASE
+                    # ------------------------------------------
                     if Staff.objects.filter(
                         school=school,
-                        employee_id=employee_id,
+                        employee_id=employee_id
                     ).exists():
                         raise ValueError(
-                            f"Employee ID {employee_id} already exists."
+                            f"Employee ID '{employee_id}' already exists"
                         )
 
-                    # -----------------------------------------
-                    # CHECK MOBILE IN DATABASE
-                    # -----------------------------------------
                     if Staff.objects.filter(
                         school=school,
-                        mobile=mobile,
+                        mobile=mobile
                     ).exists():
                         raise ValueError(
-                            f"Mobile number {mobile} already exists."
+                            f"Mobile '{mobile}' already exists"
                         )
 
-                    # -----------------------------------------
-                    # CHECK EMAIL IN DATABASE
-                    # -----------------------------------------
                     if email and Staff.objects.filter(
                         school=school,
-                        email__iexact=email,
+                        email=email
                     ).exists():
                         raise ValueError(
-                            f"Email {email} already exists."
+                            f"Email '{email}' already exists"
                         )
 
-                    # -----------------------------------------
+                    # ------------------------------------------
+                    # ROLE VALIDATION
+                    # ------------------------------------------
+                    role = Roles.objects.filter(
+                        role_name=staff_type
+                    ).first()
+
+                    if not role:
+                        raise ValueError(
+                            f"Role not configured for staff type '{staff_type}'"
+                        )
+
+                    # ------------------------------------------
                     # CREATE USER AND STAFF
-                    # -----------------------------------------
+                    # ------------------------------------------
                     with transaction.atomic():
 
-                        # Find existing global user by mobile
                         user = UserMaster.objects.filter(
                             username=mobile
                         ).first()
 
                         if user:
-
                             existing_staff = Staff.objects.filter(
-                                user=user,
                                 school=school,
+                                user=user
                             ).exists()
 
                             if existing_staff:
                                 raise ValueError(
-                                    "This user is already registered "
-                                    "as staff in this school."
+                                    f"Mobile '{mobile}' is already registered "
+                                    "as staff in this school"
                                 )
 
                         else:
-
                             user = UserMaster.objects.create(
                                 username=mobile,
-                                first_name=name,
-                                email=email,
                                 mobile=mobile,
-                                gender=gender,
-                                date_of_birth=date_of_birth,
-                                is_active=True,
+                                first_name=name,
+                                email=email or ""
                             )
 
-                        # -------------------------------------
-                        # CREATE STAFF
-                        # -------------------------------------
                         staff = Staff.objects.create(
-                            user=user,
                             school=school,
                             branch=branch,
+                            user=user,
                             employee_id=employee_id,
                             staff_type=staff_type,
                             department=department,
                             name=name,
                             gender=gender,
-                            date_of_birth=date_of_birth,
                             mobile=mobile,
                             email=email,
+                            joining_date=joining_date,
+                            date_of_birth=date_of_birth,
                             qualification=qualification,
                             experience=experience,
-                            joining_date=joining_date,
                             status=status,
                             address=address,
                             emergency_contact_name=emergency_contact_name,
                             emergency_contact_mobile=emergency_contact_mobile,
+                            created_by=request.user
                         )
 
-                        # -------------------------------------
-                        # ASSIGN SCHOOL ROLE
-                        # -------------------------------------
                         UserRoles.objects.get_or_create(
                             user=user,
                             school=school,
-                            role=role,
+                            role=role
                         )
 
-                    # -----------------------------------------
-                    # UPDATE DUPLICATE TRACKERS
-                    # -----------------------------------------
+                    # ------------------------------------------
+                    # UPDATE SUCCESS COUNTERS
+                    # ------------------------------------------
+                    created_count += 1
+
                     uploaded_employee_ids.add(employee_id)
                     uploaded_mobiles.add(mobile)
 
                     if email:
                         uploaded_emails.add(email)
 
-                    success_count += 1
-
-                    application_logger.info(
-                        "staff_bulk_upload_row_created",
-                        requested_by=str(request.user.id),
-                        school_id=str(school.id),
-                        staff_id=str(staff.id),
-                        employee_id=employee_id,
-                        row_number=row_number,
-                    )
-
-                except IntegrityError as exc:
-
+                except Exception as e:
                     failed_count += 1
 
                     errors.append({
                         "row": row_number,
-                        "employee_id": employee_id,
-                        "message": (
-                            "Duplicate staff record or database "
-                            "constraint violation."
+                        "employee_id": (
+                            str(row[headers.index("employee_id")])
+                            if "employee_id" in headers
+                            and headers.index("employee_id") < len(row)
+                            else None
                         ),
+                        "error": str(e)
                     })
 
                     application_logger.exception(
-                        "staff_bulk_upload_row_integrity_error",
-                        requested_by=str(request.user.id),
-                        school_id=str(school.id),
-                        row_number=row_number,
-                        error=str(exc),
+                        f"Staff bulk upload failed at row {row_number}: {str(e)}"
                     )
 
-                except Exception as exc:
-
-                    failed_count += 1
-
-                    errors.append({
-                        "row": row_number,
-                        "employee_id": employee_id,
-                        "message": str(exc),
-                    })
-
-                    application_logger.warning(
-                        "staff_bulk_upload_row_failed",
-                        requested_by=str(request.user.id),
-                        school_id=str(school.id),
-                        row_number=row_number,
-                        employee_id=employee_id,
-                        error=str(exc),
-                    )
-
-            # -------------------------------------------------
+            # --------------------------------------------------
             # FINAL RESPONSE
-            # -------------------------------------------------
+            # --------------------------------------------------
             application_logger.info(
-                "staff_bulk_upload_completed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                created_count=success_count,
-                failed_count=failed_count,
+                f"Staff bulk upload completed. "
+                f"Created: {created_count}, Failed: {failed_count}"
             )
 
             return CustomResponse.successResponse(
-                description="Staff bulk upload processed successfully.",
+                message="Staff bulk upload completed",
                 data={
-                    "created_count": success_count,
+                    "total_processed": created_count + failed_count,
+                    "created_count": created_count,
                     "failed_count": failed_count,
-                    "total_processed": success_count + failed_count,
-                    "errors": errors,
-                },
+                    "errors": errors
+                }
             )
 
-        except Exception as exc:
-
+        except Exception as e:
             application_logger.exception(
-                "staff_bulk_upload_failed",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                file_name=file.name,
-                error=str(exc),
+                f"Staff bulk upload failed: {str(e)}"
             )
 
             return CustomResponse.errorResponse(
-                description=(
-                    "Failed to process staff Excel file. "
-                    "Please check the template and try again."
-                )
+                message="Staff bulk upload failed",
+                data={"error": str(e)}
             )
-
 
 
 
