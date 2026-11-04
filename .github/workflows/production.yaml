@@ -1,0 +1,47 @@
+
+name: Production
+
+on:
+  push:
+    branches:
+      - production
+    paths-ignore:
+      - "postman/**"
+      - "docs/**"
+      - "bruno/**"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Add SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PRODUCTION_EC2_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Add known hosts
+        run: |
+          ssh-keyscan -H ${{ secrets.PRODUCTION_EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to Production EC2
+        run: |
+          ssh ${{ secrets.PRODUCTION_EC2_USER }}@${{ secrets.PRODUCTION_EC2_HOST }} << 'EOF'
+            set -e
+
+            cd schoolfirst-erp-backend
+
+            git checkout production
+            git pull origin production
+
+            docker network create schoolfirst-erp-network || true
+
+            docker compose \
+              -f ./deploy/compose/docker-compose.yaml \
+              --env-file .env.docker \
+              up -d --build --remove-orphans postgres backend
+
+            # Clean up dangling images
+            docker image prune -f
+          EOF
