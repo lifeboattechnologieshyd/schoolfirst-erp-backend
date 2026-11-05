@@ -1970,6 +1970,8 @@ class BulkUploadStudentAPIView(APIView):
                 description="School not found."
             )
 
+
+
         # --------------------------------------------------
         # QUERY PARAMETERS
         # --------------------------------------------------
@@ -1984,24 +1986,28 @@ class BulkUploadStudentAPIView(APIView):
             except (ValueError, TypeError, AttributeError):
                 return False
 
-        if  branch_id or  is_valid_uuid(branch_id):
-            return CustomResponse.errorResponse(
-                description="Valid branch_id is required."
-            )
+        branch = None
 
+        if branch_id:
+            if not is_valid_uuid(branch_id):
+                return CustomResponse.errorResponse(
+                    description="Valid branch_id is required."
+                )
+
+            branch = Branch.objects.filter(
+                id=branch_id,
+                school=school
+            ).first()
+
+            if not branch:
+                return CustomResponse.errorResponse(
+                    description="Branch not found."
+                )
+
+        # Academic year is mandatory
         if not academic_year_id or not is_valid_uuid(academic_year_id):
             return CustomResponse.errorResponse(
                 description="Valid academic_year_id is required."
-            )
-
-        branch = Branch.objects.filter(
-            id=branch_id,
-            school=school
-        ).first()
-
-        if not branch:
-            return CustomResponse.errorResponse(
-                description="Branch not found."
             )
 
         academic_year = AcademicYear.objects.filter(
