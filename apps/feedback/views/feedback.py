@@ -412,3 +412,4 @@ class FeedbackCategoryLISTAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Failed to fetch feedback categories."
             )
+
