@@ -1,3 +1,4 @@
+import uuid
 from datetime import timedelta
 
 from django.db.models import Q, Prefetch
@@ -2193,146 +2194,142 @@ class GetSchoolConfigurationAPIView(APIView):
 
 class UpdateSchoolConfigurationAPIView(APIView):
 
-    permission_classes = [IsAuthenticated,HasPermission,]
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
 
     required_permission = "school.configuration.update"
 
     def put(self, request):
 
-        # school = request.school
-        school = request.GET.get("school_id")
+        school_id = request.query_params.get("school_id")
 
-        if school is None:
-
-            return CustomResponse.errorResponse(description="School not found.",)
-
-        configuration = SchoolConfiguration.objects.filter(school=school,).first()
-
-        if configuration is None:
-
-            return CustomResponse.errorResponse(description="School configuration not found.",)
-
-        clients = request.data.get("clients",[],)
-
-        if not isinstance(clients, list):
-
-            return CustomResponse.errorResponse(description="clients must be a list.",)
-
-        client_types = []
-
-        for client in clients:
-
-            client_type = client.get("client_type",)
-
-            identifier = client.get("identifier",)
-
-            if not client_type:
-
-                return CustomResponse.errorResponse(description="client_type is required.", )
-
-            if client_type not in SchoolClient.ClientType.values:
-
-                return CustomResponse.errorResponse(
-
-                    description=f"Invalid client_type '{client_type}'.",
-
-                )
-
-            if not identifier:
-
-                return CustomResponse.errorResponse(
-
-                    description=f"Identifier is required for '{client_type}'.",
-
-                )
-
-            if client_type in client_types:
-
-                return CustomResponse.errorResponse(
-
-                    description=f"Duplicate client_type '{client_type}'.",
-
-                )
-
-            client_types.append(
-
-                client_type,
-
+        if not school_id:
+            return CustomResponse.errorResponse(
+                description="School ID is required."
             )
 
         try:
+            school_uuid = uuid.UUID(str(school_id))
+        except (ValueError, TypeError, AttributeError):
+            return CustomResponse.errorResponse(
+                description="Invalid school ID."
+            )
 
+        school = School.objects.filter(
+            id=school_uuid
+        ).first()
+
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        configuration = SchoolConfiguration.objects.filter(
+            school=school,
+        ).first()
+
+        if configuration is None:
+            return CustomResponse.errorResponse(
+                description="School configuration not found."
+            )
+
+        clients = request.data.get("clients", [])
+
+        if not isinstance(clients, list):
+            return CustomResponse.errorResponse(
+                description="clients must be a list."
+            )
+
+        client_types = []
+
+        for index, client in enumerate(clients):
+
+            if not isinstance(client, dict):
+                return CustomResponse.errorResponse(
+                    description=f"Invalid client data at index {index}."
+                )
+
+            client_type = client.get("client_type")
+            identifier = client.get("identifier")
+
+            if not client_type:
+                return CustomResponse.errorResponse(
+                    description="client_type is required."
+                )
+
+            if client_type not in SchoolClient.ClientType.values:
+                return CustomResponse.errorResponse(
+                    description=f"Invalid client_type '{client_type}'."
+                )
+
+            if not identifier:
+                return CustomResponse.errorResponse(
+                    description=f"Identifier is required for '{client_type}'."
+                )
+
+            if client_type in client_types:
+                return CustomResponse.errorResponse(
+                    description=f"Duplicate client_type '{client_type}'."
+                )
+
+            client_types.append(client_type)
+
+        try:
             with transaction.atomic():
 
-                restricted_fields = ["id","school","created_at","updated_at","deleted_at",]
+                restricted_fields = [
+                    "id",
+                    "school",
+                    "created_at",
+                    "updated_at",
+                    "deleted_at",
+                ]
 
                 for field, value in request.data.items():
 
-                    if field in restricted_fields:
-
+                    if field in restricted_fields or field == "clients":
                         continue
 
-                    if field == "clients":
-
-                        continue
-
-                    if hasattr(
-
-                        configuration,
-
-                        field,
-
-                    ):
-
-                        setattr(
-
-                            configuration,
-
-                            field,
-
-                            value,
-
-                        )
+                    if hasattr(configuration, field):
+                        setattr(configuration, field, value)
 
                 configuration.save()
 
                 for client in clients:
 
-                    SchoolClient.objects.update_or_create(school=school,
-
-                        client_type=client.get(
-
-                            "client_type",
-
-                        ),
-
+                    SchoolClient.objects.update_or_create(
+                        school=school,
+                        client_type=client["client_type"],
                         defaults={
-
-                            "identifier": client.get(
-
-                                "identifier",
-
-                            ),
-
+                            "identifier": client["identifier"],
                             "is_active": True,
-
                         },
-
                     )
 
-        except Exception as e:
-
-            return CustomResponse.errorResponse(
-
-                description=str(e),
-
+        except Exception:
+            application_logger.exception(
+                "school_configuration_update_failed",
+                school_id=str(school.id),
+                updated_by=str(request.user.id),
             )
 
-        return CustomResponse.successResponse(
+            return CustomResponse.errorResponse(
+                description="Failed to update school configuration."
+            )
 
-            description="School configuration updated successfully.",
-
+        application_logger.info(
+            "school_configuration_updated",
+            school_id=str(school.id),
+            updated_by=str(request.user.id),
         )
+
+        return CustomResponse.successResponse(
+            description="School configuration updated successfully."
+        )
+
+
 class GetSchoolClientInfoAPIView(APIView):
 
     permission_classes = [AllowAny]
