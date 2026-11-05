@@ -1,3 +1,4 @@
+import uuid
 from datetime import timedelta
 
 from django.db.models import Q, Prefetch
@@ -549,7 +550,6 @@ class SchoolLeadUpdateAPIView(APIView):
 # ===========================
 
 class CreateOrganizationAPIView(APIView):
-
     permission_classes = [
         IsAuthenticated,
         HasPermission,
@@ -558,54 +558,88 @@ class CreateOrganizationAPIView(APIView):
     required_permission = "organization.create"
 
     def post(self, request):
+        data = request.data
 
         application_logger.info(
             "organization_create_requested",
             requested_by=str(request.user.id),
-            organization_name=request.data.get("name"),
+            organization_name=data.get("name"),
         )
 
-        try:
+        name = data.get("name")
+        phone_number = data.get("phone_number")
 
-            organization = Organization.objects.create(
-                name=request.data.get("name"),
-                code=request.data.get("code"),
-                email=request.data.get("email"),
-                phone_number=request.data.get("phone_number"),
-                address=request.data.get("address"),
-                website=request.data.get("website"),
-                logo=request.data.get("logo"),
-                status=request.data.get(
-                    "status",
-                    Organization.Status.ACTIVE,
-                ),
+        if not name:
+            return CustomResponse.errorResponse(
+                description="Organization name is required."
             )
+
+        if not phone_number:
+            return CustomResponse.errorResponse(
+                description="Phone number is required."
+            )
+
+        try:
+            with transaction.atomic():
+
+                # Check existing user
+                user = UserMaster.objects.filter(
+                    username=phone_number
+                ).first()
+
+                if user:
+                    return CustomResponse.errorResponse(
+                        description="User already exists with this mobile number."
+                    )
+
+                # Create organization
+                organization = Organization.objects.create(
+                    name=name,
+                    code=data.get("code"),
+                    email=data.get("email"),
+                    phone_number=phone_number,
+                    address=data.get("address"),
+                    website=data.get("website"),
+                    logo=data.get("logo"),
+                    status=data.get(
+                        "status",
+                        Organization.Status.ACTIVE,
+                    ),
+                )
+
+                # Create user using organization mobile number
+                user = UserMaster.objects.create(
+                    username=phone_number,
+                    mobile=phone_number,
+                )
 
             application_logger.info(
                 "organization_created",
-                requested_by=str(request.user.id),
                 organization_id=str(organization.id),
                 organization_name=organization.name,
+                user_id=str(user.id),
             )
 
             return CustomResponse.successResponse(
-                description="Organization created successfully",
+                description="Organization and user created successfully.",
                 data={
-                    "id": organization.id,
+                    "organization_id": str(organization.id),
+                    "organization_name": organization.name,
+                    "user_id": str(user.id),
+                    "username": user.username,
+                    "mobile": user.mobile,
                 },
             )
 
-        except Exception as e:
-
+        except Exception:
             application_logger.exception(
                 "organization_create_failed",
                 requested_by=str(request.user.id),
-                organization_name=request.data.get("name"),
-                error=str(e),
+                organization_name=name,
             )
 
             return CustomResponse.errorResponse(
-                description=str(e),
+                description="Unable to create organization."
             )
 # ===========================
 # ORGANIZATION LIST
@@ -773,7 +807,6 @@ class UpdateOrganizationAPIView(APIView):
 # ===========================
 
 class CreateSchoolAPIView(APIView):
-
     permission_classes = [
         IsAuthenticated,
         HasPermission,
@@ -783,87 +816,114 @@ class CreateSchoolAPIView(APIView):
 
     def post(self, request):
 
+        organization_id = request.data.get("organization_id")
+
         application_logger.info(
             "school_create_requested",
             requested_by=str(request.user.id),
-            organization_id=request.data.get("organization_id"),
+            organization_id=organization_id,
             school_name=request.data.get("name"),
         )
 
         try:
+            with transaction.atomic():
 
-            organization = Organization.objects.filter(
-                id=request.data.get(
-                    "organization_id"
+                # Get organization
+                organization = Organization.objects.filter(
+                    id=organization_id
+                ).first()
+
+                if not organization:
+                    return CustomResponse.errorResponse(
+                        description="Organization not found."
+                    )
+
+                # Find user using organization's mobile number
+                organization_user = UserMaster.objects.filter(
+                    username=organization.phone_number
+                ).first()
+
+                if not organization_user:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "User not found for organization's mobile number. "
+                            "Please create the organization user first."
+                        )
+                    )
+
+                # Get SCHOOL_ADMIN role
+                school_admin_role = Roles.objects.filter(
+                    role_name=RolesEnum.SCHOOL_ADMIN.value
+                ).first()
+
+                if not school_admin_role:
+                    return CustomResponse.errorResponse(
+                        description="SCHOOL_ADMIN role not found."
+                    )
+
+                # Create school
+                school = School.objects.create(
+                    organization=organization,
+                    name=request.data.get("name"),
+                    code=request.data.get("code"),
+                    board=request.data.get("board"),
+                    email=request.data.get("email"),
+                    phone_number=request.data.get("phone_number"),
+                    address=request.data.get("address"),
+                    city=request.data.get("city"),
+                    state=request.data.get("state"),
+                    country=request.data.get("country", "India"),
+                    primary_color=request.data.get("primary_color"),
+                    secondary_color=request.data.get("secondary_color"),
                 )
-            ).first()
 
-            if not organization:
+                # Assign SCHOOL_ADMIN to organization user
+                user_role, created = UserRoles.objects.get_or_create(
+                    user=organization_user,
+                    school=school,
+                    role=school_admin_role,
+                )
 
-                application_logger.warning(
-                    "school_create_failed",
+                # Check permission
+                check_permission(
+                    request,
+                    "school.create",
+                    school.id,
+                )
+
+                application_logger.info(
+                    "school_created",
                     requested_by=str(request.user.id),
-                    organization_id=request.data.get("organization_id"),
-                    reason="organization_not_found",
+                    school_id=str(school.id),
+                    school_name=school.name,
+                    organization_id=str(organization.id),
+                    admin_user_id=str(organization_user.id),
+                    role_assigned=created,
                 )
-
-                return CustomResponse.errorResponse(
-                    description="Organization not found"
-                )
-
-            school = School.objects.create(
-                organization=organization,
-                name=request.data.get("name"),
-                code=request.data.get("code"),
-                board=request.data.get("board"),
-                email=request.data.get("email"),
-                phone_number=request.data.get("phone_number"),
-                address=request.data.get("address"),
-                city=request.data.get("city"),
-                state=request.data.get("state"),
-                country=request.data.get(
-                    "country",
-                    "India",
-                ),
-                primary_color=request.data.get("primary_color"),
-                secondary_color=request.data.get("secondary_color"),
-            )
-
-            check_permission(
-                request,
-                "school.create",
-                school.id,
-            )
-
-            application_logger.info(
-                "school_created",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                school_name=school.name,
-                organization_id=str(organization.id),
-            )
 
             return CustomResponse.successResponse(
-                description="School created successfully",
+                description="School created and School Admin assigned successfully.",
                 data={
-                    "id": school.id,
+                    "id": str(school.id),
+                    "organization_id": str(organization.id),
+                    "admin": {
+                        "user_id": str(organization_user.id),
+                        "mobile": organization.phone_number,
+                        "role": RolesEnum.SCHOOL_ADMIN.value,
+                    },
                 },
             )
 
-        except Exception as e:
-
+        except Exception:
             application_logger.exception(
                 "school_create_failed",
                 requested_by=str(request.user.id),
-                organization_id=request.data.get("organization_id"),
-                school_name=request.data.get("name"),
-                error=str(e),
+                organization_id=organization_id,
             )
 
             return CustomResponse.errorResponse(
-                description=str(e),
+                description="Unable to create school."
             )
-
 # ===========================
 # SCHOOL LIST
 # ===========================
@@ -2134,146 +2194,142 @@ class GetSchoolConfigurationAPIView(APIView):
 
 class UpdateSchoolConfigurationAPIView(APIView):
 
-    permission_classes = [IsAuthenticated,HasPermission,]
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
 
     required_permission = "school.configuration.update"
 
     def put(self, request):
 
-        # school = request.school
-        school = request.GET.get("school_id")
+        school_id = request.query_params.get("school_id")
 
-        if school is None:
-
-            return CustomResponse.errorResponse(description="School not found.",)
-
-        configuration = SchoolConfiguration.objects.filter(school=school,).first()
-
-        if configuration is None:
-
-            return CustomResponse.errorResponse(description="School configuration not found.",)
-
-        clients = request.data.get("clients",[],)
-
-        if not isinstance(clients, list):
-
-            return CustomResponse.errorResponse(description="clients must be a list.",)
-
-        client_types = []
-
-        for client in clients:
-
-            client_type = client.get("client_type",)
-
-            identifier = client.get("identifier",)
-
-            if not client_type:
-
-                return CustomResponse.errorResponse(description="client_type is required.", )
-
-            if client_type not in SchoolClient.ClientType.values:
-
-                return CustomResponse.errorResponse(
-
-                    description=f"Invalid client_type '{client_type}'.",
-
-                )
-
-            if not identifier:
-
-                return CustomResponse.errorResponse(
-
-                    description=f"Identifier is required for '{client_type}'.",
-
-                )
-
-            if client_type in client_types:
-
-                return CustomResponse.errorResponse(
-
-                    description=f"Duplicate client_type '{client_type}'.",
-
-                )
-
-            client_types.append(
-
-                client_type,
-
+        if not school_id:
+            return CustomResponse.errorResponse(
+                description="School ID is required."
             )
 
         try:
+            school_uuid = uuid.UUID(str(school_id))
+        except (ValueError, TypeError, AttributeError):
+            return CustomResponse.errorResponse(
+                description="Invalid school ID."
+            )
 
+        school = School.objects.filter(
+            id=school_uuid
+        ).first()
+
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        configuration = SchoolConfiguration.objects.filter(
+            school=school,
+        ).first()
+
+        if configuration is None:
+            return CustomResponse.errorResponse(
+                description="School configuration not found."
+            )
+
+        clients = request.data.get("clients", [])
+
+        if not isinstance(clients, list):
+            return CustomResponse.errorResponse(
+                description="clients must be a list."
+            )
+
+        client_types = []
+
+        for index, client in enumerate(clients):
+
+            if not isinstance(client, dict):
+                return CustomResponse.errorResponse(
+                    description=f"Invalid client data at index {index}."
+                )
+
+            client_type = client.get("client_type")
+            identifier = client.get("identifier")
+
+            if not client_type:
+                return CustomResponse.errorResponse(
+                    description="client_type is required."
+                )
+
+            if client_type not in SchoolClient.ClientType.values:
+                return CustomResponse.errorResponse(
+                    description=f"Invalid client_type '{client_type}'."
+                )
+
+            if not identifier:
+                return CustomResponse.errorResponse(
+                    description=f"Identifier is required for '{client_type}'."
+                )
+
+            if client_type in client_types:
+                return CustomResponse.errorResponse(
+                    description=f"Duplicate client_type '{client_type}'."
+                )
+
+            client_types.append(client_type)
+
+        try:
             with transaction.atomic():
 
-                restricted_fields = ["id","school","created_at","updated_at","deleted_at",]
+                restricted_fields = [
+                    "id",
+                    "school",
+                    "created_at",
+                    "updated_at",
+                    "deleted_at",
+                ]
 
                 for field, value in request.data.items():
 
-                    if field in restricted_fields:
-
+                    if field in restricted_fields or field == "clients":
                         continue
 
-                    if field == "clients":
-
-                        continue
-
-                    if hasattr(
-
-                        configuration,
-
-                        field,
-
-                    ):
-
-                        setattr(
-
-                            configuration,
-
-                            field,
-
-                            value,
-
-                        )
+                    if hasattr(configuration, field):
+                        setattr(configuration, field, value)
 
                 configuration.save()
 
                 for client in clients:
 
-                    SchoolClient.objects.update_or_create(school=school,
-
-                        client_type=client.get(
-
-                            "client_type",
-
-                        ),
-
+                    SchoolClient.objects.update_or_create(
+                        school=school,
+                        client_type=client["client_type"],
                         defaults={
-
-                            "identifier": client.get(
-
-                                "identifier",
-
-                            ),
-
+                            "identifier": client["identifier"],
                             "is_active": True,
-
                         },
-
                     )
 
-        except Exception as e:
-
-            return CustomResponse.errorResponse(
-
-                description=str(e),
-
+        except Exception:
+            application_logger.exception(
+                "school_configuration_update_failed",
+                school_id=str(school.id),
+                updated_by=str(request.user.id),
             )
 
-        return CustomResponse.successResponse(
+            return CustomResponse.errorResponse(
+                description="Failed to update school configuration."
+            )
 
-            description="School configuration updated successfully.",
-
+        application_logger.info(
+            "school_configuration_updated",
+            school_id=str(school.id),
+            updated_by=str(request.user.id),
         )
+
+        return CustomResponse.successResponse(
+            description="School configuration updated successfully."
+        )
+
+
 class GetSchoolClientInfoAPIView(APIView):
 
     permission_classes = [AllowAny]
