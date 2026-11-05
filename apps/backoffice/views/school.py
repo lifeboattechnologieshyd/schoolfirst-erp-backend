@@ -2113,13 +2113,13 @@ class BulkUploadStudentAPIView(APIView):
             )
 
         # These values must come from query parameters.
-        if "Branch" in headers or "Academic Year" in headers:
-            return CustomResponse.errorResponse(
-                description=(
-                    "Do not include Branch or Academic Year in Excel. "
-                    "Pass branch_id and academic_year_id through query parameters."
-                )
-            )
+        # if "Branch" in headers or "Academic Year" in headers:
+        #     return CustomResponse.errorResponse(
+        #         description=(
+        #             "Do not include Branch or Academic Year in Excel. "
+        #             "Pass branch_id and academic_year_id through query parameters."
+        #         )
+        #     )
 
         # Removed fields from the current template.
         removed_headers = [
@@ -2258,14 +2258,13 @@ class BulkUploadStudentAPIView(APIView):
 
                 section = Section.objects.filter(
                     grade=grade,
-                    branch=branch,
                     name__iexact=section_name
                 ).first()
 
                 if not section:
                     raise ValueError(
                         f"Section '{section_name}' not found "
-                        f"for grade '{grade_name}' and selected branch."
+                        f"for grade '{grade_name}' "
                     )
 
                 # ------------------------------------------
