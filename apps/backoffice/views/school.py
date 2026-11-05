@@ -1984,7 +1984,7 @@ class BulkUploadStudentAPIView(APIView):
             except (ValueError, TypeError, AttributeError):
                 return False
 
-        if not branch_id or not is_valid_uuid(branch_id):
+        if  branch_id or  is_valid_uuid(branch_id):
             return CustomResponse.errorResponse(
                 description="Valid branch_id is required."
             )
