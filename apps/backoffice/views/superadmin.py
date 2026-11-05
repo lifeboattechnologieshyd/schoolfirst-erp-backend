@@ -549,7 +549,6 @@ class SchoolLeadUpdateAPIView(APIView):
 # ===========================
 
 class CreateOrganizationAPIView(APIView):
-
     permission_classes = [
         IsAuthenticated,
         HasPermission,
@@ -558,54 +557,88 @@ class CreateOrganizationAPIView(APIView):
     required_permission = "organization.create"
 
     def post(self, request):
+        data = request.data
 
         application_logger.info(
             "organization_create_requested",
             requested_by=str(request.user.id),
-            organization_name=request.data.get("name"),
+            organization_name=data.get("name"),
         )
 
-        try:
+        name = data.get("name")
+        phone_number = data.get("phone_number")
 
-            organization = Organization.objects.create(
-                name=request.data.get("name"),
-                code=request.data.get("code"),
-                email=request.data.get("email"),
-                phone_number=request.data.get("phone_number"),
-                address=request.data.get("address"),
-                website=request.data.get("website"),
-                logo=request.data.get("logo"),
-                status=request.data.get(
-                    "status",
-                    Organization.Status.ACTIVE,
-                ),
+        if not name:
+            return CustomResponse.errorResponse(
+                description="Organization name is required."
             )
+
+        if not phone_number:
+            return CustomResponse.errorResponse(
+                description="Phone number is required."
+            )
+
+        try:
+            with transaction.atomic():
+
+                # Check existing user
+                user = UserMaster.objects.filter(
+                    username=phone_number
+                ).first()
+
+                if user:
+                    return CustomResponse.errorResponse(
+                        description="User already exists with this mobile number."
+                    )
+
+                # Create organization
+                organization = Organization.objects.create(
+                    name=name,
+                    code=data.get("code"),
+                    email=data.get("email"),
+                    phone_number=phone_number,
+                    address=data.get("address"),
+                    website=data.get("website"),
+                    logo=data.get("logo"),
+                    status=data.get(
+                        "status",
+                        Organization.Status.ACTIVE,
+                    ),
+                )
+
+                # Create user using organization mobile number
+                user = UserMaster.objects.create(
+                    username=phone_number,
+                    mobile=phone_number,
+                )
 
             application_logger.info(
                 "organization_created",
-                requested_by=str(request.user.id),
                 organization_id=str(organization.id),
                 organization_name=organization.name,
+                user_id=str(user.id),
             )
 
             return CustomResponse.successResponse(
-                description="Organization created successfully",
+                description="Organization and user created successfully.",
                 data={
-                    "id": organization.id,
+                    "organization_id": str(organization.id),
+                    "organization_name": organization.name,
+                    "user_id": str(user.id),
+                    "username": user.username,
+                    "mobile": user.mobile,
                 },
             )
 
-        except Exception as e:
-
+        except Exception:
             application_logger.exception(
                 "organization_create_failed",
                 requested_by=str(request.user.id),
-                organization_name=request.data.get("name"),
-                error=str(e),
+                organization_name=name,
             )
 
             return CustomResponse.errorResponse(
-                description=str(e),
+                description="Unable to create organization."
             )
 # ===========================
 # ORGANIZATION LIST
@@ -773,7 +806,6 @@ class UpdateOrganizationAPIView(APIView):
 # ===========================
 
 class CreateSchoolAPIView(APIView):
-
     permission_classes = [
         IsAuthenticated,
         HasPermission,
@@ -783,87 +815,114 @@ class CreateSchoolAPIView(APIView):
 
     def post(self, request):
 
+        organization_id = request.data.get("organization_id")
+
         application_logger.info(
             "school_create_requested",
             requested_by=str(request.user.id),
-            organization_id=request.data.get("organization_id"),
+            organization_id=organization_id,
             school_name=request.data.get("name"),
         )
 
         try:
+            with transaction.atomic():
 
-            organization = Organization.objects.filter(
-                id=request.data.get(
-                    "organization_id"
+                # Get organization
+                organization = Organization.objects.filter(
+                    id=organization_id
+                ).first()
+
+                if not organization:
+                    return CustomResponse.errorResponse(
+                        description="Organization not found."
+                    )
+
+                # Find user using organization's mobile number
+                organization_user = UserMaster.objects.filter(
+                    username=organization.phone_number
+                ).first()
+
+                if not organization_user:
+                    return CustomResponse.errorResponse(
+                        description=(
+                            "User not found for organization's mobile number. "
+                            "Please create the organization user first."
+                        )
+                    )
+
+                # Get SCHOOL_ADMIN role
+                school_admin_role = Roles.objects.filter(
+                    role_name=RolesEnum.SCHOOL_ADMIN.value
+                ).first()
+
+                if not school_admin_role:
+                    return CustomResponse.errorResponse(
+                        description="SCHOOL_ADMIN role not found."
+                    )
+
+                # Create school
+                school = School.objects.create(
+                    organization=organization,
+                    name=request.data.get("name"),
+                    code=request.data.get("code"),
+                    board=request.data.get("board"),
+                    email=request.data.get("email"),
+                    phone_number=request.data.get("phone_number"),
+                    address=request.data.get("address"),
+                    city=request.data.get("city"),
+                    state=request.data.get("state"),
+                    country=request.data.get("country", "India"),
+                    primary_color=request.data.get("primary_color"),
+                    secondary_color=request.data.get("secondary_color"),
                 )
-            ).first()
 
-            if not organization:
+                # Assign SCHOOL_ADMIN to organization user
+                user_role, created = UserRoles.objects.get_or_create(
+                    user=organization_user,
+                    school=school,
+                    role=school_admin_role,
+                )
 
-                application_logger.warning(
-                    "school_create_failed",
+                # Check permission
+                check_permission(
+                    request,
+                    "school.create",
+                    school.id,
+                )
+
+                application_logger.info(
+                    "school_created",
                     requested_by=str(request.user.id),
-                    organization_id=request.data.get("organization_id"),
-                    reason="organization_not_found",
+                    school_id=str(school.id),
+                    school_name=school.name,
+                    organization_id=str(organization.id),
+                    admin_user_id=str(organization_user.id),
+                    role_assigned=created,
                 )
-
-                return CustomResponse.errorResponse(
-                    description="Organization not found"
-                )
-
-            school = School.objects.create(
-                organization=organization,
-                name=request.data.get("name"),
-                code=request.data.get("code"),
-                board=request.data.get("board"),
-                email=request.data.get("email"),
-                phone_number=request.data.get("phone_number"),
-                address=request.data.get("address"),
-                city=request.data.get("city"),
-                state=request.data.get("state"),
-                country=request.data.get(
-                    "country",
-                    "India",
-                ),
-                primary_color=request.data.get("primary_color"),
-                secondary_color=request.data.get("secondary_color"),
-            )
-
-            check_permission(
-                request,
-                "school.create",
-                school.id,
-            )
-
-            application_logger.info(
-                "school_created",
-                requested_by=str(request.user.id),
-                school_id=str(school.id),
-                school_name=school.name,
-                organization_id=str(organization.id),
-            )
 
             return CustomResponse.successResponse(
-                description="School created successfully",
+                description="School created and School Admin assigned successfully.",
                 data={
-                    "id": school.id,
+                    "id": str(school.id),
+                    "organization_id": str(organization.id),
+                    "admin": {
+                        "user_id": str(organization_user.id),
+                        "mobile": organization.phone_number,
+                        "role": RolesEnum.SCHOOL_ADMIN.value,
+                    },
                 },
             )
 
-        except Exception as e:
-
+        except Exception:
             application_logger.exception(
                 "school_create_failed",
                 requested_by=str(request.user.id),
-                organization_id=request.data.get("organization_id"),
-                school_name=request.data.get("name"),
-                error=str(e),
+                organization_id=organization_id,
             )
 
             return CustomResponse.errorResponse(
-                description=str(e),
+                description="Unable to create school."
             )
-
 # ===========================
 # SCHOOL LIST
 # ===========================
