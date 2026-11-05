@@ -4455,7 +4455,7 @@ class BulkUploadStaffAPIView(APIView):
 
     def post(self, request):
         try:
-            school = request.user.school
+            school = request.school
 
             # --------------------------------------------------
             # QUERY PARAMETERS
@@ -4561,12 +4561,12 @@ class BulkUploadStaffAPIView(APIView):
                 )
 
             # branch_id and status must not be in Excel
-            if "branch_id" in headers or "status" in headers:
-                return CustomResponse.errorResponse(
-                    message="Do not include branch_id or status in Excel. "
-                            "Pass branch_id through query parameters. "
-                            "Status will always be ACTIVE."
-                )
+            # if "branch_id" in headers or "status" in headers:
+            #     return CustomResponse.errorResponse(
+            #         message="Do not include branch_id or status in Excel. "
+            #                 "Pass branch_id through query parameters. "
+            #                 "Status will always be ACTIVE."
+            #     )
 
             # --------------------------------------------------
             # COUNTERS
