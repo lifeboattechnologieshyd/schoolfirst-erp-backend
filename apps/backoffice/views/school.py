@@ -2037,29 +2037,15 @@ class BulkUploadStudentAPIView(APIView):
             )
 
         try:
-
             workbook = load_workbook(
                 file,
                 data_only=True
             )
 
-            if "Students" not in workbook.sheetnames:
-                return CustomResponse.errorResponse(
-                    description="Students sheet not found."
-                )
+            # Use the first active worksheet.
+            sheet = workbook.active
 
-            sheet = workbook["Students"]
-
-        except Exception as e:
-
-            audit_logger.exception(
-                "student_bulk_upload_failed",
-                performed_by=str(request.user.id),
-                school_id=str(school.id),
-                reason="invalid_excel_file",
-                error=str(e),
-            )
-
+        except Exception:
             return CustomResponse.errorResponse(
                 description="Invalid Excel file."
             )
