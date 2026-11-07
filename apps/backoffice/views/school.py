@@ -1660,7 +1660,6 @@ class CreateStudentAPIView(APIView):
         section = Section.objects.filter(
             id=request.data.get("section_id"),
             grade=grade,
-            branch=branch,
         ).first()
 
         if section is None:
@@ -1683,26 +1682,14 @@ class CreateStudentAPIView(APIView):
         # BOARD VALIDATION
         # --------------------------------------------------
 
-        board = request.data.get("board", Student.Board.STATE)
+        board = request.data.get("board",)
 
         if board not in Student.Board.values:
             return CustomResponse.errorResponse(
                 description="Invalid board."
             )
 
-        # --------------------------------------------------
-        # HOSTEL TYPE VALIDATION
-        # --------------------------------------------------
 
-        hostel_type = request.data.get(
-            "hostel_type",
-            Student.HostelType.DAY_SCHOLAR,
-        )
-
-        if hostel_type not in Student.HostelType.values:
-            return CustomResponse.errorResponse(
-                description="Invalid hostel type."
-            )
 
         # --------------------------------------------------
         # ENROLLMENT TYPE VALIDATION
@@ -1842,12 +1829,7 @@ class CreateStudentAPIView(APIView):
                         "previous_exam_percentage"
                     ),
 
-                    transport_required=request.data.get(
-                        "transport_required",
-                        False,
-                    ),
-                    pickup_point=request.data.get("pickup_point"),
-                    hostel_type=hostel_type,
+
                 )
 
             # Student creation is committed here.
