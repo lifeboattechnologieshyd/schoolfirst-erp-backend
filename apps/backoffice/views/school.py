@@ -1585,12 +1585,9 @@ class CreateStudentAPIView(APIView):
         )
 
         if school is None:
-            audit_logger.warning(
-                "student_create_failed",
-                performed_by=str(request.user.id),
-                reason="school_not_found",
+            return CustomResponse.errorResponse(
+                description="School not found."
             )
-            return CustomResponse.errorResponse(description="School not found.")
 
         required_fields = [
             "academic_year_id",
@@ -1606,30 +1603,31 @@ class CreateStudentAPIView(APIView):
 
         for field in required_fields:
             if request.data.get(field) in [None, ""]:
-                audit_logger.warning(
-                    "student_create_failed",
-                    performed_by=str(request.user.id),
-                    school_id=str(school.id),
-                    missing_field=field,
-                    reason="required_field_missing",
+                return CustomResponse.errorResponse(
+                    description=f"{field} is required."
                 )
-                return CustomResponse.errorResponse(description=f"{field} is required.")
+
+        # --------------------------------------------------
+        # BRANCH VALIDATION
+        # --------------------------------------------------
 
         branch = None
         branch_id = request.data.get("branch_id")
 
         if branch_id:
-            branch = Branch.objects.filter(id=branch_id, school=school).first()
+            branch = Branch.objects.filter(
+                id=branch_id,
+                school=school,
+            ).first()
 
             if branch is None:
-                audit_logger.warning(
-                    "student_create_failed",
-                    performed_by=str(request.user.id),
-                    school_id=str(school.id),
-                    branch_id=branch_id,
-                    reason="branch_not_found",
+                return CustomResponse.errorResponse(
+                    description="Branch not found."
                 )
-                return CustomResponse.errorResponse(description="Branch not found.")
+
+        # --------------------------------------------------
+        # ACADEMIC YEAR VALIDATION
+        # --------------------------------------------------
 
         academic_year = AcademicYear.objects.filter(
             id=request.data.get("academic_year_id"),
@@ -1637,14 +1635,13 @@ class CreateStudentAPIView(APIView):
         ).first()
 
         if academic_year is None:
-            audit_logger.warning(
-                "student_create_failed",
-                performed_by=str(request.user.id),
-                school_id=str(school.id),
-                academic_year_id=request.data.get("academic_year_id"),
-                reason="academic_year_not_found",
+            return CustomResponse.errorResponse(
+                description="Academic year not found."
             )
-            return CustomResponse.errorResponse(description="Academic year not found.")
+
+        # --------------------------------------------------
+        # GRADE VALIDATION
+        # --------------------------------------------------
 
         grade = Grade.objects.filter(
             id=request.data.get("grade_id"),
@@ -1652,140 +1649,114 @@ class CreateStudentAPIView(APIView):
         ).first()
 
         if grade is None:
-            audit_logger.warning(
-                "student_create_failed",
-                performed_by=str(request.user.id),
-                school_id=str(school.id),
-                grade_id=request.data.get("grade_id"),
-                reason="grade_not_found",
+            return CustomResponse.errorResponse(
+                description="Grade not found."
             )
-            return CustomResponse.errorResponse(description="Grade not found.")
+
+        # --------------------------------------------------
+        # SECTION VALIDATION
+        # --------------------------------------------------
 
         section = Section.objects.filter(
             id=request.data.get("section_id"),
             grade=grade,
-            branch=branch,
         ).first()
 
         if section is None:
-            audit_logger.warning(
-                "student_create_failed",
-                performed_by=str(request.user.id),
-                school_id=str(school.id),
-                branch_id=str(branch.id) if branch else None,
-                grade_id=str(grade.id),
-                section_id=request.data.get("section_id"),
-                reason="section_not_found",
+            return CustomResponse.errorResponse(
+                description="Section not found."
             )
-            return CustomResponse.errorResponse(description="Section not found.")
+
+        # --------------------------------------------------
+        # GENDER VALIDATION
+        # --------------------------------------------------
 
         gender = request.data.get("gender")
 
         if gender not in Student.Gender.values:
-            audit_logger.warning(
-                "student_create_failed",
-                performed_by=str(request.user.id),
-                school_id=str(school.id),
-                gender=gender,
-                reason="invalid_gender",
+            return CustomResponse.errorResponse(
+                description="Invalid gender."
             )
-            return CustomResponse.errorResponse(description="Invalid gender.")
 
-        board = request.data.get("board", Student.Board.STATE)
+        # --------------------------------------------------
+        # BOARD VALIDATION
+        # --------------------------------------------------
+
+        board = request.data.get("board",)
 
         if board not in Student.Board.values:
-            audit_logger.warning(
-                "student_create_failed",
-                performed_by=str(request.user.id),
-                school_id=str(school.id),
-                board=board,
-                reason="invalid_board",
+            return CustomResponse.errorResponse(
+                description="Invalid board."
             )
-            return CustomResponse.errorResponse(description="Invalid board.")
 
-        hostel_type = request.data.get("hostel_type", Student.HostelType.DAY_SCHOLAR)
 
-        if hostel_type not in Student.HostelType.values:
-            audit_logger.warning(
-                "student_create_failed",
-                performed_by=str(request.user.id),
-                school_id=str(school.id),
-                hostel_type=hostel_type,
-                reason="invalid_hostel_type",
-            )
-            return CustomResponse.errorResponse(description="Invalid hostel type.")
 
-        enrollment_type = request.data.get("enrollment_type", Student.EnrollmentType.NEW)
+        # --------------------------------------------------
+        # ENROLLMENT TYPE VALIDATION
+        # --------------------------------------------------
+
+        enrollment_type = request.data.get(
+            "enrollment_type",
+            Student.EnrollmentType.NEW,
+        )
 
         if enrollment_type not in Student.EnrollmentType.values:
-            audit_logger.warning(
-                "student_create_failed",
-                performed_by=str(request.user.id),
-                school_id=str(school.id),
-                enrollment_type=enrollment_type,
-                reason="invalid_enrollment_type",
+            return CustomResponse.errorResponse(
+                description="Invalid enrollment type."
             )
-            return CustomResponse.errorResponse(description="Invalid enrollment type.")
 
-        admission_number = request.data.get("admission_number").strip()
+        # --------------------------------------------------
+        # ADMISSION NUMBER VALIDATION
+        # --------------------------------------------------
 
-        if Student.objects.filter(school=school, admission_number=admission_number).exists():
-            audit_logger.warning(
-                "student_create_failed",
-                performed_by=str(request.user.id),
-                school_id=str(school.id),
-                admission_number=admission_number,
-                reason="admission_number_already_exists",
+        admission_number = request.data.get(
+            "admission_number"
+        ).strip()
+
+        if Student.objects.filter(
+            school=school,
+            admission_number=admission_number,
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="Admission number already exists."
             )
-            return CustomResponse.errorResponse(description="Admission number already exists.")
+
+        # --------------------------------------------------
+        # ROLL NUMBER VALIDATION
+        # --------------------------------------------------
 
         roll_number = request.data.get("roll_number")
 
-        if Student.objects.filter(section=section, roll_number=roll_number).exists():
-            audit_logger.warning(
-                "student_create_failed",
-                performed_by=str(request.user.id),
-                school_id=str(school.id),
-                section_id=str(section.id),
-                roll_number=roll_number,
-                reason="roll_number_already_exists",
+        if Student.objects.filter(
+            section=section,
+            roll_number=roll_number,
+        ).exists():
+            return CustomResponse.errorResponse(
+                description="Roll number already exists in this section."
             )
-            return CustomResponse.errorResponse(description="Roll number already exists in this section.")
 
-        valid_blood_groups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
+        # --------------------------------------------------
+        # BLOOD GROUP VALIDATION
+        # --------------------------------------------------
+
+        valid_blood_groups = [
+            "A+", "A-", "B+", "B-",
+            "AB+", "AB-", "O+", "O-",
+        ]
+
         blood_group = request.data.get("blood_group")
 
         if blood_group and blood_group not in valid_blood_groups:
-            audit_logger.warning(
-                "student_create_failed",
-                performed_by=str(request.user.id),
-                school_id=str(school.id),
-                blood_group=blood_group,
-                reason="invalid_blood_group",
+            return CustomResponse.errorResponse(
+                description="Invalid blood group."
             )
-            return CustomResponse.errorResponse(description="Invalid blood group.")
+
+        # --------------------------------------------------
+        # CREATE STUDENT
+        # --------------------------------------------------
 
         try:
             with transaction.atomic():
-
-                fee_concession_id = request.data.get("fee_concession_id")
-                concession = None
-
-                if fee_concession_id:
-                    concession = FeeConcession.objects.filter(
-                        id=fee_concession_id,
-                        school=school,
-                    ).first()
-
-                    if concession is None:
-                        audit_logger.warning(
-                            "student_create_failed",
-                            performed_by=str(request.user.id),
-                            school_id=str(school.id),
-                            fee_concession_id=fee_concession_id,
-                            reason="fee_concession_not_found",
-                        )
-                        return CustomResponse.errorResponse(description="Fee concession not found.")
 
                 student = Student.objects.create(
                     school=school,
@@ -1794,107 +1765,207 @@ class CreateStudentAPIView(APIView):
                     academic_year=academic_year,
                     grade=grade,
                     section=section,
+
                     admission_number=admission_number,
                     roll_number=roll_number,
                     name=request.data.get("name").strip(),
                     gender=gender,
+
                     date_of_birth=request.data.get("date_of_birth"),
                     admission_date=request.data.get("admission_date"),
                     enrollment_type=enrollment_type,
-                    status=request.data.get("status", Student.Status.ACTIVE),
+
+                    status=request.data.get(
+                        "status",
+                        Student.Status.ACTIVE,
+                    ),
+
                     place_of_birth=request.data.get("place_of_birth"),
                     blood_group=blood_group,
                     photo_url=request.data.get("photo_url"),
                     nationality=request.data.get("nationality", "Indian"),
                     mother_tongue=request.data.get("mother_tongue"),
+
                     aadhaar_number=request.data.get("aadhaar_number"),
                     religion=request.data.get("religion"),
                     caste=request.data.get("caste"),
                     sub_caste=request.data.get("sub_caste"),
                     student_category=request.data.get("student_category"),
-                    identification_marks=request.data.get("identification_marks"),
+                    identification_marks=request.data.get(
+                        "identification_marks"
+                    ),
+
                     email=request.data.get("email"),
                     address=request.data.get("address"),
-                    emergency_contact_name=request.data.get("emergency_contact_name"),
-                    emergency_contact_mobile=request.data.get("emergency_contact_mobile"),
+
+                    emergency_contact_name=request.data.get(
+                        "emergency_contact_name"
+                    ),
+                    emergency_contact_mobile=request.data.get(
+                        "emergency_contact_mobile"
+                    ),
+
                     father_name=request.data.get("father_name"),
                     father_mobile=request.data.get("father_mobile"),
                     father_occupation=request.data.get("father_occupation"),
+
                     mother_name=request.data.get("mother_name"),
                     mother_mobile=request.data.get("mother_mobile"),
                     mother_occupation=request.data.get("mother_occupation"),
+
                     guardian_name=request.data.get("guardian_name"),
                     guardian_mobile=request.data.get("guardian_mobile"),
-                    guardian_occupation=request.data.get("guardian_occupation"),
-                    previous_school_name=request.data.get("previous_school_name"),
-                    previous_school_tc_number=request.data.get("previous_school_tc_number"),
-                    previous_exam_percentage=request.data.get("previous_exam_percentage"),
-                    transport_required=request.data.get("transport_required", False),
-                    pickup_point=request.data.get("pickup_point"),
-                    hostel_type=hostel_type,
+                    guardian_occupation=request.data.get(
+                        "guardian_occupation"
+                    ),
+
+                    previous_school_name=request.data.get(
+                        "previous_school_name"
+                    ),
+                    previous_school_tc_number=request.data.get(
+                        "previous_school_tc_number"
+                    ),
+                    previous_exam_percentage=request.data.get(
+                        "previous_exam_percentage"
+                    ),
+
+
                 )
 
-                fee_template = FeeTemplate.objects.filter(
-                    school=school,
-                    academic_year=academic_year,
-                    grade=grade,
-                ).first()
+            # Student creation is committed here.
+            # Fee generation is handled separately.
 
-                if fee_template is None:
-                    raise Exception(f"Fee template not configured for grade '{grade.name}'.")
-
-                # StudentFeeAssignment.objects.create(
-                #     student=student,
-                #     fee_template=fee_template,
-                #     concession=concession,
-                #     assigned_by=request.user,
-                # )
-
-                generate_student_fees(
-                    student=student,
-                    fee_template=fee_template,
-                    concession=concession,
-                )
+            audit_logger.info(
+                "student_created",
+                performed_by=str(request.user.id),
+                school_id=str(school.id),
+                student_id=str(student.id),
+                admission_number=admission_number,
+                grade_id=str(grade.id),
+                section_id=str(section.id),
+            )
 
         except Exception as e:
+
             audit_logger.exception(
                 "student_create_failed",
                 performed_by=str(request.user.id),
                 school_id=str(school.id),
-                branch_id=str(branch.id) if branch else None,
-                academic_year_id=str(academic_year.id),
-                grade_id=str(grade.id),
-                section_id=str(section.id),
                 admission_number=admission_number,
-                reason="exception",
+                reason="student_creation_exception",
                 error=str(e),
             )
-            return CustomResponse.errorResponse(description=str(e))
 
-        audit_logger.info(
-            "student_created",
-            performed_by=str(request.user.id),
-            student_id=str(student.id),
-            school_id=str(school.id),
-            branch_id=str(branch.id) if branch else None,
-            academic_year_id=str(academic_year.id),
-            grade_id=str(grade.id),
-            section_id=str(section.id),
-            admission_number=student.admission_number,
-            roll_number=student.roll_number,
-            student_name=student.name,
-            fee_template_id=str(fee_template.id),
-            concession_id=str(concession.id) if concession else None,
-        )
+            return CustomResponse.errorResponse(
+                description=str(e)
+            )
+
+        # --------------------------------------------------
+        # OPTIONAL FEE GENERATION
+        # --------------------------------------------------
+
+        fee_generated = False
+        fee_status = "NOT_CONFIGURED"
+        fee_message = "Fee template not configured for this grade."
+
+        try:
+
+            fee_template = FeeTemplate.objects.filter(
+                school=school,
+                academic_year=academic_year,
+                grade=grade,
+                is_active=True,
+            ).first()
+
+            if fee_template:
+
+                # ------------------------------------------
+                # OPTIONAL FEE CONCESSION
+                # ------------------------------------------
+
+                concession = None
+                fee_concession_id = request.data.get(
+                    "fee_concession_id"
+                )
+
+                if fee_concession_id:
+
+                    concession = FeeConcession.objects.filter(
+                        id=fee_concession_id,
+                        school=school,
+                    ).first()
+
+                    if concession is None:
+                        raise ValueError(
+                            "Fee concession not found."
+                        )
+
+                # ------------------------------------------
+                # GENERATE STUDENT FEES
+                # ------------------------------------------
+
+                with transaction.atomic():
+
+                    generate_student_fees(
+                        student=student,
+                        fee_template=fee_template,
+                        concession=concession,
+                    )
+
+                fee_generated = True
+                fee_status = "GENERATED"
+                fee_message = "Student fees generated successfully."
+
+                audit_logger.info(
+                    "student_fee_generation_completed",
+                    student_id=str(student.id),
+                    school_id=str(school.id),
+                    fee_template_id=str(fee_template.id),
+                    fee_concession_id=(
+                        str(concession.id) if concession else None
+                    ),
+                )
+
+            else:
+
+                audit_logger.warning(
+                    "student_fee_template_not_configured",
+                    student_id=str(student.id),
+                    school_id=str(school.id),
+                    academic_year_id=str(academic_year.id),
+                    grade_id=str(grade.id),
+                    admission_number=admission_number,
+                )
+
+        except Exception as fee_error:
+
+            fee_status = "FAILED"
+            fee_message = str(fee_error)
+
+            audit_logger.exception(
+                "student_fee_generation_failed",
+                student_id=str(student.id),
+                school_id=str(school.id),
+                error=str(fee_error),
+            )
+
+        # --------------------------------------------------
+        # FINAL RESPONSE
+        # --------------------------------------------------
 
         return CustomResponse.successResponse(
             description="Student created successfully.",
             data={
-                "id": str(student.id),
-                "name": student.name,
+                "student_id": str(student.id),
                 "admission_number": student.admission_number,
+                "name": student.name,
+                "fee_generated": fee_generated,
+                "fee_status": fee_status,
+                "fee_message": fee_message,
             },
         )
+
+
 
 
 
