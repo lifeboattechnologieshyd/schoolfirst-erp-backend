@@ -2543,23 +2543,23 @@ class TimetableListAPIView(APIView):
                             ),
                         },
 
-                        "subject": {
-                            "id": str(
-                                entry.subject.id
-                            ),
-                            "name": (
-                                entry.subject.name
-                            ),
-                        },
+                        "subject": (
+                            {
+                                "id": str(entry.subject.id),
+                                "name": entry.subject.name,
+                            }
+                            if entry.subject
+                            else None
+                        ),
 
-                        "teacher": {
-                            "id": str(
-                                entry.teacher.id
-                            ),
-                            "name": (
-                                entry.teacher.name
-                            ),
-                        },
+                        "teacher": (
+                            {
+                                "id": str(entry.teacher.id),
+                                "name": entry.teacher.name,
+                            }
+                            if entry.teacher
+                            else None
+                        ),
 
                         "notes": entry.notes,
 
@@ -4153,36 +4153,7 @@ class BulkUploadTimetableAPIView(APIView):
                             else:
                                 updated_count += 1
 
-                            # if existing_entry:
-                            #
-                            #     raise ValueError(
-                            #         "Timetable entry "
-                            #         "already exists for "
-                            #         f"{section.name}, "
-                            #         f"{day_of_week}, "
-                            #         f"Period "
-                            #         f"{period_number}."
-                            #     )
 
-                            # ------------------------------------------
-                            # CREATE ENTRY
-                            # ------------------------------------------
-
-                            # TimetableEntry.objects.create(
-                            #     timetable=timetable,
-                            #     grade=grade,
-                            #     section=section,
-                            #     subject=subject,
-                            #     teacher=teacher,
-                            #     period=period,
-                            #     day_of_week=day_of_week,
-                            #     notes=notes,
-                            #     status=(
-                            #         TimetableEntry
-                            #         .Status
-                            #         .ACTIVE
-                            #     ),
-                            # )
 
 
                         except IntegrityError as exc:
