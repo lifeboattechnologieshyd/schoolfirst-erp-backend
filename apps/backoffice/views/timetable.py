@@ -3089,6 +3089,7 @@ class TimetableDeleteAPIView(APIView):
 
 
 
+
 class BulkUploadTimetableAPIView(APIView):
 
     permission_classes = [IsAuthenticated, HasPermission]
@@ -3226,6 +3227,7 @@ class BulkUploadTimetableAPIView(APIView):
             }
 
             for field, value in required_params.items():
+
                 if not value:
                     return CustomResponse.errorResponse(
                         description=f"{field} is required."
@@ -3236,12 +3238,16 @@ class BulkUploadTimetableAPIView(APIView):
             # ------------------------------------------------------
 
             try:
-                academic_year_uuid = uuid.UUID(str(academic_year_id))
+
+                academic_year_uuid = uuid.UUID(
+                    str(academic_year_id)
+                )
                 grade_uuid = uuid.UUID(str(grade_id))
                 section_uuid = uuid.UUID(str(section_id))
                 term_uuid = uuid.UUID(str(term_id))
 
             except (ValueError, TypeError, AttributeError):
+
                 return CustomResponse.errorResponse(
                     description="Invalid UUID parameter."
                 )
@@ -3314,11 +3320,14 @@ class BulkUploadTimetableAPIView(APIView):
                 )
 
             try:
+
                 workbook = load_workbook(
                     file,
                     data_only=True,
                 )
+
             except Exception as exc:
+
                 application_logger.exception(
                     "timetable_bulk_upload_invalid_excel",
                     extra={
@@ -3369,6 +3378,7 @@ class BulkUploadTimetableAPIView(APIView):
             ]
 
             for header in required_period_headers:
+
                 if header not in period_headers:
                     return CustomResponse.errorResponse(
                         description=(
@@ -3513,6 +3523,7 @@ class BulkUploadTimetableAPIView(APIView):
             ]
 
             for header in required_timetable_headers:
+
                 if header not in timetable_headers:
                     return CustomResponse.errorResponse(
                         description=(
@@ -3606,6 +3617,8 @@ class BulkUploadTimetableAPIView(APIView):
                 # PROCESS TIMETABLE ROWS
                 # ----------------------------------------------
 
+                working_days = set()
+
                 for row_number, row in enumerate(
                     timetable_sheet.iter_rows(
                         min_row=2,
@@ -3618,14 +3631,13 @@ class BulkUploadTimetableAPIView(APIView):
 
                     try:
 
-                        # Each row gets its own savepoint.
                         with transaction.atomic():
 
                             data = dict(
                                 zip(timetable_headers, row)
                             )
 
-                            # Skip completely empty rows.
+                            # Skip empty rows
                             if not any(
                                 value not in [None, ""]
                                 for value in row
@@ -3694,38 +3706,18 @@ class BulkUploadTimetableAPIView(APIView):
                                 )
 
                             # ----------------------------------
-                            # BREAK PERIOD
+                            # BREAK PERIOD SHOULD NOT BE IN SHEET
                             # ----------------------------------
 
                             if period.is_break:
-
-                                entry, entry_created = (
-                                    TimetableEntry.objects.update_or_create(
-                                        timetable=timetable,
-                                        section=section,
-                                        day_of_week=day_of_week,
-                                        period=period,
-                                        defaults={
-                                            "grade": grade,
-                                            "subject": None,
-                                            "teacher": None,
-                                            "notes": period.name,
-                                            "status": (
-                                                TimetableEntry.Status.ACTIVE
-                                            ),
-                                        },
-                                    )
+                                raise ValueError(
+                                    f"Period '{period_number}' is a break "
+                                    "period. Do not add it to the "
+                                    "Timetable sheet."
                                 )
 
-                                if entry_created:
-                                    success_count += 1
-                                else:
-                                    updated_count += 1
-
-                                continue
-
                             # ----------------------------------
-                            # NORMAL PERIOD - SUBJECT
+                            # SUBJECT VALIDATION
                             # ----------------------------------
 
                             if not subject_name:
@@ -3744,7 +3736,7 @@ class BulkUploadTimetableAPIView(APIView):
                                 )
 
                             # ----------------------------------
-                            # NORMAL PERIOD - TEACHER
+                            # TEACHER VALIDATION
                             # ----------------------------------
 
                             if not teacher_name:
@@ -3764,7 +3756,7 @@ class BulkUploadTimetableAPIView(APIView):
                                 )
 
                             # ----------------------------------
-                            # CREATE / UPDATE ENTRY
+                            # CREATE / UPDATE NORMAL ENTRY
                             # ----------------------------------
 
                             entry, entry_created = (
@@ -3784,6 +3776,8 @@ class BulkUploadTimetableAPIView(APIView):
                                     },
                                 )
                             )
+
+                            working_days.add(day_of_week)
 
                             if entry_created:
                                 success_count += 1
@@ -3837,6 +3831,67 @@ class BulkUploadTimetableAPIView(APIView):
                             },
                         )
 
+                # ----------------------------------------------
+                # AUTOMATICALLY CREATE BREAK ENTRIES
+                # ----------------------------------------------
+
+                break_periods = [
+                    period
+                    for period in periods.values()
+                    if period.is_break
+                ]
+
+                for day in sorted(working_days):
+
+                    for period in break_periods:
+
+                        try:
+
+                            with transaction.atomic():
+
+                                entry, entry_created = (
+                                    TimetableEntry.objects.update_or_create(
+                                        timetable=timetable,
+                                        section=section,
+                                        day_of_week=day,
+                                        period=period,
+                                        defaults={
+                                            "grade": grade,
+                                            "subject": None,
+                                            "teacher": None,
+                                            "notes": period.name,
+                                            "status": (
+                                                TimetableEntry.Status.ACTIVE
+                                            ),
+                                        },
+                                    )
+                                )
+
+                                if entry_created:
+                                    success_count += 1
+                                else:
+                                    updated_count += 1
+
+                        except Exception as exc:
+
+                            failed_count += 1
+
+                            errors.append({
+                                "row": f"AUTO_BREAK_{day}_{period.period_number}",
+                                "message": str(exc),
+                            })
+
+                            application_logger.warning(
+                                "timetable_break_creation_failed",
+                                extra={
+                                    "performed_by": str(request.user.id),
+                                    "school_id": str(school.id),
+                                    "day": day,
+                                    "period": period.period_number,
+                                    "error": str(exc),
+                                },
+                            )
+
             # ------------------------------------------------------
             # FINAL LOG
             # ------------------------------------------------------
@@ -3889,6 +3944,7 @@ class BulkUploadTimetableAPIView(APIView):
                         "created": created,
                         "id": timetable.id,
                     },
+                    "working_days": sorted(working_days),
                     "total_records": (
                         success_count + failed_count
                     ),
@@ -3944,7 +4000,6 @@ class BulkUploadTimetableAPIView(APIView):
             return CustomResponse.errorResponse(
                 description=str(exc)
             )
-
 
 
 
