@@ -2543,23 +2543,23 @@ class TimetableListAPIView(APIView):
                             ),
                         },
 
-                        "subject": {
-                            "id": str(
-                                entry.subject.id
-                            ),
-                            "name": (
-                                entry.subject.name
-                            ),
-                        },
+                        "subject": (
+                            {
+                                "id": str(entry.subject.id),
+                                "name": entry.subject.name,
+                            }
+                            if entry.subject
+                            else None
+                        ),
 
-                        "teacher": {
-                            "id": str(
-                                entry.teacher.id
-                            ),
-                            "name": (
-                                entry.teacher.name
-                            ),
-                        },
+                        "teacher": (
+                            {
+                                "id": str(entry.teacher.id),
+                                "name": entry.teacher.name,
+                            }
+                            if entry.teacher
+                            else None
+                        ),
 
                         "notes": entry.notes,
 
@@ -3089,11 +3089,11 @@ class TimetableDeleteAPIView(APIView):
 
 
 
+
 class BulkUploadTimetableAPIView(APIView):
 
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "timetable.bulk_upload"
-
     parser_classes = [MultiPartParser]
 
     # --------------------------------------------------------------
@@ -3106,11 +3106,9 @@ class BulkUploadTimetableAPIView(APIView):
         if value in [None, ""]:
             raise ValueError("Time is required.")
 
-        # Excel time cell
         if isinstance(value, time):
             return value
 
-        # Excel datetime cell
         if isinstance(value, datetime):
             return value.time()
 
@@ -3131,8 +3129,7 @@ class BulkUploadTimetableAPIView(APIView):
                 continue
 
         raise ValueError(
-            f"Invalid time '{value}'. "
-            f"Use HH:MM format."
+            f"Invalid time '{value}'. Use HH:MM format."
         )
 
     # --------------------------------------------------------------
@@ -3150,25 +3147,14 @@ class BulkUploadTimetableAPIView(APIView):
 
         value = str(value).strip().lower()
 
-        if value in (
-            "yes",
-            "true",
-            "1",
-            "y",
-        ):
+        if value in ("yes", "true", "1", "y"):
             return True
 
-        if value in (
-            "no",
-            "false",
-            "0",
-            "n",
-        ):
+        if value in ("no", "false", "0", "n"):
             return False
 
         raise ValueError(
-            f"Invalid Is Break value '{value}'. "
-            f"Use Yes or No."
+            f"Invalid Is Break value '{value}'. Use Yes or No."
         )
 
     # --------------------------------------------------------------
@@ -3179,14 +3165,11 @@ class BulkUploadTimetableAPIView(APIView):
     def parse_period_number(value):
 
         if value in [None, ""]:
-            raise ValueError(
-                "Period Number is required."
-            )
+            raise ValueError("Period Number is required.")
 
         try:
             period_number = int(float(value))
         except (ValueError, TypeError):
-
             raise ValueError(
                 f"Invalid period number '{value}'."
             )
@@ -3212,152 +3195,66 @@ class BulkUploadTimetableAPIView(APIView):
                 "timetable_bulk_upload_started",
                 extra={
                     "performed_by": str(request.user.id),
-                    "school_id": (
-                        str(school.id)
-                        if school
-                        else None
-                    ),
+                    "school_id": str(school.id) if school else None,
                 },
             )
 
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
             # SCHOOL VALIDATION
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
 
             if not school:
-
-                application_logger.warning(
-                    "timetable_bulk_upload_failed",
-                    extra={
-                        "performed_by": str(
-                            request.user.id
-                        ),
-                        "reason": "school_not_found",
-                    },
-                )
-
                 return CustomResponse.errorResponse(
                     description="School not found."
                 )
 
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
             # GET PARAMETERS
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
 
-            academic_year_id = (
-                request.query_params.get(
-                    "academic_year_id"
-                )
+            academic_year_id = request.query_params.get(
+                "academic_year_id"
             )
-
-            grade_id = request.query_params.get(
-                "grade_id"
-            )
-
-            section_id = request.query_params.get(
-                "section_id"
-            )
+            grade_id = request.query_params.get("grade_id")
+            section_id = request.query_params.get("section_id")
             term_id = request.query_params.get("term_id")
 
+            required_params = {
+                "academic_year_id": academic_year_id,
+                "grade_id": grade_id,
+                "section_id": section_id,
+                "term_id": term_id,
+            }
 
-            # ----------------------------------------------------------
-            # PARAMETER VALIDATION
-            # ----------------------------------------------------------
+            for field, value in required_params.items():
 
-            if not academic_year_id:
-
-                return CustomResponse.errorResponse(
-                    description=(
-                        "academic_year_id is required."
+                if not value:
+                    return CustomResponse.errorResponse(
+                        description=f"{field} is required."
                     )
-                )
 
-            if not grade_id:
-
-                return CustomResponse.errorResponse(
-                    description="grade_id is required."
-                )
-
-            if not section_id:
-
-                return CustomResponse.errorResponse(
-                    description="section_id is required."
-                )
-            if not term_id:
-                return CustomResponse.errorResponse(
-                    description="term_id is required."
-                )
-
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
             # UUID VALIDATION
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
 
             try:
 
                 academic_year_uuid = uuid.UUID(
                     str(academic_year_id)
                 )
+                grade_uuid = uuid.UUID(str(grade_id))
+                section_uuid = uuid.UUID(str(section_id))
+                term_uuid = uuid.UUID(str(term_id))
 
-            except (
-                ValueError,
-                TypeError,
-                AttributeError,
-            ):
-
-                return CustomResponse.errorResponse(
-                    description="Invalid academic_year_id."
-                )
-
-            try:
-
-                grade_uuid = uuid.UUID(
-                    str(grade_id)
-                )
-
-            except (
-                ValueError,
-                TypeError,
-                AttributeError,
-            ):
+            except (ValueError, TypeError, AttributeError):
 
                 return CustomResponse.errorResponse(
-                    description="Invalid grade_id."
+                    description="Invalid UUID parameter."
                 )
 
-            try:
-
-                section_uuid = uuid.UUID(
-                    str(section_id)
-                )
-
-            except (
-                ValueError,
-                TypeError,
-                AttributeError,
-            ):
-
-                return CustomResponse.errorResponse(
-                    description="Invalid section_id."
-                )
-            try:
-
-                term_uuid = uuid.UUID(
-                    str(term_id)
-                )
-
-            except (
-                ValueError,
-                TypeError,
-                AttributeError,
-            ):
-
-                return CustomResponse.errorResponse(
-                    description="Invalid term_id."
-                )
-
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
             # ACADEMIC YEAR
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
 
             academic_year = AcademicYear.objects.filter(
                 id=academic_year_uuid,
@@ -3365,32 +3262,13 @@ class BulkUploadTimetableAPIView(APIView):
             ).first()
 
             if not academic_year:
-
-                application_logger.warning(
-                    "timetable_bulk_upload_failed",
-                    extra={
-                        "performed_by": str(
-                            request.user.id
-                        ),
-                        "school_id": str(
-                            school.id
-                        ),
-                        "academic_year_id": (
-                            academic_year_id
-                        ),
-                        "reason": (
-                            "academic_year_not_found"
-                        ),
-                    },
-                )
-
                 return CustomResponse.errorResponse(
                     description="Academic year not found."
                 )
 
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
             # GRADE
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
 
             grade = Grade.objects.filter(
                 id=grade_uuid,
@@ -3398,30 +3276,13 @@ class BulkUploadTimetableAPIView(APIView):
             ).first()
 
             if not grade:
-
-                application_logger.warning(
-                    "timetable_bulk_upload_failed",
-                    extra={
-                        "performed_by": str(
-                            request.user.id
-                        ),
-                        "school_id": str(
-                            school.id
-                        ),
-                        "grade_id": str(
-                            grade_id
-                        ),
-                        "reason": "grade_not_found",
-                    },
-                )
-
                 return CustomResponse.errorResponse(
                     description="Grade not found."
                 )
 
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
             # SECTION
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
 
             section = Section.objects.filter(
                 id=section_uuid,
@@ -3429,88 +3290,34 @@ class BulkUploadTimetableAPIView(APIView):
             ).first()
 
             if not section:
-
-                application_logger.warning(
-                    "timetable_bulk_upload_failed",
-                    extra={
-                        "performed_by": str(
-                            request.user.id
-                        ),
-                        "school_id": str(
-                            school.id
-                        ),
-                        "grade_id": str(
-                            grade_id
-                        ),
-                        "section_id": str(
-                            section_id
-                        ),
-                        "reason": (
-                            "section_not_found"
-                        ),
-                    },
-                )
-
                 return CustomResponse.errorResponse(
-                    description=(
-                        "Section not found for "
-                        "the selected grade."
-                    )
+                    description="Section not found for the selected grade."
                 )
+
+            # ------------------------------------------------------
+            # TERM
+            # ------------------------------------------------------
+
             term = TimetableTerm.objects.filter(
-                id = term_uuid,
+                id=term_uuid,
                 school=school,
             ).first()
+
             if not term:
-                application_logger.warning(
-                    "timetable_bulk_upload_failed",
-                    extra={
-                        "performed_by": str(
-                            request.user.id
-
-                        ),
-                        "school_id": str(
-                            school.id),
-
-                        "reason": (
-                            "timetable term not found"
-                        ),
-                    }
-                )
                 return CustomResponse.errorResponse(
                     description="Timetable term not found."
                 )
 
-            # ----------------------------------------------------------
-            # FILE
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
+            # FILE VALIDATION
+            # ------------------------------------------------------
 
             file = request.FILES.get("file")
 
             if not file:
-
-                application_logger.warning(
-                    "timetable_bulk_upload_failed",
-                    extra={
-                        "performed_by": str(
-                            request.user.id
-                        ),
-                        "school_id": str(
-                            school.id
-                        ),
-                        "reason": (
-                            "excel_file_missing"
-                        ),
-                    },
-                )
-
                 return CustomResponse.errorResponse(
                     description="Excel file is required."
                 )
-
-            # ----------------------------------------------------------
-            # LOAD WORKBOOK
-            # ----------------------------------------------------------
 
             try:
 
@@ -3522,18 +3329,11 @@ class BulkUploadTimetableAPIView(APIView):
             except Exception as exc:
 
                 application_logger.exception(
-                    "timetable_bulk_upload_failed",
+                    "timetable_bulk_upload_invalid_excel",
                     extra={
-                        "performed_by": str(
-                            request.user.id
-                        ),
-                        "school_id": str(
-                            school.id
-                        ),
+                        "performed_by": str(request.user.id),
+                        "school_id": str(school.id),
                         "file_name": file.name,
-                        "reason": (
-                            "invalid_excel_file"
-                        ),
                         "error": str(exc),
                     },
                 )
@@ -3542,68 +3342,30 @@ class BulkUploadTimetableAPIView(APIView):
                     description="Invalid Excel file."
                 )
 
-            # ----------------------------------------------------------
-            # PERIOD SHEET
-            # ----------------------------------------------------------
+            # ------------------------------------------------------
+            # SHEET VALIDATION
+            # ------------------------------------------------------
 
             if "Periods" not in workbook.sheetnames:
-
-                application_logger.warning(
-                    "timetable_bulk_upload_failed",
-                    extra={
-                        "performed_by": str(
-                            request.user.id
-                        ),
-                        "school_id": str(
-                            school.id
-                        ),
-                        "file_name": file.name,
-                        "reason": (
-                            "period_sheet_missing"
-                        ),
-                    },
+                return CustomResponse.errorResponse(
+                    description="Periods sheet is required."
                 )
 
+            if "Timetable" not in workbook.sheetnames:
                 return CustomResponse.errorResponse(
-                    description=(
-                        "Periods sheet is required."
-                    )
+                    description="Timetable sheet is required."
                 )
 
             period_sheet = workbook["Periods"]
+            timetable_sheet = workbook["Timetable"]
 
-            # ----------------------------------------------------------
-            # FIND TIMETABLE SHEET
-            # ----------------------------------------------------------
-
-            timetable_sheet = None
-
-            for sheet_name in workbook.sheetnames:
-
-                if sheet_name != "Periods":
-
-                    timetable_sheet = workbook[
-                        sheet_name
-                    ]
-
-                    break
-
-            if not timetable_sheet:
-
-                return CustomResponse.errorResponse(
-                    description=(
-                        "Timetable sheet is required."
-                    )
-                )
-
-            # ==========================================================
-            # PERIOD SHEET VALIDATION
-            # ==========================================================
+            # ------------------------------------------------------
+            # PERIOD HEADERS
+            # ------------------------------------------------------
 
             period_headers = [
                 str(cell.value).strip()
-                if cell.value is not None
-                else ""
+                if cell.value is not None else ""
                 for cell in period_sheet[1]
             ]
 
@@ -3618,34 +3380,16 @@ class BulkUploadTimetableAPIView(APIView):
             for header in required_period_headers:
 
                 if header not in period_headers:
-
-                    application_logger.warning(
-                        "timetable_bulk_upload_failed",
-                        extra={
-                            "performed_by": str(
-                                request.user.id
-                            ),
-                            "school_id": str(
-                                school.id
-                            ),
-                            "file_name": file.name,
-                            "missing_header": header,
-                            "reason": (
-                                "period_column_missing"
-                            ),
-                        },
-                    )
-
                     return CustomResponse.errorResponse(
                         description=(
                             f"{header} column is missing "
-                            f"in Periods sheet."
+                            "in Periods sheet."
                         )
                     )
 
-            # ==========================================================
-            # READ AND VALIDATE PERIODS
-            # ==========================================================
+            # ------------------------------------------------------
+            # READ PERIOD DATA
+            # ------------------------------------------------------
 
             period_data = {}
 
@@ -3659,29 +3403,23 @@ class BulkUploadTimetableAPIView(APIView):
 
                 try:
 
-                    data = dict(
-                        zip(
-                            period_headers,
-                            row,
-                        )
-                    )
+                    data = dict(zip(period_headers, row))
+
+                    if not any(
+                        value not in [None, ""]
+                        for value in row
+                    ):
+                        continue
 
                     name = str(
                         data.get("Name") or ""
                     ).strip()
 
                     if not name:
+                        raise ValueError("Name is required.")
 
-                        raise ValueError(
-                            "Name is required."
-                        )
-
-                    period_number = (
-                        self.parse_period_number(
-                            data.get(
-                                "Period Number"
-                            )
-                        )
+                    period_number = self.parse_period_number(
+                        data.get("Period Number")
                     )
 
                     start_time = self.parse_time(
@@ -3693,10 +3431,8 @@ class BulkUploadTimetableAPIView(APIView):
                     )
 
                     if start_time >= end_time:
-
                         raise ValueError(
-                            "Start Time must be "
-                            "less than End Time."
+                            "Start Time must be less than End Time."
                         )
 
                     is_break = self.parse_boolean(
@@ -3704,17 +3440,13 @@ class BulkUploadTimetableAPIView(APIView):
                     )
 
                     if period_number in period_data:
-
                         raise ValueError(
-                            f"Duplicate period number "
-                            f"'{period_number}'."
+                            f"Duplicate period number '{period_number}'."
                         )
 
                     period_data[period_number] = {
                         "name": name,
-                        "period_number": (
-                            period_number
-                        ),
+                        "period_number": period_number,
                         "start_time": start_time,
                         "end_time": end_time,
                         "is_break": is_break,
@@ -3725,12 +3457,8 @@ class BulkUploadTimetableAPIView(APIView):
                     application_logger.warning(
                         "timetable_period_import_failed",
                         extra={
-                            "performed_by": str(
-                                request.user.id
-                            ),
-                            "school_id": str(
-                                school.id
-                            ),
+                            "performed_by": str(request.user.id),
+                            "school_id": str(school.id),
                             "file_name": file.name,
                             "row_number": row_number,
                             "error": str(exc),
@@ -3739,66 +3467,50 @@ class BulkUploadTimetableAPIView(APIView):
 
                     return CustomResponse.errorResponse(
                         description=(
-                            f"Periods sheet row "
-                            f"{row_number}: {str(exc)}"
+                            f"Periods sheet row {row_number}: {str(exc)}"
                         )
                     )
 
             if not period_data:
-
                 return CustomResponse.errorResponse(
                     description=(
-                        "Periods sheet must contain "
-                        "at least one period."
+                        "Periods sheet must contain at least one period."
                     )
                 )
 
-            # ==========================================================
-            # VALIDATE PERIOD OVERLAPPING
-            # ==========================================================
+            # ------------------------------------------------------
+            # PERIOD OVERLAP VALIDATION
+            # ------------------------------------------------------
 
             sorted_periods = sorted(
                 period_data.values(),
-                key=lambda item: item[
-                    "start_time"
-                ],
+                key=lambda item: item["start_time"],
             )
 
-            for index in range(
-                len(sorted_periods) - 1
-            ):
+            for index in range(len(sorted_periods) - 1):
 
-                current_period = (
-                    sorted_periods[index]
-                )
-
-                next_period = (
-                    sorted_periods[index + 1]
-                )
+                current_period = sorted_periods[index]
+                next_period = sorted_periods[index + 1]
 
                 if (
                     current_period["end_time"]
                     > next_period["start_time"]
                 ):
-
                     return CustomResponse.errorResponse(
                         description=(
                             "Periods overlap: "
-                            f"Period "
-                            f"{current_period['period_number']} "
-                            f"and Period "
-                            f"{next_period['period_number']}."
+                            f"Period {current_period['period_number']} "
+                            f"and Period {next_period['period_number']}."
                         )
                     )
 
-            # ==========================================================
-            # TIMETABLE SHEET VALIDATION
-            # ==========================================================
+            # ------------------------------------------------------
+            # TIMETABLE HEADERS
+            # ------------------------------------------------------
 
             timetable_headers = [
                 str(cell.value).strip()
-                if cell.value is not None
-                else ""
+                if cell.value is not None else ""
                 for cell in timetable_sheet[1]
             ]
 
@@ -3813,17 +3525,16 @@ class BulkUploadTimetableAPIView(APIView):
             for header in required_timetable_headers:
 
                 if header not in timetable_headers:
-
                     return CustomResponse.errorResponse(
                         description=(
                             f"{header} column is missing "
-                            f"in timetable sheet."
+                            "in Timetable sheet."
                         )
                     )
 
-            # ==========================================================
+            # ------------------------------------------------------
             # COUNTERS
-            # ==========================================================
+            # ------------------------------------------------------
 
             period_created_count = 0
             period_existing_count = 0
@@ -3832,594 +3543,456 @@ class BulkUploadTimetableAPIView(APIView):
             updated_count = 0
             failed_count = 0
 
-
             errors = []
 
-            # ==========================================================
-            # CREATE PERIODS
-            # ==========================================================
+            # ------------------------------------------------------
+            # CREATE PERIODS AND TIMETABLE
+            # ------------------------------------------------------
 
-            try:
+            with transaction.atomic():
 
-                with transaction.atomic():
+                periods = {}
 
-                    periods = {}
+                # ----------------------------------------------
+                # CREATE / GET PERIODS
+                # ----------------------------------------------
 
-                    for period_number, data in (
-                        period_data.items()
-                    ):
+                for period_number, data in period_data.items():
 
-                        period = (
-                            TimetablePeriod.objects.filter(
-                                school=school,
-                                period_number=(
-                                    period_number
-                                ),
-                            ).first()
-                        )
+                    period = TimetablePeriod.objects.filter(
+                        school=school,
+                        period_number=period_number,
+                    ).first()
 
-                        if period:
+                    if period:
 
-                            # Existing period must have
-                            # the same timing.
-
-                            if (
-                                period.start_time
-                                != data["start_time"]
-                                or
-                                period.end_time
-                                != data["end_time"]
-                            ):
-
-                                raise ValueError(
-                                    f"Period "
-                                    f"'{period_number}' "
-                                    f"already exists with "
-                                    f"a different time."
-                                )
-
-                            periods[
-                                period_number
-                            ] = period
-
-                            period_existing_count += 1
-
-                        else:
-
-                            period = (
-                                TimetablePeriod.objects.create(
-                                    school=school,
-                                    name=data["name"],
-                                    period_number=(
-                                        period_number
-                                    ),
-                                    start_time=(
-                                        data["start_time"]
-                                    ),
-                                    end_time=(
-                                        data["end_time"]
-                                    ),
-                                    is_break=(
-                                        data["is_break"]
-                                    ),
-                                    # status=(
-                                    #     TimetablePeriod
-                                    #     .Status
-                                    #     .ACTIVE
-                                    # ),
-                                )
+                        if (
+                            period.start_time != data["start_time"]
+                            or period.end_time != data["end_time"]
+                        ):
+                            raise ValueError(
+                                f"Period '{period_number}' already "
+                                "exists with a different time."
                             )
 
-                            periods[
-                                period_number
-                            ] = period
+                        if period.is_break != data["is_break"]:
+                            raise ValueError(
+                                f"Period '{period_number}' already "
+                                "exists with a different Is Break value."
+                            )
 
-                            period_created_count += 1
+                        periods[period_number] = period
+                        period_existing_count += 1
 
-                    # ==================================================
-                    # CREATE / GET TIMETABLE
-                    # ==================================================
+                    else:
 
-                    timetable, created = (
-                        Timetable.objects.get_or_create(
+                        period = TimetablePeriod.objects.create(
                             school=school,
-                            academic_year=(
-                                academic_year
-                            ),
-                            term = term,
-                            # grade=grade,
-                            # section=section,
-                            defaults={
-                                "status": (
-                                    Timetable
-                                    .Status
-                                    .ACTIVE
-                                ),
-                            },
+                            name=data["name"],
+                            period_number=period_number,
+                            start_time=data["start_time"],
+                            end_time=data["end_time"],
+                            is_break=data["is_break"],
                         )
+
+                        periods[period_number] = period
+                        period_created_count += 1
+
+                # ----------------------------------------------
+                # CREATE / GET TIMETABLE
+                # ----------------------------------------------
+
+                timetable, created = (
+                    Timetable.objects.get_or_create(
+                        school=school,
+                        academic_year=academic_year,
+                        term=term,
+                        defaults={
+                            "status": Timetable.Status.ACTIVE,
+                        },
                     )
+                )
 
-                    # ==================================================
-                    # PROCESS TIMETABLE ROWS
-                    # ==================================================
+                # ----------------------------------------------
+                # PROCESS TIMETABLE ROWS
+                # ----------------------------------------------
 
-                    for row_number, row in enumerate(
-                        timetable_sheet.iter_rows(
-                            min_row=2,
-                            values_only=True,
-                        ),
-                        start=2,
-                    ):
+                working_days = set()
 
-                        data = {}
+                for row_number, row in enumerate(
+                    timetable_sheet.iter_rows(
+                        min_row=2,
+                        values_only=True,
+                    ),
+                    start=2,
+                ):
 
-                        try:
+                    data = {}
+
+                    try:
+
+                        with transaction.atomic():
 
                             data = dict(
-                                zip(
-                                    timetable_headers,
-                                    row,
-                                )
+                                zip(timetable_headers, row)
                             )
 
-                            # ------------------------------------------
+                            # Skip empty rows
+                            if not any(
+                                value not in [None, ""]
+                                for value in row
+                            ):
+                                continue
+
+                            # ----------------------------------
                             # VALUES
-                            # ------------------------------------------
+                            # ----------------------------------
 
                             day_of_week = str(
                                 data.get("Day") or ""
                             ).strip().upper()
 
-                            period_value = data.get(
-                                "Period"
-                            )
+                            period_value = data.get("Period")
 
                             subject_name = str(
-                                data.get("Subject")
-                                or ""
+                                data.get("Subject") or ""
                             ).strip()
 
                             teacher_name = str(
-                                data.get("Teacher")
-                                or ""
+                                data.get("Teacher") or ""
                             ).strip()
 
-                            notes = data.get(
-                                "Notes"
-                            )
+                            notes = data.get("Notes")
 
-                            # ------------------------------------------
+                            # ----------------------------------
                             # REQUIRED VALUES
-                            # ------------------------------------------
+                            # ----------------------------------
 
-                            required_values = {
-                                "Day": day_of_week,
-                                "Period": period_value,
-                                "Subject": subject_name,
-                                "Teacher": teacher_name,
-                            }
+                            if not day_of_week:
+                                raise ValueError("Day is required.")
 
-                            for field, value in (
-                                required_values.items()
-                            ):
+                            if period_value in [None, ""]:
+                                raise ValueError("Period is required.")
 
-                                if value in [
-                                    None,
-                                    "",
-                                ]:
-
-                                    raise ValueError(
-                                        f"{field} is required."
-                                    )
-
-                            # ------------------------------------------
-                            # DAY
-                            # ------------------------------------------
+                            # ----------------------------------
+                            # DAY VALIDATION
+                            # ----------------------------------
 
                             if (
                                 day_of_week
-                                not in (
-                                    TimetableEntry
-                                    .DayOfWeek
-                                    .values
-                                )
+                                not in TimetableEntry.DayOfWeek.values
                             ):
-
                                 raise ValueError(
-                                    f"Invalid day "
-                                    f"'{day_of_week}'."
+                                    f"Invalid day '{day_of_week}'."
                                 )
 
-                            # ------------------------------------------
-                            # PERIOD
-                            # ------------------------------------------
+                            # ----------------------------------
+                            # PERIOD VALIDATION
+                            # ----------------------------------
 
                             try:
-
-                                period_number = int(
-                                    float(
-                                        period_value
-                                    )
-                                )
-
-                            except (
-                                ValueError,
-                                TypeError,
-                            ):
-
+                                period_number = int(float(period_value))
+                            except (ValueError, TypeError):
                                 raise ValueError(
-                                    f"Invalid period "
-                                    f"'{period_value}'."
+                                    f"Invalid period '{period_value}'."
                                 )
 
                             period = periods.get(period_number)
 
                             if not period:
-
                                 raise ValueError(
-                                    f"Period "
-                                    f"'{period_number}' "
-                                    f"not found in "
-                                    f"Periods sheet."
+                                    f"Period '{period_number}' not found "
+                                    "in Periods sheet."
                                 )
-                            # BREAK
+
+                            # ----------------------------------
+                            # BREAK PERIOD SHOULD NOT BE IN SHEET
+                            # ----------------------------------
+
                             if period.is_break:
-                                entry, created = TimetableEntry.objects.update_or_create(
+                                raise ValueError(
+                                    f"Period '{period_number}' is a break "
+                                    "period. Do not add it to the "
+                                    "Timetable sheet."
+                                )
+
+                            # ----------------------------------
+                            # SUBJECT VALIDATION
+                            # ----------------------------------
+
+                            if not subject_name:
+                                raise ValueError(
+                                    "Subject is required."
+                                )
+
+                            subject = Subject.objects.filter(
+                                school=school,
+                                name__iexact=subject_name,
+                            ).first()
+
+                            if not subject:
+                                raise ValueError(
+                                    f"Subject '{subject_name}' not found."
+                                )
+
+                            # ----------------------------------
+                            # TEACHER VALIDATION
+                            # ----------------------------------
+
+                            if not teacher_name:
+                                raise ValueError(
+                                    "Teacher is required."
+                                )
+
+                            teacher = Staff.objects.filter(
+                                school=school,
+                                name__iexact=teacher_name,
+                                status=Staff.Status.ACTIVE,
+                            ).first()
+
+                            if not teacher:
+                                raise ValueError(
+                                    f"Teacher '{teacher_name}' not found."
+                                )
+
+                            # ----------------------------------
+                            # CREATE / UPDATE NORMAL ENTRY
+                            # ----------------------------------
+
+                            entry, entry_created = (
+                                TimetableEntry.objects.update_or_create(
                                     timetable=timetable,
                                     section=section,
                                     day_of_week=day_of_week,
                                     period=period,
                                     defaults={
                                         "grade": grade,
-                                        "subject": None,
-                                        "teacher": None,
-                                        "notes": period.name,
-                                        "status": TimetableEntry.Status.ACTIVE,
+                                        "subject": subject,
+                                        "teacher": teacher,
+                                        "notes": notes,
+                                        "status": (
+                                            TimetableEntry.Status.ACTIVE
+                                        ),
                                     },
                                 )
-
-                                if created:
-                                    success_count += 1
-                                else:
-                                    updated_count += 1
-
-                                continue
-
-                            # ------------------------------------------
-                            # SUBJECT
-                            # ------------------------------------------
-
-                            subject = (
-                                Subject.objects.filter(
-                                    school=school,
-                                    name__iexact=(
-                                        subject_name
-                                    ),
-                                ).first()
                             )
 
-                            if not subject:
+                            working_days.add(day_of_week)
 
-                                raise ValueError(
-                                    f"Subject "
-                                    f"'{subject_name}' "
-                                    f"not found."
-                                )
-
-                            # ------------------------------------------
-                            # TEACHER
-                            # ------------------------------------------
-
-                            teacher = (
-                                Staff.objects.filter(
-                                    school=school,
-                                    name__iexact=(
-                                        teacher_name
-                                    ),
-                                    status=(
-                                        Staff.Status
-                                        .ACTIVE
-                                    ),
-                                ).first()
-                            )
-
-                            if not teacher:
-
-                                raise ValueError(
-                                    f"Teacher "
-                                    f"'{teacher_name}' "
-                                    f"not found."
-                                )
-
-                            # ------------------------------------------
-                            # DUPLICATE ENTRY
-                            # ------------------------------------------
-
-                            entry, created = TimetableEntry.objects.update_or_create(
-                                timetable=timetable,
-                                section=section,
-                                day_of_week=day_of_week,
-                                period=period,
-                                defaults={
-                                    "grade": grade,
-                                    "subject": subject,
-                                    "teacher": teacher,
-                                    "notes": notes,
-                                    "status": TimetableEntry.Status.ACTIVE,
-                                },
-                            )
-                            if created:
+                            if entry_created:
                                 success_count += 1
                             else:
                                 updated_count += 1
 
-                            # if existing_entry:
-                            #
-                            #     raise ValueError(
-                            #         "Timetable entry "
-                            #         "already exists for "
-                            #         f"{section.name}, "
-                            #         f"{day_of_week}, "
-                            #         f"Period "
-                            #         f"{period_number}."
-                            #     )
+                    except IntegrityError as exc:
 
-                            # ------------------------------------------
-                            # CREATE ENTRY
-                            # ------------------------------------------
+                        failed_count += 1
 
-                            # TimetableEntry.objects.create(
-                            #     timetable=timetable,
-                            #     grade=grade,
-                            #     section=section,
-                            #     subject=subject,
-                            #     teacher=teacher,
-                            #     period=period,
-                            #     day_of_week=day_of_week,
-                            #     notes=notes,
-                            #     status=(
-                            #         TimetableEntry
-                            #         .Status
-                            #         .ACTIVE
-                            #     ),
-                            # )
+                        errors.append({
+                            "row": row_number,
+                            "message": (
+                                "Duplicate timetable entry or invalid "
+                                "timetable data."
+                            ),
+                        })
 
+                        application_logger.warning(
+                            "timetable_bulk_upload_row_failed",
+                            extra={
+                                "performed_by": str(request.user.id),
+                                "school_id": str(school.id),
+                                "file_name": file.name,
+                                "row_number": row_number,
+                                "error": str(exc),
+                            },
+                        )
 
-                        except IntegrityError as exc:
+                    except Exception as exc:
 
-                            failed_count += 1
+                        failed_count += 1
 
-                            errors.append({
-                                "row": row_number,
-                                "message": (
-                                    "Duplicate timetable "
-                                    "entry or invalid "
-                                    "timetable data."
-                                ),
-                            })
+                        errors.append({
+                            "row": row_number,
+                            "message": str(exc),
+                        })
 
-                            application_logger.warning(
-                                "timetable_bulk_upload_row_failed",
-                                extra={
-                                    "performed_by": str(
-                                        request.user.id
-                                    ),
-                                    "school_id": str(
-                                        school.id
-                                    ),
-                                    "file_name": (
-                                        file.name
-                                    ),
-                                    "row_number": (
-                                        row_number
-                                    ),
-                                    "error": str(exc),
-                                },
-                            )
+                        application_logger.warning(
+                            "timetable_bulk_upload_row_failed",
+                            extra={
+                                "performed_by": str(request.user.id),
+                                "school_id": str(school.id),
+                                "file_name": file.name,
+                                "row_number": row_number,
+                                "day": data.get("Day"),
+                                "period": data.get("Period"),
+                                "subject": data.get("Subject"),
+                                "teacher": data.get("Teacher"),
+                                "error": str(exc),
+                            },
+                        )
+
+                # ----------------------------------------------
+                # AUTOMATICALLY CREATE BREAK ENTRIES
+                # ----------------------------------------------
+
+                break_periods = [
+                    period
+                    for period in periods.values()
+                    if period.is_break
+                ]
+
+                for day in sorted(working_days):
+
+                    for period in break_periods:
+
+                        try:
+
+                            with transaction.atomic():
+
+                                entry, entry_created = (
+                                    TimetableEntry.objects.update_or_create(
+                                        timetable=timetable,
+                                        section=section,
+                                        day_of_week=day,
+                                        period=period,
+                                        defaults={
+                                            "grade": grade,
+                                            "subject": None,
+                                            "teacher": None,
+                                            "notes": period.name,
+                                            "status": (
+                                                TimetableEntry.Status.ACTIVE
+                                            ),
+                                        },
+                                    )
+                                )
+
+                                if entry_created:
+                                    success_count += 1
+                                else:
+                                    updated_count += 1
 
                         except Exception as exc:
 
                             failed_count += 1
 
                             errors.append({
-                                "row": row_number,
+                                "row": f"AUTO_BREAK_{day}_{period.period_number}",
                                 "message": str(exc),
                             })
 
                             application_logger.warning(
-                                "timetable_bulk_upload_row_failed",
+                                "timetable_break_creation_failed",
                                 extra={
-                                    "performed_by": str(
-                                        request.user.id
-                                    ),
-                                    "school_id": str(
-                                        school.id
-                                    ),
-                                    "file_name": (
-                                        file.name
-                                    ),
-                                    "row_number": (
-                                        row_number
-                                    ),
-                                    "day": data.get(
-                                        "Day"
-                                    ),
-                                    "period": data.get(
-                                        "Period"
-                                    ),
-                                    "subject": data.get(
-                                        "Subject"
-                                    ),
-                                    "teacher": data.get(
-                                        "Teacher"
-                                    ),
+                                    "performed_by": str(request.user.id),
+                                    "school_id": str(school.id),
+                                    "day": day,
+                                    "period": period.period_number,
                                     "error": str(exc),
                                 },
                             )
 
-            except ValueError as exc:
-
-                application_logger.warning(
-                    "timetable_bulk_upload_failed",
-                    extra={
-                        "performed_by": str(
-                            request.user.id
-                        ),
-                        "school_id": str(
-                            school.id
-                        ),
-                        "file_name": file.name,
-                        "reason": "period_validation",
-                        "error": str(exc),
-                    },
-                )
-
-                return CustomResponse.errorResponse(
-                    description=str(exc)
-                )
-
-            except IntegrityError as exc:
-
-                application_logger.exception(
-                    "timetable_bulk_upload_failed",
-                    extra={
-                        "performed_by": str(
-                            request.user.id
-                        ),
-                        "school_id": str(
-                            school.id
-                        ),
-                        "file_name": file.name,
-                        "reason": "database_error",
-                        "error": str(exc),
-                    },
-                )
-
-                return CustomResponse.errorResponse(
-                    description=(
-                        "Unable to upload timetable."
-                    )
-                )
-
-            except Exception as exc:
-
-                application_logger.exception(
-                    "timetable_bulk_upload_failed",
-                    extra={
-                        "performed_by": str(
-                            request.user.id
-                        ),
-                        "school_id": str(
-                            school.id
-                        ),
-                        "file_name": file.name,
-                        "reason": "unexpected_error",
-                        "error": str(exc),
-                    },
-                )
-
-                return CustomResponse.errorResponse(
-                    description=(
-                        "Unable to upload timetable."
-                    )
-                )
-
-            # ==========================================================
+            # ------------------------------------------------------
             # FINAL LOG
-            # ==========================================================
+            # ------------------------------------------------------
 
             application_logger.info(
                 "timetable_bulk_upload_completed",
                 extra={
-                    "performed_by": str(
-                        request.user.id
-                    ),
-                    "school_id": str(
-                        school.id
-                    ),
+                    "performed_by": str(request.user.id),
+                    "school_id": str(school.id),
                     "file_name": file.name,
-                    "academic_year_id": str(
-                        academic_year.id
-                    ),
-                    "grade_id": str(
-                        grade.id
-                    ),
-                    "section_id": str(
-                        section.id
-                    ),
-                    "period_created_count": (
-                        period_created_count
-                    ),
-                    "period_existing_count": (
-                        period_existing_count
-                    ),
+                    "academic_year_id": str(academic_year.id),
+                    "grade_id": str(grade.id),
+                    "section_id": str(section.id),
+                    "period_created_count": period_created_count,
+                    "period_existing_count": period_existing_count,
                     "success_count": success_count,
+                    "updated_count": updated_count,
                     "failed_count": failed_count,
                 },
             )
 
-            # ==========================================================
+            # ------------------------------------------------------
             # RESPONSE
-            # ==========================================================
+            # ------------------------------------------------------
 
             return CustomResponse.successResponse(
-                description=(
-                    "Timetable bulk upload completed."
-                ),
+                description="Timetable bulk upload completed.",
                 data={
-
                     "academic_year": {
                         "id": academic_year.id,
                         "name": academic_year.name,
                     },
-
                     "grade": {
                         "id": grade.id,
                         "name": grade.name,
                     },
-
                     "section": {
                         "id": section.id,
                         "name": section.name,
                     },
-
                     "periods": {
-                        "created": (
-                            period_created_count
-                        ),
-                        "existing": (
-                            period_existing_count
-                        ),
+                        "created": period_created_count,
+                        "existing": period_existing_count,
                         "total": (
                             period_created_count
                             + period_existing_count
                         ),
                     },
-
                     "timetable": {
                         "created": created,
                         "id": timetable.id,
                     },
-
+                    "working_days": sorted(working_days),
                     "total_records": (
-                        success_count
-                        + failed_count
+                        success_count + failed_count
                     ),
-
                     "success_count": success_count,
-
+                    "updated_count": updated_count,
                     "failed_count": failed_count,
-
                     "errors": errors,
                 },
             )
+
+        except ValueError as exc:
+
+            application_logger.warning(
+                "timetable_bulk_upload_failed",
+                extra={
+                    "performed_by": str(request.user.id),
+                    "school_id": (
+                        str(request.school.id)
+                        if request.school else None
+                    ),
+                    "error": str(exc),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(exc)
+            )
+
+        except IntegrityError as exc:
+
+            application_logger.exception(
+                "timetable_bulk_upload_database_error",
+                extra={
+                    "performed_by": str(request.user.id),
+                    "error": str(exc),
+                },
+            )
+
+            return CustomResponse.errorResponse(
+                description="Unable to upload timetable."
+            )
+
         except Exception as exc:
+
             application_logger.exception(
                 "timetable_create_exception",
                 extra={
-                    "requested_by": str(
-                        request.user.id
-                    ),
+                    "requested_by": str(request.user.id),
                     "error": str(exc),
                 },
             )

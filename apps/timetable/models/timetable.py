@@ -347,12 +347,14 @@ class TimetableEntry(AuditModel):
         Subject,
         on_delete=models.CASCADE,
         related_name="timetable_entries",
+        null=True,
     )
 
     teacher = models.ForeignKey(
         Staff,
         on_delete=models.CASCADE,
         related_name="timetable_entries",
+        null=True,
     )
 
     # room = models.ForeignKey(
