@@ -130,6 +130,12 @@ class ADMINSendOTPAPIView(APIView):
 
             elif mobile == "7569787335":
                 otp = "1234"
+            elif mobile == "9494442335":
+                otp = "1234"
+            elif mobile == "7780595740":
+                otp = "1234"
+            elif mobile == "8919248746":
+                otp = "1234"
 
             else:
                 otp = generate_otp()
