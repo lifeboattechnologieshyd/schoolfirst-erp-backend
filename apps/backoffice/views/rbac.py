@@ -1,3 +1,5 @@
+from pydoc import describe
+
 from django.db import transaction
 from rest_framework import status
 from rest_framework.views import APIView
@@ -53,7 +55,10 @@ class ModuleListCreateAPIView(APIView):
         )
 
         return CustomResponse.successResponse(
-            data=data
+            total=len(data),
+            data=data,
+            description="Module list created successfully.",
+
         )
 
     def post(self, request):
@@ -167,8 +172,42 @@ class PermissionListCreateAPIView(APIView):
             user_id=str(request.user.id),
         )
 
-        permissions = Permissions.objects.select_related(
-            "module"
+        permission_filter = request.query_params.get(
+            "permission",
+            "",
+        ).strip()
+
+        module_filter = request.query_params.get(
+            "module",
+            "",
+        ).strip()
+
+        permissions = Permissions.objects.filter(
+            is_deleted=False,
+        ).select_related(
+            "module",
+        )
+
+        # Permission name filter
+        if permission_filter:
+            permissions = permissions.filter(
+                permission_name__icontains=permission_filter,
+            )
+
+        # Module ID or module name filter
+        if module_filter:
+            if len(module_filter) == 36:
+                permissions = permissions.filter(
+                    module_id=module_filter,
+                )
+            else:
+                permissions = permissions.filter(
+                    module__module_name__icontains=module_filter,
+                )
+
+        permissions = permissions.order_by(
+            "module__module_name",
+            "permission_name",
         )
 
         data = [
@@ -185,10 +224,14 @@ class PermissionListCreateAPIView(APIView):
             "permissions_list_fetched",
             user_id=str(request.user.id),
             total_count=len(data),
+            permission_filter=permission_filter,
+            module_filter=module_filter,
         )
 
         return CustomResponse.successResponse(
-            data=data
+            total=len(data),
+            data=data,
+            description="permissions_list_fetched successfully.",
         )
 
     def post(self, request):
