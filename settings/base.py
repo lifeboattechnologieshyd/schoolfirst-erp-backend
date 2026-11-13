@@ -61,6 +61,8 @@ INSTALLED_APPS = [
     "apps.contactus",
     "apps.timetable",
     "apps.bulletin",
+    "apps.curriculum",
+    "apps.edutainment",
     # Third Party
     "rest_framework",
     "rest_framework.authtoken",

@@ -183,6 +183,7 @@ class ADMINSendOTPAPIView(APIView):
 
 
 
+
 class ADMINVerifyOTPAPIView(APIView):
 
     permission_classes = [AllowAny]
@@ -198,6 +199,7 @@ class ADMINVerifyOTPAPIView(APIView):
             mobile=mobile,
         )
 
+        # Validate required fields
         if not mobile or not otp:
 
             auth_logger.warning(
@@ -211,6 +213,7 @@ class ADMINVerifyOTPAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Get user
         user = UserMaster.objects.filter(
             mobile=mobile,
             is_active=True,
@@ -229,10 +232,7 @@ class ADMINVerifyOTPAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        roles = get_user_roles(
-            user=user,
-        )
-
+        # Verify OTP
         otp_obj = UserOTP.objects.filter(
             mobile=int(mobile),
             otp=otp,
@@ -256,6 +256,7 @@ class ADMINVerifyOTPAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Mark OTP as used
         otp_obj.is_used = True
         otp_obj.save(
             update_fields=["is_used"],
@@ -268,39 +269,61 @@ class ADMINVerifyOTPAPIView(APIView):
             otp_id=str(otp_obj.id),
         )
 
-        refresh = RefreshToken.for_user(
-            user,
-        )
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
 
+        # Get user permissions
         permissions = get_user_permissions(
             user=user,
         )
 
-        assigned_schools = UserRoles.objects.filter(
+        # Get school and role combinations
+        user_roles = UserRoles.objects.filter(
             user=user,
             school__isnull=False,
         ).select_related(
             "school",
-        ).values(
-            "school__id",
+            "role",
+        ).order_by(
             "school__name",
-        ).distinct()
+            "role__role_name",
+        )
 
-        schools = [
-            {
-                "id": str(school["school__id"]),
-                "name": school["school__name"],
+        school_role_mapping = {}
+
+        for item in user_roles:
+
+            school_id = str(item.school_id)
+
+            if school_id not in school_role_mapping:
+
+                school_role_mapping[school_id] = {
+                    "school": {
+                        "id": school_id,
+                        "name": item.school.name,
+                    },
+                    "roles": [],
+                }
+
+            role_data = {
+                "id": str(item.role_id),
+                "name": item.role.role_name,
             }
-            for school in assigned_schools
-        ]
 
+            if role_data not in school_role_mapping[school_id]["roles"]:
+                school_role_mapping[school_id]["roles"].append(role_data)
+
+        school_roles = list(
+            school_role_mapping.values(),
+        )
+
+        # Login success logging
         auth_logger.info(
             "admin_login_successful",
             user_id=str(user.id),
             mobile=mobile,
-            roles=roles,
             permission_count=len(permissions),
-            school_count=len(schools),
+            school_count=len(school_roles),
         )
 
         return CustomResponse.successResponse(
@@ -313,9 +336,8 @@ class ADMINVerifyOTPAPIView(APIView):
                     "first_name": user.first_name,
                     "last_name": user.last_name,
                 },
-                "roles": roles,
+                "school_roles": school_roles,
                 "permissions": permissions,
-                "schools": schools,
                 "tokens": {
                     "access": str(refresh.access_token),
                     "refresh": str(refresh),
@@ -323,6 +345,7 @@ class ADMINVerifyOTPAPIView(APIView):
             },
             description="Login successful.",
         )
+
 
 
 class LogoutAPIView(APIView):
