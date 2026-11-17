@@ -16,6 +16,9 @@ from apps.backoffice.views.calendar import AcademicCalendarWeekendRuleCreateAPIV
     AcademicCalendarUpdateAPIView
 from apps.backoffice.views.contactus import AdminSupportTicketsAPIView, AdminSupportTicketDetailAPIView, \
     AdminReplySupportTicketAPIView, AdminUpdateSupportTicketStatusAPIView
+from apps.backoffice.views.edutainment import FeedListCreateAPIView, FeedDetailAPIView, FeedStatusUpdateAPIView, \
+    FeedCategoryListCreateAPIView, FeedCategoryDetailAPIView, DIYMaterialsAPIView, DIYStepsAPIView, \
+    DIYContentUpdateAPIView
 from apps.backoffice.views.events import CreateCalendarEventAPIView, CalendarEventListAPIView, \
     UpdateCalendarEventAPIView
 from apps.backoffice.views.examination import ExaminationTypeCreateAPIView, ExaminationTypeListAPIView, \
@@ -715,6 +718,24 @@ urlpatterns = [
     path("calendar-weekend-rule/<uuid:rule_id>",AcademicCalendarWeekendRuleUpdateAPIView.as_view(),),
 
     path("calendar-weekend-rule/<uuid:rule_id>/delete/",AcademicCalendarWeekendRuleDeleteAPIView.as_view(),),
+
+    #Family zone
+
+    path("feeds",FeedListCreateAPIView.as_view(),),
+
+    path("feeds/<uuid:feed_id>",FeedDetailAPIView.as_view(),),
+
+    path("feeds/<uuid:feed_id>/status",FeedStatusUpdateAPIView.as_view(),),
+
+    path("feed-categories",FeedCategoryListCreateAPIView.as_view(),),
+
+    path("feed-categories/<uuid:category_id>",FeedCategoryDetailAPIView.as_view(),),
+
+    path("feeds/<uuid:feed_id>/diy-materials",DIYMaterialsAPIView.as_view(),),
+
+    path("feeds/<uuid:feed_id>/diy-steps",DIYStepsAPIView.as_view(),),
+
+    path("feeds/<uuid:feed_id>/diy-content",DIYContentUpdateAPIView.as_view(),),
 
 
 

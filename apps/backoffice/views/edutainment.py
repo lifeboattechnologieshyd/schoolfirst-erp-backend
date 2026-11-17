@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 
-from apps.edutainment.models import Feed
+from apps.edutainment.models import Feed, FeedCategories, DIYMaterials, DIYSteps
 from shared.mixins import CustomPageNumberPagination, CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
@@ -492,3 +492,759 @@ class FeedStatusUpdateAPIView(APIView):
             },
             description="Feed status updated successfully.",
         )
+
+
+
+class FeedCategoryListCreateAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, HasPermission]
+    pagination_class = CustomPageNumberPagination
+
+    def get_permissions(self):
+
+        if self.request.method == "GET":
+            self.required_permission = "feed_category.view"
+
+        elif self.request.method == "POST":
+            self.required_permission = "feed_category.create"
+
+        return super().get_permissions()
+
+    def get(self, request):
+
+        search = request.query_params.get("search", "").strip()
+        category_status = request.query_params.get("status", "").strip()
+
+        application_logger.info(
+            "feed_category_list_requested",
+            requested_by=str(request.user.id),
+            search=search,
+            status=category_status,
+        )
+
+        try:
+
+            categories = FeedCategories.objects.all()
+
+            if search:
+                categories = categories.filter(
+                    display_name__icontains=search,
+                )
+
+            if category_status:
+                if category_status not in FeedCategories.CategoryStatus.values:
+                    return CustomResponse.errorResponse(
+                        description="Invalid category status.",
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                categories = categories.filter(
+                    status=category_status,
+                )
+
+            categories = categories.order_by("display_name")
+
+            total = categories.count()
+
+            paginator = self.pagination_class()
+            page = paginator.paginate_queryset(categories, request)
+
+            data = [
+                {
+                    "id": str(category.id),
+                    "display_name": category.display_name,
+                    "status": category.status,
+                }
+                for category in page
+            ]
+
+        except Exception as e:
+
+            application_logger.exception(
+                "feed_category_list_failed",
+                requested_by=str(request.user.id),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Unable to fetch feed categories.",
+            )
+
+        application_logger.info(
+            "feed_category_list_fetched",
+            requested_by=str(request.user.id),
+            total=total,
+            returned_count=len(data),
+        )
+
+        return CustomResponse.successResponse(
+            data=data,
+            total=total,
+            description="Feed categories fetched successfully.",
+        )
+
+    @transaction.atomic
+    def post(self, request):
+
+        display_name = request.data.get("display_name", "").strip()
+
+        category_status = request.data.get(
+            "status",
+            FeedCategories.CategoryStatus.ACTIVE,
+        )
+
+        if not display_name:
+            return CustomResponse.errorResponse(
+                description="Category name is required.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if category_status not in FeedCategories.CategoryStatus.values:
+            return CustomResponse.errorResponse(
+                description="Invalid category status.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if FeedCategories.objects.filter(
+            display_name__iexact=display_name,
+        ).exists():
+
+            return CustomResponse.errorResponse(
+                description="Category already exists.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+
+            category = FeedCategories.objects.create(
+                display_name=display_name,
+                status=category_status,
+            )
+
+        except Exception as e:
+
+            application_logger.exception(
+                "feed_category_create_failed",
+                requested_by=str(request.user.id),
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Unable to create feed category.",
+            )
+
+        application_logger.info(
+            "feed_category_created",
+            category_id=str(category.id),
+            display_name=category.display_name,
+            requested_by=str(request.user.id),
+        )
+
+        return CustomResponse.successResponse(
+            data={
+                "id": str(category.id),
+                "display_name": category.display_name,
+                "status": category.status,
+            },
+            description="Feed category created successfully.",
+        )
+
+
+class FeedCategoryDetailAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    def get_permissions(self):
+
+        if self.request.method == "PUT":
+            self.required_permission = "feed_category.update"
+
+        elif self.request.method == "DELETE":
+            self.required_permission = "feed_category.delete"
+
+        return super().get_permissions()
+
+    def get_category(self, category_id):
+
+        return FeedCategories.objects.filter(
+            id=category_id,
+        ).first()
+
+    @transaction.atomic
+    def put(self, request, category_id):
+
+        category = self.get_category(category_id)
+
+        if not category:
+            return CustomResponse.errorResponse(
+                description="Feed category not found.",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        display_name = request.data.get("display_name")
+        category_status = request.data.get("status")
+
+        if display_name is not None:
+
+            display_name = display_name.strip()
+
+            if not display_name:
+                return CustomResponse.errorResponse(
+                    description="Category name cannot be empty.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            duplicate = FeedCategories.objects.filter(
+                display_name__iexact=display_name,
+            ).exclude(
+                id=category.id,
+            ).exists()
+
+            if duplicate:
+                return CustomResponse.errorResponse(
+                    description="Category already exists.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            category.display_name = display_name
+
+        if category_status is not None:
+
+            if category_status not in FeedCategories.CategoryStatus.values:
+                return CustomResponse.errorResponse(
+                    description="Invalid category status.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            category.status = category_status
+
+        category.save()
+
+        application_logger.info(
+            "feed_category_updated",
+            category_id=str(category.id),
+            requested_by=str(request.user.id),
+        )
+
+        return CustomResponse.successResponse(
+            data={
+                "id": str(category.id),
+                "display_name": category.display_name,
+                "status": category.status,
+            },
+            description="Feed category updated successfully.",
+        )
+
+    @transaction.atomic
+    def delete(self, request, category_id):
+
+        category = self.get_category(category_id)
+
+        if not category:
+            return CustomResponse.errorResponse(
+                description="Feed category not found.",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        category_id = str(category.id)
+
+        category.delete()
+
+        application_logger.info(
+            "feed_category_deleted",
+            category_id=category_id,
+            requested_by=str(request.user.id),
+        )
+
+        return CustomResponse.successResponse(
+            data={
+                "id": category_id,
+            },
+            description="Feed category deleted successfully.",
+        )
+
+
+
+class DIYMaterialsAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, HasPermission]
+    pagination_class = CustomPageNumberPagination
+
+    def get_permissions(self):
+
+        if self.request.method == "GET":
+            self.required_permission = "feed.view"
+
+        elif self.request.method == "POST":
+            self.required_permission = "feed.update"
+
+        return super().get_permissions()
+
+    def get_feed(self, feed_id):
+
+        return Feed.objects.filter(
+            id=feed_id,
+        ).first()
+
+    def get(self, request, feed_id):
+
+        application_logger.info(
+            "diy_materials_list_requested",
+            requested_by=str(request.user.id),
+            feed_id=str(feed_id),
+        )
+
+        feed = self.get_feed(feed_id)
+
+        if not feed:
+            return CustomResponse.errorResponse(
+                description="Feed not found.",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        materials = DIYMaterials.objects.filter(
+            feed=feed,
+        ).order_by("display_order", "created_at")
+
+        total = materials.count()
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(materials, request)
+
+        data = [
+            {
+                "id": str(material.id),
+                "material_name": material.material_name,
+                "quantity": material.quantity,
+                "display_order": material.display_order,
+            }
+            for material in page
+        ]
+
+        application_logger.info(
+            "diy_materials_list_fetched",
+            requested_by=str(request.user.id),
+            feed_id=str(feed.id),
+            total=total,
+            returned_count=len(data),
+        )
+
+        return CustomResponse.successResponse(
+            data=data,
+            total=total,
+            description="DIY materials fetched successfully.",
+        )
+
+    @transaction.atomic
+    def post(self, request, feed_id):
+
+        feed = self.get_feed(feed_id)
+
+        if not feed:
+            return CustomResponse.errorResponse(
+                description="Feed not found.",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        material_name = request.data.get("material_name", "").strip()
+        quantity = request.data.get("quantity")
+        display_order = request.data.get("display_order", 0)
+
+        if not material_name:
+            return CustomResponse.errorResponse(
+                description="Material name is required.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            display_order = int(display_order)
+
+            if display_order < 0:
+                raise ValueError
+
+        except (ValueError, TypeError):
+            return CustomResponse.errorResponse(
+                description="Display order must be a non-negative integer.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        material = DIYMaterials.objects.create(
+            feed=feed,
+            material_name=material_name,
+            quantity=quantity,
+            display_order=display_order,
+        )
+
+        application_logger.info(
+            "diy_material_created",
+            material_id=str(material.id),
+            feed_id=str(feed.id),
+            requested_by=str(request.user.id),
+        )
+
+        return CustomResponse.successResponse(
+            data={
+                "id": str(material.id),
+                "feed_id": str(feed.id),
+                "material_name": material.material_name,
+                "quantity": material.quantity,
+                "display_order": material.display_order,
+            },
+            description="DIY material added successfully.",
+        )
+
+
+
+class DIYStepsAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, HasPermission]
+    pagination_class = CustomPageNumberPagination
+
+    def get_permissions(self):
+
+        if self.request.method == "GET":
+            self.required_permission = "feed.view"
+
+        elif self.request.method == "POST":
+            self.required_permission = "feed.update"
+
+        return super().get_permissions()
+
+    def get_feed(self, feed_id):
+
+        return Feed.objects.filter(
+            id=feed_id,
+        ).first()
+
+    def get(self, request, feed_id):
+
+        application_logger.info(
+            "diy_steps_list_requested",
+            requested_by=str(request.user.id),
+            feed_id=str(feed_id),
+        )
+
+        feed = self.get_feed(feed_id)
+
+        if not feed:
+            return CustomResponse.errorResponse(
+                description="Feed not found.",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        steps = DIYSteps.objects.filter(
+            feed=feed,
+        ).order_by("step_number")
+
+        total = steps.count()
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(steps, request)
+
+        data = [
+            {
+                "id": str(step.id),
+                "step_number": step.step_number,
+                "heading": step.heading,
+                "description": step.description,
+                "image": step.image,
+            }
+            for step in page
+        ]
+
+        application_logger.info(
+            "diy_steps_list_fetched",
+            requested_by=str(request.user.id),
+            feed_id=str(feed.id),
+            total=total,
+            returned_count=len(data),
+        )
+
+        return CustomResponse.successResponse(
+            data=data,
+            total=total,
+            description="DIY steps fetched successfully.",
+        )
+
+    @transaction.atomic
+    def post(self, request, feed_id):
+
+        feed = self.get_feed(feed_id)
+
+        if not feed:
+            return CustomResponse.errorResponse(
+                description="Feed not found.",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        step_number = request.data.get("step_number")
+        description = request.data.get("description", "").strip()
+
+        if step_number is None:
+            return CustomResponse.errorResponse(
+                description="Step number is required.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            step_number = int(step_number)
+
+            if step_number < 1:
+                raise ValueError
+
+        except (ValueError, TypeError):
+            return CustomResponse.errorResponse(
+                description="Step number must be a positive integer.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not description:
+            return CustomResponse.errorResponse(
+                description="Step description is required.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if DIYSteps.objects.filter(
+            feed=feed,
+            step_number=step_number,
+        ).exists():
+
+            return CustomResponse.errorResponse(
+                description="Step number already exists for this feed.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        step = DIYSteps.objects.create(
+            feed=feed,
+            step_number=step_number,
+            heading=request.data.get("heading"),
+            description=description,
+            image=request.data.get("image"),
+        )
+
+        application_logger.info(
+            "diy_step_created",
+            step_id=str(step.id),
+            feed_id=str(feed.id),
+            step_number=step.step_number,
+            requested_by=str(request.user.id),
+        )
+
+        return CustomResponse.successResponse(
+            data={
+                "id": str(step.id),
+                "feed_id": str(feed.id),
+                "step_number": step.step_number,
+                "heading": step.heading,
+                "description": step.description,
+                "image": step.image,
+            },
+            description="DIY step added successfully.",
+        )
+
+
+class DIYContentUpdateAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    def get_permissions(self):
+
+        self.required_permission = "feed.update"
+
+        return super().get_permissions()
+
+    @transaction.atomic
+    def put(self, request, feed_id):
+
+        application_logger.info(
+            "diy_content_update_started",
+            requested_by=str(request.user.id),
+            feed_id=str(feed_id),
+        )
+
+        feed = Feed.objects.filter(
+            id=feed_id,
+        ).first()
+
+        if not feed:
+            return CustomResponse.errorResponse(
+                description="Feed not found.",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        materials = request.data.get("materials")
+        steps = request.data.get("steps")
+
+        if materials is None and steps is None:
+            return CustomResponse.errorResponse(
+                description="Provide materials or steps to update.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate materials
+        if materials is not None:
+
+            if not isinstance(materials, list):
+                return CustomResponse.errorResponse(
+                    description="Materials must be a list.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            for index, material in enumerate(materials):
+
+                if not isinstance(material, dict):
+                    return CustomResponse.errorResponse(
+                        description=f"Invalid material at position {index + 1}.",
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                if not str(material.get("material_name", "")).strip():
+                    return CustomResponse.errorResponse(
+                        description=f"Material name is required at position {index + 1}.",
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                try:
+                    display_order = int(material.get("display_order", index))
+
+                    if display_order < 0:
+                        raise ValueError
+
+                    material["display_order"] = display_order
+
+                except (ValueError, TypeError):
+                    return CustomResponse.errorResponse(
+                        description=f"Invalid display order at position {index + 1}.",
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+        # Validate steps
+        if steps is not None:
+
+            if not isinstance(steps, list):
+                return CustomResponse.errorResponse(
+                    description="Steps must be a list.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            step_numbers = []
+
+            for index, step in enumerate(steps):
+
+                if not isinstance(step, dict):
+                    return CustomResponse.errorResponse(
+                        description=f"Invalid step at position {index + 1}.",
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                try:
+                    step_number = int(step.get("step_number"))
+
+                    if step_number < 1:
+                        raise ValueError
+
+                except (ValueError, TypeError):
+                    return CustomResponse.errorResponse(
+                        description=f"Valid step number is required at position {index + 1}.",
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                if step_number in step_numbers:
+                    return CustomResponse.errorResponse(
+                        description=f"Duplicate step number: {step_number}.",
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                step_numbers.append(step_number)
+
+                if not str(step.get("description", "")).strip():
+                    return CustomResponse.errorResponse(
+                        description=f"Step description is required at position {index + 1}.",
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                step["step_number"] = step_number
+
+        # Update materials only when supplied
+        if materials is not None:
+
+            DIYMaterials.objects.filter(
+                feed=feed,
+            ).delete()
+
+            DIYMaterials.objects.bulk_create([
+                DIYMaterials(
+                    feed=feed,
+                    material_name=material["material_name"].strip(),
+                    quantity=material.get("quantity"),
+                    display_order=material["display_order"],
+                )
+                for material in materials
+            ])
+
+        # Update steps only when supplied
+        if steps is not None:
+
+            DIYSteps.objects.filter(
+                feed=feed,
+            ).delete()
+
+            DIYSteps.objects.bulk_create([
+                DIYSteps(
+                    feed=feed,
+                    step_number=step["step_number"],
+                    heading=step.get("heading"),
+                    description=step["description"].strip(),
+                    image=step.get("image"),
+                )
+                for step in steps
+            ])
+
+        # Fetch updated content
+        updated_materials = DIYMaterials.objects.filter(
+            feed=feed,
+        ).order_by("display_order", "created_at")
+
+        updated_steps = DIYSteps.objects.filter(
+            feed=feed,
+        ).order_by("step_number")
+
+        data = {
+            "feed_id": str(feed.id),
+            "materials": [
+                {
+                    "id": str(material.id),
+                    "material_name": material.material_name,
+                    "quantity": material.quantity,
+                    "display_order": material.display_order,
+                }
+                for material in updated_materials
+            ],
+            "steps": [
+                {
+                    "id": str(step.id),
+                    "step_number": step.step_number,
+                    "heading": step.heading,
+                    "description": step.description,
+                    "image": step.image,
+                }
+                for step in updated_steps
+            ],
+        }
+
+        application_logger.info(
+            "diy_content_updated",
+            requested_by=str(request.user.id),
+            feed_id=str(feed.id),
+            materials_count=updated_materials.count(),
+            steps_count=updated_steps.count(),
+        )
+
+        return CustomResponse.successResponse(
+            data=data,
+            description="DIY content updated successfully.",
+        )
+
+
+
+
