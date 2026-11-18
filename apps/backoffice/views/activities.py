@@ -15,10 +15,7 @@ class ActivitiesListAPIView(APIView):
 
     permission_classes = [IsAuthenticated, HasPermission]
     pagination_class = CustomPageNumberPagination
-
     required_permission = "activity.view"
-
-
 
     def get(self, request):
 
@@ -41,11 +38,18 @@ class ActivitiesListAPIView(APIView):
             if theme:
                 queryset = queryset.filter(theme__icontains=theme)
 
-            paginator = PageNumberPagination()
+            total = queryset.count()
+
+            paginator = self.pagination_class()
 
             paginated_queryset = paginator.paginate_queryset(
-                queryset, request
+                queryset,
+                request,
+                view=self
             )
+
+            if paginated_queryset is None:
+                paginated_queryset = queryset
 
             data = [
                 {
@@ -58,21 +62,22 @@ class ActivitiesListAPIView(APIView):
                     "youtube_video_url": activity.youtube_video_url,
                     "description": activity.description,
                     "image": activity.image,
-                    "steps_count": activity.activity_steps.count(),
                 }
                 for activity in paginated_queryset
             ]
 
             return CustomResponse.successResponse(
                 data=data,
-                total=queryset.count(),
+                total=total,
                 description="Activities fetched successfully."
             )
 
         except Exception as e:
+
             application_logger.exception(
                 f"Activities list error: {str(e)}"
             )
+
             return CustomResponse.errorResponse(
                 description="Unable to fetch activities."
             )
