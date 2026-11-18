@@ -495,20 +495,15 @@ class FeedStatusUpdateAPIView(APIView):
 
 
 
-class FeedCategoryListCreateAPIView(APIView):
+class FeedCategoryListAPIView(APIView):
 
     permission_classes = [IsAuthenticated, HasPermission]
     pagination_class = CustomPageNumberPagination
 
-    def get_permissions(self):
 
-        if self.request.method == "GET":
-            self.required_permission = "feed_category.view"
+    required_permission = "feed_category.view"
 
-        elif self.request.method == "POST":
-            self.required_permission = "feed_category.create"
 
-        return
 
     def get(self, request):
 
@@ -582,6 +577,11 @@ class FeedCategoryListCreateAPIView(APIView):
             total=total,
             description="Feed categories fetched successfully.",
         )
+
+class FeedCategoryCreateAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "feed_category.create"
 
     @transaction.atomic
     def post(self, request):
