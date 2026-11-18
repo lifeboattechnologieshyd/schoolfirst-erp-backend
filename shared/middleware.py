@@ -74,6 +74,7 @@ class SchoolMiddleware:
             "/backoffice/support/ticket/update",
             "/backoffice/client-info/<str:identifier>",
             "/backoffice/feeds",
+            "/edutainment/feeds",
 
         )
 
