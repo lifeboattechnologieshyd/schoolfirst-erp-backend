@@ -731,7 +731,7 @@ urlpatterns = [
 
     path("feed-categories",FeedCategoryListAPIView.as_view(),),
 
-    path("feed-categories/<uuid:category_id>",FeedCategoryDetailAPIView.as_view(),),
+    path("feeds-categories/<uuid:category_id>",FeedCategoryDetailAPIView.as_view(),),
 
     path("feeds/<uuid:feed_id>/diy-materials",DIYMaterialsAPIView.as_view(),),
 
