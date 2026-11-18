@@ -11,7 +11,7 @@ class Feed(AuditModel):
         TEXT = "TEXT", "Text"
         IMAGE = "IMAGE", "Image"
         VIDEO = "VIDEO", "Video"
-        YOUTUBE = "YOUTUBE video", "Youtube video"
+        YOUTUBE = "YOUTUBE", "Youtube video"
         AUDIO = "AUDIO", "Audio"
 
     class FeedStatus(models.TextChoices):

@@ -1143,6 +1143,7 @@ class Staff(AuditModel):
 
 
 
+
         indexes = [
             models.Index(fields=["school"]),
             models.Index(fields=["staff_type"]),
