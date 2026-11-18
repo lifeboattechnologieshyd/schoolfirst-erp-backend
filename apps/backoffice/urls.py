@@ -1,5 +1,6 @@
 from django.urls import path
 
+from apps.backoffice.views.activities import ActivitiesCreateAPIView, ActivitiesListAPIView
 from apps.backoffice.views.assignment import CreateAssignmentAPIView, AssignmentListAPIView, AssignmentUpdateAPIView, \
     TeacherAssignmentSubmissionListAPIView, TeacherCheckAssignmentAPIView
 from apps.backoffice.views.attendance import StaffAttendanceListAPIView, BulkMarkStaffAttendanceAPIView, \
@@ -741,6 +742,10 @@ urlpatterns = [
     path("feeds/<uuid:feed_id>/diy-steps",DIYStepsAPIView.as_view(),),
 
     path("feeds/<uuid:feed_id>/diy-content",DIYContentUpdateAPIView.as_view(),),
+
+    path("activities/create",ActivitiesCreateAPIView.as_view()),
+
+    path("activities",ActivitiesListAPIView.as_view(),),
 
 
 
