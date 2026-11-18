@@ -650,8 +650,11 @@ class FeedCategoryListCreateAPIView(APIView):
                 description="Feed category created successfully.",
             )
         except Exception as e:
+
             application_logger.exception(
-                "feed_category_create_failed",
+                "Error creating feed category. "
+                "error=%s",
+                str(e),
             )
 
 
