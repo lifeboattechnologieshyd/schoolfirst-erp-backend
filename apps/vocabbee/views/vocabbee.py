@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 
 from apps.vocabbee.models import PracticeAttempts, PracticeAttemptAnswers, KidWordProgress, Words, \
-    DailyChallengeAttempts, Kids, DailyChallengeAttemptAnswers, DailyChallengeWords
+    DailyChallengeAttempts, Kids, DailyChallengeAttemptAnswers, DailyChallengeWords, Grades
 from shared.mixins import CustomResponse
 from shared.utils.vocabbee import get_practice_words
 
@@ -897,3 +897,168 @@ class DailyChallengeHistoryAPIView(APIView):
             for attempt in attempts
         ]
         return CustomResponse().successResponse(data=data)
+
+class GradesList(APIView):
+    def get(self, request):
+        grades = Grades.objects.filter(
+                is_active=True
+            ).order_by(
+                "sort_order"
+            )
+        data = []
+        for grade in grades:
+            data.append({
+                "id": str(grade.id),
+                "name": grade.name
+            })
+        return CustomResponse().successResponse(
+            data=data,
+            description="Grades fetched successfully"
+        )
+
+
+class AddKid(APIView):
+
+    def post(self, request):
+
+        name = request.data.get("name")
+        grade_id = request.data.get("grade_id")
+        profile_image = request.data.get("profile_image")
+
+        if not name:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Kid name is required"
+            )
+
+        if not grade_id:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Grade is required"
+            )
+        grade = Grades.objects.filter(
+            id=grade_id,
+            is_active=True
+        ).first()
+        if not grade:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Invalid grade"
+            )
+        kid = Kids.objects.create(
+            parent=request.user,
+            grade=grade,
+            name=name,
+            profile_image=profile_image
+        )
+        return CustomResponse().successResponse(
+            data={
+                "kid_id": str(kid.id)
+            },
+            description="Kid added successfully"
+        )
+
+    def get(self, request):
+        kids = request.user.kids.filter(
+            is_active=True
+        ).select_related(
+            "grade"
+        )
+
+        response = []
+        for kid in kids:
+            response.append({
+                "kid_id": str(kid.id),
+                "name": kid.name,
+                "profile_image": kid.profile_image,
+                "grade": {
+                    "id": str(kid.grade.id),
+                    "name": kid.grade.name
+                }
+            })
+        return CustomResponse().successResponse(
+            data=response,
+            description="Kids fetched successfully"
+        )
+    def put(self, request):
+
+        kid_id = request.data.get("kid_id")
+
+        if not kid_id:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Kid ID is required"
+            )
+
+        kid = request.user.kids.filter(
+            id=kid_id,
+            is_active=True
+        ).first()
+
+        if not kid:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Invalid kid"
+            )
+
+        name = request.data.get("name")
+        grade_id = request.data.get("grade_id")
+        profile_image = request.data.get("profile_image")
+
+        if not name:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Kid name is required"
+            )
+
+        grade = Grades.objects.filter(
+            id=grade_id,
+            is_active=True
+        ).first()
+
+        if not grade:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Invalid grade"
+            )
+
+        kid.name = name.strip()
+        kid.grade = grade
+
+        if profile_image is not None:
+            kid.profile_image = profile_image
+
+        kid.save()
+
+        return CustomResponse().successResponse(
+            data={},
+            description="Kid updated successfully"
+        )
+
+    def delete(self, request):
+
+        kid_id = request.data.get("kid_id")
+
+        if not kid_id:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Kid ID is required"
+            )
+
+        kid = request.user.kids.filter(
+            id=kid_id,
+            is_active=True
+        ).first()
+
+        if not kid:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Invalid kid"
+            )
+
+        kid.is_active = False
+        kid.save()
+        return CustomResponse().successResponse(
+            data={},
+            description="Kid deleted successfully"
+        )

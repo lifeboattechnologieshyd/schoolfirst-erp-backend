@@ -3,7 +3,8 @@ from django.urls import path
 from apps.backoffice.views.school import SubjectListAPIView
 from apps.vocabbee.views.vocabbee import StartPractice, SubmitPracticeAnswer, SkipPracticeQuestion, EndPractice, \
     PracticeHistoryAPIView, PracticeStats, DailyChallengesAPIView, DailyChallengeWordsAPIView, \
-    DailyChallengeSubmitAPIView, DailyChallengeResultAPIView, DailyChallengeStatsAPIView, DailyChallengeHistoryAPIView
+    DailyChallengeSubmitAPIView, DailyChallengeResultAPIView, DailyChallengeStatsAPIView, DailyChallengeHistoryAPIView, \
+    GradesList, AddKid
 
 urlpatterns = [
     path("practice/start", StartPractice.as_view()),
@@ -24,4 +25,7 @@ urlpatterns = [
     path("daily-challenges/results", DailyChallengeResultAPIView.as_view()),
     path("daily-challenges/stats", DailyChallengeStatsAPIView.as_view()),
     path("daily-challenges/history", DailyChallengeHistoryAPIView.as_view()),
+
+    path("grades", GradesList.as_view()),
+    path("kids", AddKid.as_view()),
 ]
