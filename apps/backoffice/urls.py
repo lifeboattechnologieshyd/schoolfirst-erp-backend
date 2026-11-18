@@ -729,7 +729,7 @@ urlpatterns = [
 
     path("feeds-categories/create",FeedCategoryCreateAPIView.as_view(),),
 
-    path("feed-categories",FeedCategoryListAPIView.as_view(),),
+    path("feeds-categories",FeedCategoryListAPIView.as_view(),),
 
     path("feeds-categories/<uuid:category_id>",FeedCategoryDetailAPIView.as_view(),),
 
