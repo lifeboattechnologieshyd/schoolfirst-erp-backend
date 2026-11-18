@@ -75,6 +75,8 @@ class SchoolMiddleware:
             "/backoffice/client-info/<str:identifier>",
             "/backoffice/feeds",
             "/edutainment/feeds",
+            "/backoffice/activities",
+            "/activities/"
 
         )
 
