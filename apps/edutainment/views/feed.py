@@ -335,10 +335,7 @@ class FeedCommentCreateAPIView(APIView):
                         description="Parent comment not found.",
                     )
 
-            user_name = (
-                request.user.get_full_name()
-                or getattr(request.user, "username", "")
-            )
+
 
             comment = FeedComments.objects.create(
                 feed_id=feed.id,
@@ -346,7 +343,6 @@ class FeedCommentCreateAPIView(APIView):
                 parent_id=parent_comment.id if parent_comment else None,
                 comment=comment_text,
                 image=image,
-                user_name=user_name,
             )
 
             Feed.objects.filter(id=feed.id).update(
