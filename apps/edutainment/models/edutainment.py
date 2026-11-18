@@ -8,29 +8,29 @@ from django.contrib.postgres.fields import ArrayField
 class Feed(AuditModel):
 
     class FeedType(models.TextChoices):
-        TEXT = "Text", "Text"
-        IMAGE = "Image", "Image"
-        VIDEO = "Video", "Video"
-        YOUTUBE = "Youtube video", "Youtube video"
-        AUDIO = "Audio", "Audio"
+        TEXT = "TEXT", "Text"
+        IMAGE = "IMAGE", "Image"
+        VIDEO = "VIDEO", "Video"
+        YOUTUBE = "YOUTUBE video", "Youtube video"
+        AUDIO = "AUDIO", "Audio"
 
     class FeedStatus(models.TextChoices):
-        DRAFT = "Draft", "Draft"
-        PENDING = "Pending", "Pending"
-        APPROVED = "Approved", "Approved"
-        REJECTED = "Rejected", "Rejected"
-        PUBLISHED = "Published", "Published"
+        DRAFT = "DRAFT", "Draft"
+        PENDING = "PENDING", "Pending"
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected"
+        PUBLISHED = "PUBLISHED", "Published"
 
     class FeedCategory(models.TextChoices):
-        DIY = "Diy", "DIY"
-        PTIPS = "Ptips", "Parent Tips"
-        FTIPS = "Ftips", "Family Tips"
-        STORIES = "Stories", "Stories"
+        DIY = "DIY", "Diy"
+        PTIPS = "PTIPS", "Parent Tips"
+        FTIPS = "FTIPS", "Family Tips"
+        STORIES = "STORIES", "Stories"
 
     class Language(models.TextChoices):
-        TELUGU = "Telugu", "Telugu"
-        HINDI = "Hindi", "Hindi"
-        ENGLISH = "English", "English"
+        TELUGU = "TELUGU", "Telugu"
+        HINDI = "HINDI", "Hindi"
+        ENGLISH = "ENGLISH", "English"
 
     id = models.UUIDField(
         primary_key=True,
@@ -231,8 +231,8 @@ class Feed(AuditModel):
 class FeedCategories(AuditModel):
 
     class CategoryStatus(models.TextChoices):
-        ACTIVE = "Active", "Active"
-        INACTIVE = "Inactive", "Inactive"
+        ACTIVE = "ACTIVE", "Active"
+        INACTIVE = "INACTIVE", "Inactive"
 
     id = models.UUIDField(
         primary_key=True,
