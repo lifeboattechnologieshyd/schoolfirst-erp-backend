@@ -304,7 +304,6 @@ class FeedCommentCreateAPIView(APIView):
             if not feed:
                 return CustomResponse.errorResponse(
                     description="Feed not found.",
-                    status=status.HTTP_404_NOT_FOUND,
                 )
 
             comment_text = request.data.get("comment")
@@ -314,13 +313,11 @@ class FeedCommentCreateAPIView(APIView):
             if not comment_text and not image:
                 return CustomResponse.errorResponse(
                     description="Comment or image is required.",
-                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             if comment_text and len(comment_text) > 500:
                 return CustomResponse.errorResponse(
                     description="Comment cannot exceed 500 characters.",
-                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             parent_comment = None

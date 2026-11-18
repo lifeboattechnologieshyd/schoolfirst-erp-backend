@@ -5,22 +5,20 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.activities.models import Activities
-from shared.mixins import CustomResponse
+from apps.activities.models import Activities, ActivitySteps
+from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
 
 
-class ActivitiesListCreateAPIView(APIView):
+class ActivitiesListAPIView(APIView):
 
     permission_classes = [IsAuthenticated, HasPermission]
+    pagination_class = CustomPageNumberPagination
 
-    def get_permissions(self):
-        self.required_permission = (
-            "activity.view" if self.request.method == "GET"
-            else "activity.create"
-        )
-        return super().get_permissions()
+    required_permission = "activity.view"
+
+
 
     def get(self, request):
 
@@ -44,7 +42,6 @@ class ActivitiesListCreateAPIView(APIView):
                 queryset = queryset.filter(theme__icontains=theme)
 
             paginator = PageNumberPagination()
-            paginator.page_size = 20
 
             paginated_queryset = paginator.paginate_queryset(
                 queryset, request
@@ -79,6 +76,11 @@ class ActivitiesListCreateAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Unable to fetch activities."
             )
+
+class ActivitiesCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "activity.view"
+
 
     def post(self, request):
 
@@ -147,18 +149,10 @@ class ActivityStepsAPIView(APIView):
 
     permission_classes = [IsAuthenticated, HasPermission]
 
-    def get_permissions(self):
-        self.required_permission = (
-            "activity.view" if self.request.method == "GET"
-            else "activity.update"
-        )
-        return super().get_permissions()
 
-    def get_activity(self, activity_id):
-        return get_object_or_404(
-            Activities,
-            id=activity_id
-        )
+
+
+
 
     def get(self, request, activity_id):
 
