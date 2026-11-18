@@ -585,69 +585,74 @@ class FeedCategoryListCreateAPIView(APIView):
 
     @transaction.atomic
     def post(self, request):
-
-        display_name = request.data.get("display_name", "").strip()
-
-        category_status = request.data.get(
-            "status",
-            FeedCategories.CategoryStatus.ACTIVE,
-        )
-
-        if not display_name:
-            return CustomResponse.errorResponse(
-                description="Category name is required.",
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if category_status not in FeedCategories.CategoryStatus.values:
-            return CustomResponse.errorResponse(
-                description="Invalid category status.",
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if FeedCategories.objects.filter(
-            display_name__iexact=display_name,
-        ).exists():
-
-            return CustomResponse.errorResponse(
-                description="Category already exists.",
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         try:
 
-            category = FeedCategories.objects.create(
-                display_name=display_name,
-                status=category_status,
+            display_name = request.data.get("display_name", "").strip()
+
+            category_status = request.data.get(
+                "status",
+                FeedCategories.CategoryStatus.ACTIVE,
             )
 
-        except Exception as e:
+            if not display_name:
+                return CustomResponse.errorResponse(
+                    description="Category name is required.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
+            if category_status not in FeedCategories.CategoryStatus.values:
+                return CustomResponse.errorResponse(
+                    description="Invalid category status.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if FeedCategories.objects.filter(
+                display_name__iexact=display_name,
+            ).exists():
+
+                return CustomResponse.errorResponse(
+                    description="Category already exists.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+
+                category = FeedCategories.objects.create(
+                    display_name=display_name,
+                    status=category_status,
+                )
+
+            except Exception as e:
+
+                application_logger.exception(
+                    "feed_category_create_failed",
+                    requested_by=str(request.user.id),
+                    error=str(e),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Unable to create feed category.",
+                )
+
+            application_logger.info(
+                "feed_category_created",
+                category_id=str(category.id),
+                display_name=category.display_name,
+                requested_by=str(request.user.id),
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "id": str(category.id),
+                    "display_name": category.display_name,
+                    "status": category.status,
+                },
+                description="Feed category created successfully.",
+            )
+        except Exception as e:
             application_logger.exception(
                 "feed_category_create_failed",
-                requested_by=str(request.user.id),
-                error=str(e),
             )
-
-            return CustomResponse.errorResponse(
-                description="Unable to create feed category.",
-            )
-
-        application_logger.info(
-            "feed_category_created",
-            category_id=str(category.id),
-            display_name=category.display_name,
-            requested_by=str(request.user.id),
-        )
-
-        return CustomResponse.successResponse(
-            data={
-                "id": str(category.id),
-                "display_name": category.display_name,
-                "status": category.status,
-            },
-            description="Feed category created successfully.",
-        )
 
 
 class FeedCategoryDetailAPIView(APIView):
