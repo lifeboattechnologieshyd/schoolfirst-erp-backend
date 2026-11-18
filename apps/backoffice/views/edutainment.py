@@ -21,7 +21,7 @@ class FeedListAPIView(APIView):
     def get(self, request):
 
         try:
-            category = request.query_params.get("category")
+            category = request.query_params.get("'category'")
             feed_status = request.query_params.get("status")
             feed_type = request.query_params.get("feed_type")
             language = request.query_params.get("language")

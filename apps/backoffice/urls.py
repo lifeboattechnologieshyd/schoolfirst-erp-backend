@@ -730,7 +730,6 @@ urlpatterns = [
 
     path("feeds/<uuid:feed_id>/delete",FeedDeleteAPIView.as_view()),
 
-
     path("feeds-categories/create",FeedCategoryCreateAPIView.as_view(),),
 
     path("feeds-categories",FeedCategoryListAPIView.as_view(),),
