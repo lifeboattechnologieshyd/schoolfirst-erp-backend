@@ -508,7 +508,7 @@ class FeedCategoryListCreateAPIView(APIView):
         elif self.request.method == "POST":
             self.required_permission = "feed_category.create"
 
-        return super().get_permissions()
+        return
 
     def get(self, request):
 
