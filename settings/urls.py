@@ -110,6 +110,8 @@ if "apps.curriculum" in settings.INSTALLED_APPS:
     urlpatterns.append(path("curriculum/", include("apps.curriculum.urls")))
 if "apps.edutainment" in settings.INSTALLED_APPS:
     urlpatterns.append(path("edutainment/", include("apps.edutainment.urls")))
+if "apps.activities" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("activities/", include("apps.activities.urls")))
 
 
 

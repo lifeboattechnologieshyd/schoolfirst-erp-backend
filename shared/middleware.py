@@ -73,6 +73,7 @@ class SchoolMiddleware:
             "/backoffice/support/reply",
             "/backoffice/support/ticket/update",
             "/backoffice/client-info/<str:identifier>",
+            "/backoffice/feeds",
 
         )
 
