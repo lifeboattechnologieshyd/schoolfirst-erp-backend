@@ -176,7 +176,7 @@ class FeedUnlikeAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
-    def delete(self, request, feed_id):
+    def post(self, request, feed_id):
 
         try:
             feed = Feed.objects.filter(id=feed_id).first()
