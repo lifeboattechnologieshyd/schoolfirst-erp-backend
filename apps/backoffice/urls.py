@@ -16,9 +16,10 @@ from apps.backoffice.views.calendar import AcademicCalendarWeekendRuleCreateAPIV
     AcademicCalendarUpdateAPIView
 from apps.backoffice.views.contactus import AdminSupportTicketsAPIView, AdminSupportTicketDetailAPIView, \
     AdminReplySupportTicketAPIView, AdminUpdateSupportTicketStatusAPIView
-from apps.backoffice.views.edutainment import FeedListCreateAPIView, FeedDetailAPIView, FeedStatusUpdateAPIView, \
-     FeedCategoryDetailAPIView, DIYMaterialsAPIView, DIYStepsAPIView, \
-    DIYContentUpdateAPIView, FeedCategoryCreateAPIView, FeedCategoryListAPIView
+from apps.backoffice.views.edutainment import  \
+    FeedCategoryDetailAPIView, DIYMaterialsAPIView, DIYStepsAPIView, \
+    DIYContentUpdateAPIView, FeedCategoryCreateAPIView, FeedCategoryListAPIView, FeedCreateAPIView, FeedListAPIView, \
+    FeedUpdateAPIView, FeedDeleteAPIView
 from apps.backoffice.views.events import CreateCalendarEventAPIView, CalendarEventListAPIView, \
     UpdateCalendarEventAPIView
 from apps.backoffice.views.examination import ExaminationTypeCreateAPIView, ExaminationTypeListAPIView, \
@@ -721,11 +722,14 @@ urlpatterns = [
 
     #Family zone
 
-    path("feeds",FeedListCreateAPIView.as_view(),),
+    path("feeds",FeedListAPIView.as_view(),),
 
-    path("feeds/<uuid:feed_id>",FeedDetailAPIView.as_view(),),
+    path("feeds/create",FeedCreateAPIView.as_view(),),
 
-    path("feeds/<uuid:feed_id>/status",FeedStatusUpdateAPIView.as_view(),),
+    path("feeds/<uuid:feed_id>/update>",FeedUpdateAPIView.as_view()),
+
+    path("feeds/<uuid:feed_id>/delete",FeedDeleteAPIView.as_view()),
+
 
     path("feeds-categories/create",FeedCategoryCreateAPIView.as_view(),),
 

@@ -12,38 +12,23 @@ from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
 
 
-class FeedListCreateAPIView(APIView):
+class FeedListAPIView(APIView):
 
     permission_classes = [IsAuthenticated, HasPermission]
     pagination_class = CustomPageNumberPagination
-
-    def get_permissions(self):
-        return super().get_permissions()
+    required_permission = "feed.view"
 
     def get(self, request):
 
-        self.required_permission = "feed.view"
-
-        school = request.school
-
-        category = request.query_params.get("category")
-        feed_status = request.query_params.get("status")
-        feed_type = request.query_params.get("feed_type")
-        language = request.query_params.get("language")
-        trending = request.query_params.get("trending")
-        search = request.query_params.get("search")
-
-        application_logger.info(
-            "feed_list_requested",
-            requested_by=str(request.user.id),
-            school_id=str(school.id) if school else None,
-        )
-
         try:
+            category = request.query_params.get("category")
+            feed_status = request.query_params.get("status")
+            feed_type = request.query_params.get("feed_type")
+            language = request.query_params.get("language")
+            trending = request.query_params.get("trending")
+            search = request.query_params.get("search")
 
-            feeds = Feed.objects.filter(
-                school_id=school.id if school else None,
-            )
+            feeds = Feed.objects.all()
 
             if category:
                 feeds = feeds.filter(f_category=category)
@@ -59,14 +44,14 @@ class FeedListCreateAPIView(APIView):
 
             if trending is not None:
                 feeds = feeds.filter(
-                    trending=trending.lower() == "true",
+                    trending=trending.lower() == "true"
                 )
 
             if search:
                 feeds = feeds.filter(
-                    Q(heading__icontains=search)
-                    | Q(description__icontains=search)
-                    | Q(subject__icontains=search)
+                    Q(heading__icontains=search) |
+                    Q(description__icontains=search) |
+                    Q(subject__icontains=search)
                 )
 
             feeds = feeds.order_by("-created_at")
@@ -106,37 +91,39 @@ class FeedListCreateAPIView(APIView):
                 for feed in page
             ]
 
+            application_logger.info(
+                "feed_list_fetched user_id=%s total=%s returned_count=%s",
+                request.user.id,
+                total,
+                len(data),
+            )
+
+            return CustomResponse.successResponse(
+                data=data,
+                total=total,
+                description="Feeds fetched successfully."
+            )
+
         except Exception as e:
 
             application_logger.exception(
-                "feed_list_failed",
-                requested_by=str(request.user.id),
-                error=str(e),
+                "feed_list_failed user_id=%s error=%s",
+                request.user.id,
+                str(e),
             )
 
             return CustomResponse.errorResponse(
-                description="Unable to fetch feeds.",
+                description="Unable to fetch feeds."
             )
 
-        application_logger.info(
-            "feed_list_fetched",
-            requested_by=str(request.user.id),
-            total=total,
-            returned_count=len(data),
-        )
+class FeedCreateAPIView(APIView):
 
-        return CustomResponse.successResponse(
-            data=data,
-            total=total,
-            description="Feeds fetched successfully.",
-        )
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "feed.create"
 
     @transaction.atomic
     def post(self, request):
 
-        self.required_permission = "feed.create"
-
-        school = request.school
         request_data = request.data
 
         heading = request_data.get("heading")
@@ -206,7 +193,6 @@ class FeedListCreateAPIView(APIView):
                 f_category=category,
                 language=language,
                 status=feed_status,
-                school_id=school.id if school else None,
                 image=request_data.get("image"),
                 video=request_data.get("video"),
                 youtube_video=request_data.get("youtube_video"),
@@ -225,274 +211,193 @@ class FeedListCreateAPIView(APIView):
                 ip_address=request.META.get("REMOTE_ADDR"),
             )
 
+            application_logger.info(
+                "feed_created feed_id=%s user_id=%s",
+                feed.id,
+                request.user.id,
+            )
+
+            return CustomResponse.successResponse(
+                data={
+                    "id": str(feed.id),
+                    "heading": feed.heading,
+                    "serial_number": feed.serial_number,
+                    "status": feed.status,
+                },
+                description="Feed created successfully.",
+            )
+
         except Exception as e:
 
             application_logger.exception(
-                "feed_create_failed",
-                requested_by=str(request.user.id),
-                error=str(e),
+                "feed_create_failed user_id=%s error=%s",
+                request.user.id,
+                str(e),
             )
 
             return CustomResponse.errorResponse(
-                description="Unable to create feed.",
+                description="Unable to create feed."
             )
 
-        application_logger.info(
-            "feed_created",
-            feed_id=str(feed.id),
-            requested_by=str(request.user.id),
-            school_id=str(school.id) if school else None,
-        )
-
-        return CustomResponse.successResponse(
-            data={
-                "id": str(feed.id),
-                "heading": feed.heading,
-                "serial_number": feed.serial_number,
-                "status": feed.status,
-            },
-            description="Feed created successfully.",
-        )
-
-
-
-class FeedDetailAPIView(APIView):
+class FeedUpdateAPIView(APIView):
 
     permission_classes = [IsAuthenticated, HasPermission]
-
-    def get_feed(self, request, feed_id):
-
-        school = request.school
-
-        return Feed.objects.filter(
-            id=feed_id,
-            school_id=school.id if school else None,
-        ).first()
-
-    def get(self, request, feed_id):
-
-        self.required_permission = "feed.view"
-
-        feed = self.get_feed(request, feed_id)
-
-        if not feed:
-            return CustomResponse.errorResponse(
-                description="Feed not found.",
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        data = {
-            "id": str(feed.id),
-            "serial_number": feed.serial_number,
-            "heading": feed.heading,
-            "feed_type": feed.feed_type,
-            "f_category": feed.f_category,
-            "image": feed.image,
-            "video": feed.video,
-            "youtube_video": feed.youtube_video,
-            "audio_url": feed.audio_url,
-            "trending": feed.trending,
-            "categories": feed.categories,
-            "grade_id": str(feed.grade_id) if feed.grade_id else None,
-            "subject": feed.subject,
-            "lesson": feed.lesson,
-            "skill_tested": feed.skill_tested,
-            "description": feed.description,
-            "description_2": feed.description_2,
-            "language": feed.language,
-            "duration": feed.duration,
-            "remarks": feed.remarks,
-            "posting_date": feed.posting_date,
-            "status": feed.status,
-            "approved_by": feed.approved_by,
-            "approved_time": feed.approved_time,
-            "likes_count": feed.likes_count,
-            "comments_count": feed.comments_count,
-            "whatsapp_share_count": feed.whatsapp_share_count,
-        }
-
-        return CustomResponse.successResponse(
-            data=data,
-            description="Feed fetched successfully.",
-        )
+    required_permission = "feed.update"
 
     @transaction.atomic
     def put(self, request, feed_id):
 
-        self.required_permission = "feed.update"
+        try:
 
-        feed = self.get_feed(request, feed_id)
+            feed = Feed.objects.filter(id=feed_id).first()
 
-        if not feed:
-            return CustomResponse.errorResponse(
-                description="Feed not found.",
-                status=status.HTTP_404_NOT_FOUND,
+            if not feed:
+                return CustomResponse.errorResponse(
+                    description="Feed not found.",
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            request_data = request.data
+
+            allowed_fields = [
+                "heading",
+                "image",
+                "video",
+                "youtube_video",
+                "audio_url",
+                "trending",
+                "categories",
+                "grade_id",
+                "subject",
+                "lesson",
+                "skill_tested",
+                "description",
+                "description_2",
+                "duration",
+                "remarks",
+                "posting_date",
+            ]
+
+            enum_fields = {
+                "feed_type": Feed.FeedType.values,
+                "f_category": Feed.FeedCategory.values,
+                "language": Feed.Language.values,
+            }
+
+            for field, valid_values in enum_fields.items():
+
+                if field in request_data:
+                    if request_data[field] not in valid_values:
+                        return CustomResponse.errorResponse(
+                            description=f"Invalid {field.replace('_', ' ')}.",
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+                    setattr(feed, field, request_data[field])
+
+            if "status" in request_data:
+                if request_data["status"] not in Feed.FeedStatus.values:
+                    return CustomResponse.errorResponse(
+                        description="Invalid feed status.",
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                feed.status = request_data["status"]
+
+            for field in allowed_fields:
+
+                if field in request_data:
+
+                    value = request_data.get(field)
+
+                    if field == "grade_id":
+                        value = value or None
+
+                    setattr(feed, field, value)
+
+            if not feed.heading:
+                return CustomResponse.errorResponse(
+                    description="Feed heading is required.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            feed.save()
+
+            application_logger.info(
+                "feed_updated feed_id=%s user_id=%s",
+                feed.id,
+                request.user.id,
             )
 
-        request_data = request.data
+            return CustomResponse.successResponse(
+                data={
+                    "id": str(feed.id),
+                    "heading": feed.heading,
+                    "status": feed.status,
+                },
+                description="Feed updated successfully.",
+            )
 
-        allowed_fields = [
-            "heading",
-            "image",
-            "video",
-            "youtube_video",
-            "audio_url",
-            "trending",
-            "categories",
-            "grade_id",
-            "subject",
-            "lesson",
-            "skill_tested",
-            "description",
-            "description_2",
-            "duration",
-            "remarks",
-            "posting_date",
-        ]
+        except Exception as e:
 
-        if "feed_type" in request_data:
-            if request_data["feed_type"] not in Feed.FeedType.values:
-                return CustomResponse.errorResponse(
-                    description="Invalid feed type.",
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            application_logger.exception(
+                "feed_update_failed feed_id=%s user_id=%s error=%s",
+                feed_id,
+                request.user.id,
+                str(e),
+            )
 
-        if "f_category" in request_data:
-            if request_data["f_category"] not in Feed.FeedCategory.values:
-                return CustomResponse.errorResponse(
-                    description="Invalid feed category.",
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            return CustomResponse.errorResponse(
+                description="Unable to update feed."
+            )
 
-        if "language" in request_data:
-            if request_data["language"] not in Feed.Language.values:
-                return CustomResponse.errorResponse(
-                    description="Invalid language.",
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+class FeedDeleteAPIView(APIView):
 
-        for field in allowed_fields:
-            if field in request_data:
-                setattr(feed, field, request_data.get(field))
-
-        for field in ["feed_type", "f_category", "language"]:
-            if field in request_data:
-                setattr(feed, field, request_data[field])
-
-        feed.save()
-
-        application_logger.info(
-            "feed_updated",
-            feed_id=str(feed.id),
-            requested_by=str(request.user.id),
-        )
-
-        return CustomResponse.successResponse(
-            data={
-                "id": str(feed.id),
-                "heading": feed.heading,
-                "status": feed.status,
-            },
-            description="Feed updated successfully.",
-        )
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "feed.delete"
 
     @transaction.atomic
     def delete(self, request, feed_id):
 
-        self.required_permission = "feed.delete"
+        try:
 
-        feed = self.get_feed(request, feed_id)
+            feed = Feed.objects.filter(id=feed_id).first()
 
-        if not feed:
-            return CustomResponse.errorResponse(
-                description="Feed not found.",
-                status=status.HTTP_404_NOT_FOUND,
+            if not feed:
+                return CustomResponse.errorResponse(
+                    description="Feed not found.",
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            deleted_feed_id = str(feed.id)
+
+            feed.delete()
+
+            application_logger.info(
+                "feed_deleted feed_id=%s user_id=%s",
+                deleted_feed_id,
+                request.user.id,
             )
 
-        feed_id = str(feed.id)
-        feed.delete()
-
-        application_logger.info(
-            "feed_deleted",
-            feed_id=feed_id,
-            requested_by=str(request.user.id),
-        )
-
-        return CustomResponse.successResponse(
-            data={"id": feed_id},
-            description="Feed deleted successfully.",
-        )
-
-
-
-class FeedStatusUpdateAPIView(APIView):
-
-    permission_classes = [IsAuthenticated, HasPermission]
-
-    @transaction.atomic
-    def patch(self, request, feed_id):
-
-        self.required_permission = "feed.update"
-
-        school = request.school
-
-        feed = Feed.objects.filter(
-            id=feed_id,
-            school_id=school.id if school else None,
-        ).first()
-
-        if not feed:
-            return CustomResponse.errorResponse(
-                description="Feed not found.",
-                status=status.HTTP_404_NOT_FOUND,
+            return CustomResponse.successResponse(
+                data={
+                    "id": deleted_feed_id,
+                },
+                description="Feed deleted successfully.",
             )
 
-        new_status = request.data.get("status")
+        except Exception as e:
 
-        if not new_status:
-            return CustomResponse.errorResponse(
-                description="Status is required.",
-                status=status.HTTP_400_BAD_REQUEST,
+            application_logger.exception(
+                "feed_delete_failed feed_id=%s user_id=%s error=%s",
+                feed_id,
+                request.user.id,
+                str(e),
             )
 
-        if new_status not in Feed.FeedStatus.values:
             return CustomResponse.errorResponse(
-                description="Invalid feed status.",
-                status=status.HTTP_400_BAD_REQUEST,
+                description="Unable to delete feed."
             )
-
-        feed.status = new_status
-
-        if new_status == Feed.FeedStatus.APPROVED:
-            feed.approved_by = str(request.user.id)
-            feed.approved_time = timezone.now()
-
-        feed.save(
-            update_fields=[
-                "status",
-                "approved_by",
-                "approved_time",
-                "updated_at",
-            ],
-        )
-
-        application_logger.info(
-            "feed_status_updated",
-            feed_id=str(feed.id),
-            status=new_status,
-            updated_by=str(request.user.id),
-        )
-
-        return CustomResponse.successResponse(
-            data={
-                "id": str(feed.id),
-                "status": feed.status,
-                "approved_by": feed.approved_by,
-                "approved_time": feed.approved_time,
-            },
-            description="Feed status updated successfully.",
-        )
-
 
 
 class FeedCategoryListAPIView(APIView):
