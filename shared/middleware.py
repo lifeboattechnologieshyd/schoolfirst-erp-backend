@@ -78,6 +78,7 @@ class SchoolMiddleware:
             "/edutainment/feeds",
             "/backoffice/activities",
             "/activities",
+            "/backoffice/vocabbee",
 
 
         )

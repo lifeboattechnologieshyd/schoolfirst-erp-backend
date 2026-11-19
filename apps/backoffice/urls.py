@@ -91,8 +91,8 @@ from apps.backoffice.views.transport import CreateVehicleAPIView, VehicleListAPI
     VehicleAssignmentListAPIView, CreateRouteStopAPIView, RouteStopListAPIView, UpdateRouteStopAPIView, \
     StudentTransportListAPIView, MyAssignedVehicleAPIView, RouteDetailsAPIView, CreateTransportFeeRuleAPIView, \
     TransportFeeRuleListAPIView, UpdateTransportFeeRuleAPIView, DeleteTransportFeeRuleAPIView
-from apps.backoffice.views.vocabbee import GradesList, SubjectCrud, SubjectDeleteAPIView, WordsCrud,  \
-    UploadWords
+from apps.backoffice.views.vocabbee import GradesList, SubjectCrud, SubjectDeleteAPIView, WordsCrud, \
+    UploadWords, DashboardAPIView
 from apps.fee.views.fee import CompletedStudentFeePaymentsAPIView
 
 urlpatterns = [
@@ -750,16 +750,18 @@ urlpatterns = [
 
     path("activities",ActivitiesListAPIView.as_view(),),
 
-    path("grades", GradesList.as_view()),
-    path("grades/update", GradesList.as_view()),  # PUT
-    path("grades/delete", GradesList.as_view()),
+    path("vocabbee/dashboard",DashboardAPIView.as_view(),),
 
-    path("subject", SubjectCrud.as_view()),
-    path("subject/<uuid:subject_id>", SubjectDeleteAPIView.as_view()),
+    path("vocabbee/grades", GradesList.as_view()),
+    path("vocabbee/grades/update", GradesList.as_view()),  # PUT
+    path("vocabbee/grades/delete", GradesList.as_view()),
+
+    path("vocabbee/subject", SubjectCrud.as_view()),
+    path("vocabbee/subject/<uuid:subject_id>", SubjectDeleteAPIView.as_view()),
     # DELETE
-    path("words", WordsCrud.as_view()),  # crud
+    path("vocabbee/words", WordsCrud.as_view()),  # crud
     # path("words/audio", WordsAudio.as_view()),  # get audio from sf
-    path("words/bulk", UploadWords.as_view()),  # excel upload
+    path("vocabbee/words/bulk", UploadWords.as_view()),  # excel upload
 
     path("feels",FeelsListAPIView.as_view(),),
 
