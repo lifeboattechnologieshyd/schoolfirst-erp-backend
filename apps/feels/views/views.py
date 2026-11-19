@@ -1,9 +1,10 @@
 from django.db import transaction
 from django.db.models import Q, F
+from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.feels.models import Feels, FeelLikes
+from apps.feels.models import Feels, FeelLikes, FeelViews
 from shared.mixins import CustomPageNumberPagination, CustomResponse
 from shared.utils.logger import application_logger
 
@@ -164,7 +165,6 @@ class FeelLikeAPIView(APIView):
             if not feel:
                 return CustomResponse.errorResponse(
                     description="Feel not found.",
-                    status=status.HTTP_404_NOT_FOUND,
                 )
 
             like, created = FeelLikes.objects.get_or_create(
@@ -270,3 +270,70 @@ class FeelUnlikeAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Unable to unlike feel.",
             )
+
+
+class FeelViewAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, feel_id):
+        try:
+            feel = Feels.objects.filter(id=feel_id).first()
+
+            if not feel:
+                return CustomResponse.errorResponse(
+                    description="Feel not found."
+                )
+
+            # Get request data
+            duration = request.data.get("duration", 0)
+            device_id = request.data.get("device_id")
+
+            # Get client IP address
+            ip_address = request.META.get("HTTP_X_FORWARDED_FOR")
+
+            if ip_address:
+                ip_address = ip_address.split(",")[0].strip()
+            else:
+                ip_address = request.META.get("REMOTE_ADDR")
+
+            # Get current time
+            current_time = timezone.localtime().time()
+
+            # Create view record if it doesn't already exist
+            view, created = FeelViews.objects.get_or_create(
+                feel_id=feel.id,
+                user_id=request.user.id,
+                defaults={
+                    "duration": duration,
+                    "time": current_time,
+                    "ip_address": ip_address,
+                    "device_id": device_id
+                }
+            )
+
+            if created:
+                Feels.objects.filter(id=feel.id).update(
+                    views_count=F("views_count") + 1
+                )
+
+            return CustomResponse.successResponse(
+                data={
+                    "feel_id": str(feel.id),
+                    "duration": view.duration,
+                    "view_count": Feels.objects.filter(
+                        id=feel.id
+                    ).values_list("views_count", flat=True).first(),
+                    "created": created
+                },
+                description="Feel view recorded successfully."
+            )
+
+        except Exception as e:
+            application_logger.exception(
+                f"Error recording feel view: {str(e)}"
+            )
+            return CustomResponse.errorResponse(
+                description="Unable to record feel view."
+            )
+
+
