@@ -76,7 +76,7 @@ class SchoolMiddleware:
             "/backoffice/feeds",
             "/edutainment/feeds",
             "/backoffice/activities",
-            "/activities/",
+            "/activities",
             "/backoffice/feels",
 
         )
