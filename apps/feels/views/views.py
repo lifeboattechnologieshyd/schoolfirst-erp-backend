@@ -216,7 +216,7 @@ class FeelUnlikeAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
-    def delete(self, request, feel_id):
+    def post(self, request, feel_id):
 
         try:
             feel = Feels.objects.filter(
