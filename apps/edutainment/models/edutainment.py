@@ -23,8 +23,8 @@ class Feed(AuditModel):
 
     class FeedCategory(models.TextChoices):
         DIY = "DIY", "Diy"
-        PTIPS = "PTIPS", "Parent Tips"
-        FTIPS = "FTIPS", "Family Tips"
+        PTIPS = "PTIPS", "Parenting Tips"
+        FTIPS = "FTIPS", "Prosperity Tips"
         STORIES = "STORIES", "Stories"
 
     class Language(models.TextChoices):
