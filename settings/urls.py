@@ -114,6 +114,8 @@ if "apps.activities" in settings.INSTALLED_APPS:
     urlpatterns.append(path("activities/", include("apps.activities.urls")))
 if "apps.vocabbee" in settings.INSTALLED_APPS:
     urlpatterns.append(path("vocabbee/", include("apps.vocabbee.urls")))
+if "apps.feels" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("feels/", include("apps.feels.urls")))
 
 
 

@@ -41,6 +41,9 @@ psutil==7.2.*
 phonepe-pg-sdk-python==2.1.9
 setuptools==80.9.0
 
+# Utilities
+requests>=2.31.0
+
 
 # health check
 django-health-check==4.4.*

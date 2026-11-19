@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     "apps.edutainment",
     "apps.activities",
     "apps.vocabbee",
+    "apps.feels",
     # Third Party
     "rest_framework",
     "rest_framework.authtoken",
