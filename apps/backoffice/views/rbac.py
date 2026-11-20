@@ -1,3 +1,5 @@
+from pydoc import describe
+
 from django.db import transaction
 from rest_framework import status
 from rest_framework.views import APIView
@@ -5,7 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from apps.core.models import Modules, Permissions, Roles, RolePermissions, UserMaster, UserRoles, UserPermissions
 from shared.helpers import clear_user_access_cache
-from shared.mixins import CustomResponse
+from shared.mixins import CustomResponse, CustomPageNumberPagination
 from shared.permissions import HasRole
 from shared.enums.roles import RolesEnum
 from shared.utils.logger import application_logger, audit_logger
@@ -53,7 +55,10 @@ class ModuleListCreateAPIView(APIView):
         )
 
         return CustomResponse.successResponse(
-            data=data
+            total=len(data),
+            data=data,
+            description="Module list created successfully.",
+
         )
 
     def post(self, request):
@@ -149,6 +154,7 @@ class ModuleListCreateAPIView(APIView):
             description="Module created successfully.",
             status=status.HTTP_201_CREATED,
         )
+
 class PermissionListCreateAPIView(APIView):
 
     permission_classes = [
@@ -160,6 +166,8 @@ class PermissionListCreateAPIView(APIView):
         RolesEnum.SUPERADMIN,
     ]
 
+    pagination_class = CustomPageNumberPagination
+
     def get(self, request):
 
         application_logger.info(
@@ -167,29 +175,98 @@ class PermissionListCreateAPIView(APIView):
             user_id=str(request.user.id),
         )
 
-        permissions = Permissions.objects.select_related(
-            "module"
-        )
+        permission_filter = request.query_params.get(
+            "permission",
+            "",
+        ).strip()
 
-        data = [
-            {
-                "id": str(permission.id),
-                "permission_name": permission.permission_name,
-                "module_id": str(permission.module.id),
-                "module_name": permission.module.module_name,
-            }
-            for permission in permissions
-        ]
+        module_filter = request.query_params.get(
+            "module",
+            "",
+        ).strip()
+
+        try:
+
+            permissions = Permissions.objects.filter(
+                is_deleted=False,
+            ).select_related(
+                "module",
+            )
+
+            # Permission name filter
+            if permission_filter:
+                permissions = permissions.filter(
+                    permission_name__icontains=permission_filter,
+                )
+
+            # Module ID or module name filter
+            if module_filter:
+                try:
+                    module_uuid = UUID(module_filter)
+
+                    permissions = permissions.filter(
+                        module_id=module_uuid,
+                    )
+
+                except ValueError:
+                    permissions = permissions.filter(
+                        module__module_name__icontains=module_filter,
+                    )
+
+            permissions = permissions.order_by(
+                "module__module_name",
+                "permission_name",
+                "id",
+            )
+
+            total = permissions.count()
+
+            # Pagination
+            paginator = self.pagination_class()
+            page = paginator.paginate_queryset(
+                permissions,
+                request,
+            )
+
+            data = [
+                {
+                    "id": str(permission.id),
+                    "permission_name": permission.permission_name,
+                    "module_id": str(permission.module.id),
+                    "module_name": permission.module.module_name,
+                }
+                for permission in page
+            ]
+
+        except Exception as e:
+
+            application_logger.exception(
+                "permissions_list_failed",
+                user_id=str(request.user.id),
+                permission_filter=permission_filter,
+                module_filter=module_filter,
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description=str(e),
+            )
 
         application_logger.info(
             "permissions_list_fetched",
             user_id=str(request.user.id),
-            total_count=len(data),
+            total_count=total,
+            returned_count=len(data),
+            permission_filter=permission_filter,
+            module_filter=module_filter,
         )
 
         return CustomResponse.successResponse(
-            data=data
+            total=total,
+            data=data,
+            description="permissions_list_fetched successfully.",
         )
+
 
     def post(self, request):
 

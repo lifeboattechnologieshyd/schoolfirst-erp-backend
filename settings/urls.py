@@ -106,6 +106,17 @@ if "apps.timetable" in settings.INSTALLED_APPS:
     urlpatterns.append(path("timetable/", include("apps.timetable.urls")))
 if "apps.bulletin" in settings.INSTALLED_APPS:
     urlpatterns.append(path("bulletin/", include("apps.bulletin.urls")))
+if "apps.curriculum" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("curriculum/", include("apps.curriculum.urls")))
+if "apps.edutainment" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("edutainment/", include("apps.edutainment.urls")))
+if "apps.activities" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("activities/", include("apps.activities.urls")))
+if "apps.vocabbee" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("vocabbee/", include("apps.vocabbee.urls")))
+if "apps.feels" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("feels/", include("apps.feels.urls")))
+
 
 
 ####################################

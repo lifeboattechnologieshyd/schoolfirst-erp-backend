@@ -1,5 +1,6 @@
 from django.urls import path
 
+from apps.backoffice.views.activities import ActivitiesCreateAPIView, ActivitiesListAPIView
 from apps.backoffice.views.assignment import CreateAssignmentAPIView, AssignmentListAPIView, AssignmentUpdateAPIView, \
     TeacherAssignmentSubmissionListAPIView, TeacherCheckAssignmentAPIView
 from apps.backoffice.views.attendance import StaffAttendanceListAPIView, BulkMarkStaffAttendanceAPIView, \
@@ -16,6 +17,18 @@ from apps.backoffice.views.calendar import AcademicCalendarWeekendRuleCreateAPIV
     AcademicCalendarUpdateAPIView
 from apps.backoffice.views.contactus import AdminSupportTicketsAPIView, AdminSupportTicketDetailAPIView, \
     AdminReplySupportTicketAPIView, AdminUpdateSupportTicketStatusAPIView
+from apps.backoffice.views.curriculum import CurriculumListAPIView, CurriculumCreateAPIView, CurriculumUpdateAPIView, \
+    CurriculumDeleteAPIView, CurriculumCategoryListAPIView, CurriculumCategoryCreateAPIView, \
+    CurriculumCategoryUpdateAPIView, CurriculumCategoryDeleteAPIView, CurriculumSubjectListAPIView, \
+    CurriculumSubjectCreateAPIView, CurriculumSubjectUpdateAPIView, CurriculumSubjectDeleteAPIView, \
+    CurriculumLessonListAPIView, CurriculumLessonCreateAPIView, CurriculumLessonUpdateAPIView, \
+    CurriculumLessonDeleteAPIView, CurriculumLessonPageListAPIView, CurriculumLessonPageCreateAPIView, \
+    CurriculumLessonPageUpdateAPIView, CurriculumLessonPageDeleteAPIView, CurriculumPageContentListAPIView, \
+    CurriculumPageContentCreateAPIView, CurriculumPageContentUpdateAPIView, CurriculumPageContentDeleteAPIView
+from apps.backoffice.views.edutainment import  \
+    FeedCategoryDetailAPIView, DIYMaterialsAPIView, DIYStepsAPIView, \
+    DIYContentUpdateAPIView, FeedCategoryCreateAPIView, FeedCategoryListAPIView, FeedCreateAPIView, FeedListAPIView, \
+    FeedUpdateAPIView, FeedDeleteAPIView
 from apps.backoffice.views.events import CreateCalendarEventAPIView, CalendarEventListAPIView, \
     UpdateCalendarEventAPIView
 from apps.backoffice.views.examination import ExaminationTypeCreateAPIView, ExaminationTypeListAPIView, \
@@ -41,6 +54,7 @@ from apps.backoffice.views.fee import CreateFeeTypeAPIView, FeeTypeListAPIView, 
     StudentFeePaymentListAPIView
 from apps.backoffice.views.feedback import FeedbackCategoryCreateAPIView, FeedbackCategoryListAPIView, \
     FeedbackCategoryUpdateAPIView, FeedbackListAPIView, FeedbackResponseCreateAPIView, FeedbackStatusUpdateAPIView
+from apps.backoffice.views.feels import FeelsUpdateAPIView, FeelsDeleteAPIView, FeelsCreateAPIView, FeelsListAPIView
 from apps.backoffice.views.gallery import GalleryCategoryAPIView, GalleryCreateAPIView, GalleryListAPIView, \
     GalleryUpdateAPIView, GalleryDeleteAPIView, GalleryImageDeleteAPIView, \
     GalleryVideoDeleteAPIView, DeletedGalleryMediaAPIView
@@ -85,6 +99,9 @@ from apps.backoffice.views.transport import CreateVehicleAPIView, VehicleListAPI
     VehicleAssignmentListAPIView, CreateRouteStopAPIView, RouteStopListAPIView, UpdateRouteStopAPIView, \
     StudentTransportListAPIView, MyAssignedVehicleAPIView, RouteDetailsAPIView, CreateTransportFeeRuleAPIView, \
     TransportFeeRuleListAPIView, UpdateTransportFeeRuleAPIView, DeleteTransportFeeRuleAPIView
+from apps.backoffice.views.vocabbee import GradesList, SubjectCrud, SubjectDeleteAPIView, WordsCrud, \
+    UploadWords, DashboardAPIView, TournamentCreateAPIView, TournamentDetailsAPIView, TournamentAssignGradesAPIView, \
+    TournamentAvailableWordsAPIView, TournamentAssignQuestionsAPIView, TournamentCancelAPIView, TournamentPublishAPIView
 from apps.fee.views.fee import CompletedStudentFeePaymentsAPIView
 
 urlpatterns = [
@@ -715,6 +732,100 @@ urlpatterns = [
     path("calendar-weekend-rule/<uuid:rule_id>",AcademicCalendarWeekendRuleUpdateAPIView.as_view(),),
 
     path("calendar-weekend-rule/<uuid:rule_id>/delete/",AcademicCalendarWeekendRuleDeleteAPIView.as_view(),),
+
+    #Family zone
+
+    path("feeds",FeedListAPIView.as_view(),),
+
+    path("feeds/create",FeedCreateAPIView.as_view(),),
+
+    path("feeds/<uuid:feed_id>/update",FeedUpdateAPIView.as_view()),
+
+    path("feeds/<uuid:feed_id>/delete",FeedDeleteAPIView.as_view()),
+
+    path("feeds-categories/create",FeedCategoryCreateAPIView.as_view(),),
+
+    path("feeds-categories",FeedCategoryListAPIView.as_view(),),
+
+    path("feeds-categories/<uuid:category_id>",FeedCategoryDetailAPIView.as_view(),),
+
+    path("feeds/<uuid:feed_id>/diy-materials",DIYMaterialsAPIView.as_view(),),
+
+    path("feeds/<uuid:feed_id>/diy-steps",DIYStepsAPIView.as_view(),),
+
+    path("feeds/<uuid:feed_id>/diy-content",DIYContentUpdateAPIView.as_view(),),
+
+    path("activities/create",ActivitiesCreateAPIView.as_view()),
+
+    path("activities",ActivitiesListAPIView.as_view(),),
+
+    path("vocabbee/dashboard",DashboardAPIView.as_view(),),
+
+    path("vocabbee/grades", GradesList.as_view()),
+    path("vocabbee/grades/update", GradesList.as_view()),  # PUT
+    path("vocabbee/grades/delete", GradesList.as_view()),
+
+    path("vocabbee/subject", SubjectCrud.as_view()),
+    path("vocabbee/subject/<uuid:subject_id>", SubjectDeleteAPIView.as_view()),
+    # DELETE
+    path("vocabbee/words", WordsCrud.as_view()),  # crud
+    # path("words/audio", WordsAudio.as_view()),  # get audio from sf
+    path("vocabbee/words/bulk", UploadWords.as_view()),  # excel upload
+
+    path("feels",FeelsListAPIView.as_view(),),
+
+    path("feels/create",FeelsCreateAPIView.as_view(),),
+
+    path("feels/<uuid:feel_id>/update",FeelsUpdateAPIView.as_view(),),
+
+    path("feels/<uuid:feel_id>/delete",FeelsDeleteAPIView.as_view(),),
+
+
+    path("vocabbee/tournament", TournamentCreateAPIView.as_view()),
+    path("vocabbee/tournament-details/<uuid:tournament_id>", TournamentDetailsAPIView.as_view()),
+    path("vocabbee/tournament-assign-grades/<uuid:tournament_id>", TournamentAssignGradesAPIView.as_view()),
+
+    path("vocabbee/tournaments/available-words", TournamentAvailableWordsAPIView.as_view()),
+    path("vocabbee/tournaments/assign-words/<uuid:tournament_id>", TournamentAssignQuestionsAPIView.as_view()),
+    path("vocabbee/tournaments/cancel/<uuid:tournament_id>", TournamentCancelAPIView.as_view()),
+    path("vocabbee/tournaments/validate/<uuid:tournament_id>", TournamentPublishAPIView.as_view()),
+
+
+    # Curriculum
+    path("curriculum", CurriculumListAPIView.as_view()),
+    path("curriculum/create", CurriculumCreateAPIView.as_view()),
+    path("curriculum/<uuid:curriculum_id>/update", CurriculumUpdateAPIView.as_view()),
+    path("curriculum/<uuid:curriculum_id>/delete", CurriculumDeleteAPIView.as_view()),
+
+    # Category
+    path("curriculum/categories", CurriculumCategoryListAPIView.as_view()),
+    path("curriculum/categories/create", CurriculumCategoryCreateAPIView.as_view()),
+    path("curriculum/categories/<uuid:category_id>/update", CurriculumCategoryUpdateAPIView.as_view()),
+    path("curriculum/categories/<uuid:category_id>/delete", CurriculumCategoryDeleteAPIView.as_view()),
+
+    # Subject
+    path("curriculum/subjects", CurriculumSubjectListAPIView.as_view()),
+    path("curriculum/subjects/create", CurriculumSubjectCreateAPIView.as_view()),
+    path("curriculum/subjects/<uuid:subject_id>/update", CurriculumSubjectUpdateAPIView.as_view()),
+    path("curriculum/subjects/<uuid:subject_id>/delete", CurriculumSubjectDeleteAPIView.as_view()),
+
+    # Lesson
+    path("curriculum/lessons", CurriculumLessonListAPIView.as_view()),
+    path("curriculum/lessons/create", CurriculumLessonCreateAPIView.as_view()),
+    path("curriculum/lessons/<uuid:lesson_id>/update", CurriculumLessonUpdateAPIView.as_view()),
+    path("curriculum/lessons/<uuid:lesson_id>/delete", CurriculumLessonDeleteAPIView.as_view()),
+
+    # Lesson Pages
+    path("curriculum/lessons/<uuid:lesson_id>/pages", CurriculumLessonPageListAPIView.as_view()),
+    path("curriculum/lessons/<uuid:lesson_id>/pages/create", CurriculumLessonPageCreateAPIView.as_view()),
+    path("curriculum/pages/<uuid:page_id>/update", CurriculumLessonPageUpdateAPIView.as_view()),
+    path("curriculum/pages/<uuid:page_id>/delete", CurriculumLessonPageDeleteAPIView.as_view()),
+
+    # Page Contents
+    path("curriculum/pages/<uuid:page_id>/contents", CurriculumPageContentListAPIView.as_view()),
+    path("curriculum/pages/<uuid:page_id>/contents/create", CurriculumPageContentCreateAPIView.as_view()),
+    path("curriculum/contents/<uuid:content_id>/update", CurriculumPageContentUpdateAPIView.as_view()),
+    path("curriculum/contents/<uuid:content_id>/delete", CurriculumPageContentDeleteAPIView.as_view()),
 
 
 
