@@ -17,6 +17,14 @@ from apps.backoffice.views.calendar import AcademicCalendarWeekendRuleCreateAPIV
     AcademicCalendarUpdateAPIView
 from apps.backoffice.views.contactus import AdminSupportTicketsAPIView, AdminSupportTicketDetailAPIView, \
     AdminReplySupportTicketAPIView, AdminUpdateSupportTicketStatusAPIView
+from apps.backoffice.views.curriculum import CurriculumListAPIView, CurriculumCreateAPIView, CurriculumUpdateAPIView, \
+    CurriculumDeleteAPIView, CurriculumCategoryListAPIView, CurriculumCategoryCreateAPIView, \
+    CurriculumCategoryUpdateAPIView, CurriculumCategoryDeleteAPIView, CurriculumSubjectListAPIView, \
+    CurriculumSubjectCreateAPIView, CurriculumSubjectUpdateAPIView, CurriculumSubjectDeleteAPIView, \
+    CurriculumLessonListAPIView, CurriculumLessonCreateAPIView, CurriculumLessonUpdateAPIView, \
+    CurriculumLessonDeleteAPIView, CurriculumLessonPageListAPIView, CurriculumLessonPageCreateAPIView, \
+    CurriculumLessonPageUpdateAPIView, CurriculumLessonPageDeleteAPIView, CurriculumPageContentListAPIView, \
+    CurriculumPageContentCreateAPIView, CurriculumPageContentUpdateAPIView, CurriculumPageContentDeleteAPIView
 from apps.backoffice.views.edutainment import  \
     FeedCategoryDetailAPIView, DIYMaterialsAPIView, DIYStepsAPIView, \
     DIYContentUpdateAPIView, FeedCategoryCreateAPIView, FeedCategoryListAPIView, FeedCreateAPIView, FeedListAPIView, \
@@ -770,6 +778,43 @@ urlpatterns = [
     path("feels/<uuid:feel_id>/update",FeelsUpdateAPIView.as_view(),),
 
     path("feels/<uuid:feel_id>/delete",FeelsDeleteAPIView.as_view(),),
+
+
+    # Curriculum
+    path("curriculum", CurriculumListAPIView.as_view()),
+    path("curriculum/create", CurriculumCreateAPIView.as_view()),
+    path("curriculum/<uuid:curriculum_id>/update", CurriculumUpdateAPIView.as_view()),
+    path("curriculum/<uuid:curriculum_id>/delete", CurriculumDeleteAPIView.as_view()),
+
+    # Category
+    path("curriculum/categories", CurriculumCategoryListAPIView.as_view()),
+    path("curriculum/categories/create", CurriculumCategoryCreateAPIView.as_view()),
+    path("curriculum/categories/<uuid:category_id>/update", CurriculumCategoryUpdateAPIView.as_view()),
+    path("curriculum/categories/<uuid:category_id>/delete", CurriculumCategoryDeleteAPIView.as_view()),
+
+    # Subject
+    path("curriculum/subjects", CurriculumSubjectListAPIView.as_view()),
+    path("curriculum/subjects/create", CurriculumSubjectCreateAPIView.as_view()),
+    path("curriculum/subjects/<uuid:subject_id>/update", CurriculumSubjectUpdateAPIView.as_view()),
+    path("curriculum/subjects/<uuid:subject_id>/delete", CurriculumSubjectDeleteAPIView.as_view()),
+
+    # Lesson
+    path("curriculum/lessons", CurriculumLessonListAPIView.as_view()),
+    path("curriculum/lessons/create", CurriculumLessonCreateAPIView.as_view()),
+    path("curriculum/lessons/<uuid:lesson_id>/update", CurriculumLessonUpdateAPIView.as_view()),
+    path("curriculum/lessons/<uuid:lesson_id>/delete", CurriculumLessonDeleteAPIView.as_view()),
+
+    # Lesson Pages
+    path("curriculum/lessons/<uuid:lesson_id>/pages", CurriculumLessonPageListAPIView.as_view()),
+    path("curriculum/lessons/<uuid:lesson_id>/pages/create", CurriculumLessonPageCreateAPIView.as_view()),
+    path("curriculum/pages/<uuid:page_id>/update", CurriculumLessonPageUpdateAPIView.as_view()),
+    path("curriculum/pages/<uuid:page_id>/delete", CurriculumLessonPageDeleteAPIView.as_view()),
+
+    # Page Contents
+    path("curriculum/pages/<uuid:page_id>/contents", CurriculumPageContentListAPIView.as_view()),
+    path("curriculum/pages/<uuid:page_id>/contents/create", CurriculumPageContentCreateAPIView.as_view()),
+    path("curriculum/contents/<uuid:content_id>/update", CurriculumPageContentUpdateAPIView.as_view()),
+    path("curriculum/contents/<uuid:content_id>/delete", CurriculumPageContentDeleteAPIView.as_view()),
 
 
 
