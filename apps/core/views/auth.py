@@ -814,6 +814,10 @@ class VerifyOTPAPIView(APIView):
                             "guardian_name": student.guardian_name,
                             "guardian_mobile": student.guardian_mobile,
                             "status": student.status,
+                            "clss": student.clss,
+                            "student_access_token":student.access_token,
+                            "qpass_id": student.qpass_id,
+                            "image": student.image,
                         })
 
 

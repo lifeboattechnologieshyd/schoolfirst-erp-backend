@@ -867,6 +867,11 @@ class Student(AuditModel):
         choices=HostelType.choices,
         default=HostelType.DAY_SCHOLAR,
     )
+    access_token = models.TextField(null=True, blank=True)
+    qpass_id = models.CharField(max_length=20, unique=True, null=True, blank=True)
+    clss = models.CharField(max_length=30, null=True, blank=True)
+    image = models.CharField(max_length=300,null=True)
+
 
     class Meta:
 
