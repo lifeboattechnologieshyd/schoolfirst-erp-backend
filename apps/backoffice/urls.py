@@ -100,7 +100,8 @@ from apps.backoffice.views.transport import CreateVehicleAPIView, VehicleListAPI
     StudentTransportListAPIView, MyAssignedVehicleAPIView, RouteDetailsAPIView, CreateTransportFeeRuleAPIView, \
     TransportFeeRuleListAPIView, UpdateTransportFeeRuleAPIView, DeleteTransportFeeRuleAPIView
 from apps.backoffice.views.vocabbee import GradesList, SubjectCrud, SubjectDeleteAPIView, WordsCrud, \
-    UploadWords, DashboardAPIView
+    UploadWords, DashboardAPIView, TournamentCreateAPIView, TournamentDetailsAPIView, TournamentAssignGradesAPIView, \
+    TournamentAvailableWordsAPIView, TournamentAssignQuestionsAPIView, TournamentCancelAPIView, TournamentPublishAPIView
 from apps.fee.views.fee import CompletedStudentFeePaymentsAPIView
 
 urlpatterns = [
@@ -778,6 +779,16 @@ urlpatterns = [
     path("feels/<uuid:feel_id>/update",FeelsUpdateAPIView.as_view(),),
 
     path("feels/<uuid:feel_id>/delete",FeelsDeleteAPIView.as_view(),),
+
+
+    path("vocabbee/tournament", TournamentCreateAPIView.as_view()),
+    path("vocabbee/tournament-details/<uuid:tournament_id>", TournamentDetailsAPIView.as_view()),
+    path("vocabbee/tournament-assign-grades/<uuid:tournament_id>", TournamentAssignGradesAPIView.as_view()),
+
+    path("vocabbee/tournaments/available-words", TournamentAvailableWordsAPIView.as_view()),
+    path("vocabbee/tournaments/assign-words/<uuid:tournament_id>", TournamentAssignQuestionsAPIView.as_view()),
+    path("vocabbee/tournaments/cancel/<uuid:tournament_id>", TournamentCancelAPIView.as_view()),
+    path("vocabbee/tournaments/validate/<uuid:tournament_id>", TournamentPublishAPIView.as_view()),
 
 
     # Curriculum
