@@ -79,6 +79,7 @@ class SchoolMiddleware:
             "/backoffice/activities",
             "/activities",
             "/backoffice/vocabbee",
+            "/vocabbee",
 
 
         )
