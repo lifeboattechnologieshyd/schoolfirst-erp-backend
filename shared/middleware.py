@@ -80,6 +80,8 @@ class SchoolMiddleware:
             "/activities",
             "/backoffice/vocabbee",
             "/vocabbee",
+            "/backoffice/curriculum",
+            "/curriculum/curriculum",
 
 
         )
