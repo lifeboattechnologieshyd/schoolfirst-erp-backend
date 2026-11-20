@@ -1062,3 +1062,4 @@ class AddKid(APIView):
             data={},
             description="Kid deleted successfully"
         )
+

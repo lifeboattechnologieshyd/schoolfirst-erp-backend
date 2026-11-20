@@ -4,7 +4,7 @@ from apps.backoffice.views.school import SubjectListAPIView
 from apps.vocabbee.views.vocabbee import StartPractice, SubmitPracticeAnswer, SkipPracticeQuestion, EndPractice, \
     PracticeHistoryAPIView, PracticeStats, DailyChallengesAPIView, DailyChallengeWordsAPIView, \
     DailyChallengeSubmitAPIView, DailyChallengeResultAPIView, DailyChallengeStatsAPIView, DailyChallengeHistoryAPIView, \
-    GradesList, AddKid
+    GradesList, AddKid, HomeStats
 
 urlpatterns = [
     path("practice/start", StartPractice.as_view()),
@@ -28,4 +28,6 @@ urlpatterns = [
 
     path("grades", GradesList.as_view()),
     path("kids", AddKid.as_view()),
+
+    path("home/stats", HomeStats.as_view()),
 ]
