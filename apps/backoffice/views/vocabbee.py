@@ -205,11 +205,7 @@ class WordsCrud(APIView):
 
     def post(self, request):
 
-        if not request.user.is_admin:
-            return CustomResponse().errorResponse(
-                data={},
-                description="Unauthorized"
-            )
+
 
         grade_id = request.data.get("grade_id")
         word = request.data.get("word")
