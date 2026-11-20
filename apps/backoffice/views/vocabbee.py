@@ -284,11 +284,7 @@ class WordsCrud(APIView):
 
     def get(self, request):
 
-        if not request.user.is_admin:
-            return CustomResponse().errorResponse(
-                data={},
-                description="Unauthorized"
-            )
+
 
         page = int(request.GET.get("page", 1))
         page_size = int(request.GET.get("page_size", 20))
@@ -406,11 +402,7 @@ class WordsCrud(APIView):
 
     def put(self, request):
 
-        if not request.user.is_admin:
-            return CustomResponse().errorResponse(
-                data={},
-                description="Unauthorized"
-            )
+
 
         word_id = request.data.get("word_id")
 
@@ -590,11 +582,7 @@ class WordsCrud(APIView):
 
     def delete(self, request):
 
-        if not request.user.is_admin:
-            return CustomResponse().errorResponse(
-                data={},
-                description="Unauthorized"
-            )
+
 
         word_id = request.data.get("word_id")
 
