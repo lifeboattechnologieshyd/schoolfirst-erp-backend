@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from apps.curriculum.models import Curriculum, CurriculumCategory, CurriculumSubject, CurriculumLesson
 from apps.vocabbee.models import Grades
 from shared.mixins import CustomResponse
+from shared.utils.logger import application_logger
 
 
 class CurriculumListAPIView(APIView):
@@ -11,45 +12,71 @@ class CurriculumListAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        try:
+            grade_id = request.query_params.get("grade_id")
 
-        grade_id = request.query_params.get("grade_id")
+            if not grade_id:
+                return CustomResponse.errorResponse(
+                    description="Grade ID is required."
+                )
 
-        if not grade_id:
-            return CustomResponse.errorResponse(
-                description="Grade ID is required."
+            grade = Grades.objects.filter(
+                id=grade_id,
+                is_active=True
+            ).first()
+
+            if not grade:
+                return CustomResponse.errorResponse(
+                    description="Invalid grade ID."
+                )
+
+            curriculums = Curriculum.objects.filter(
+                grades__id=grade_id,
+                is_active=True,
+                is_deleted=False
+            ).prefetch_related(
+                "grades"
+            ).distinct().order_by(
+                "serial_number"
             )
 
-        if not Grades.objects.filter(
-            id=grade_id,
-            is_active=True
-        ).exists():
-            return CustomResponse.errorResponse(
-                description="Invalid grade ID."
+            data = []
+
+            for curriculum in curriculums:
+
+                grades_data = [
+                    {
+                        "id": str(grade.id),
+                        "name": grade.name
+                    }
+                    for grade in curriculum.grades.filter(
+                        is_active=True
+                    )
+                ]
+
+                data.append({
+                    "id": str(curriculum.id),
+                    "title": curriculum.title,
+                    "description": curriculum.description,
+                    "grades": grades_data,
+                    "thumbnail_image": curriculum.thumbnail_image,
+                    "serial_number": curriculum.serial_number
+                })
+
+            return CustomResponse.successResponse(
+                data=data,
+                total=len(data),
+                description="Curriculums fetched successfully."
             )
 
-        curriculums = Curriculum.objects.filter(
-            grade_id=grade_id,
-            is_active=True,
-            is_deleted=False
-        ).order_by("serial_number")
+        except Exception:
+            application_logger.exception(
+                "Error fetching curriculums"
+            )
+            return CustomResponse.errorResponse(
+                description="Unable to fetch curriculums."
+            )
 
-        data = []
-
-        for curriculum in curriculums:
-            data.append({
-                "id": curriculum.id,
-                "title": curriculum.title,
-                "description": curriculum.description,
-                "grade_id": curriculum.grade_id,
-                "grade_name": curriculum.grade.name,
-                "thumbnail_image": curriculum.thumbnail_image,
-                "serial_number": curriculum.serial_number
-            })
-
-        return CustomResponse.successResponse(
-            data=data,
-            description="Curriculums fetched successfully."
-        )
 
 class CurriculumCategoryListAPIView(APIView):
 
@@ -95,91 +122,127 @@ class CurriculumSubjectListAPIView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, category_id):
+    def get(self, request, curriculum_id):
+        try:
+            curriculum = Curriculum.objects.filter(
+                id=curriculum_id,
+                is_active=True,
+                is_deleted=False
+            ).first()
 
-        category = CurriculumCategory.objects.filter(
-            id=category_id,
-            is_active=True,
-            is_deleted=False,
-            curriculum__is_active=True,
-            curriculum__is_deleted=False
-        ).first()
+            if not curriculum:
+                return CustomResponse.errorResponse(
+                    description="Curriculum not found."
+                )
 
-        if not category:
-            return CustomResponse.errorResponse(
-                description="Category not found."
+            subjects = CurriculumSubject.objects.filter(
+                curriculum_id=curriculum_id,
+                curriculum__is_active=True,
+                curriculum__is_deleted=False,
+                grade__is_active=True,
+                is_active=True,
+                is_deleted=False
+            ).select_related(
+                "curriculum",
+                "grade"
+            ).order_by(
+                "serial_number"
             )
 
-        subjects = CurriculumSubject.objects.filter(
-            category_id=category_id,
-            is_active=True,
-            is_deleted=False
-        ).order_by("serial_number")
+            data = []
 
-        data = []
+            for subject in subjects:
+                data.append({
+                    "id": str(subject.id),
+                    "curriculum_id": str(subject.curriculum_id),
+                    "grade_id": str(subject.grade_id),
+                    "grade_name": subject.grade.name,
+                    "name": subject.name,
+                    "description": subject.description,
+                    "thumbnail_image": subject.thumbnail_image,
+                    "total_lessons": subject.total_lessons,
+                    "serial_number": subject.serial_number
+                })
 
-        for subject in subjects:
-            data.append({
-                "id": subject.id,
-                "category_id": subject.category_id,
-                "name": subject.name,
-                "description": subject.description,
-                "thumbnail_image": subject.thumbnail_image,
-                "total_lessons": subject.total_lessons,
-                "serial_number": subject.serial_number
-            })
+            return CustomResponse.successResponse(
+                data=data,
+                total=len(data),
+                description="Subjects fetched successfully."
+            )
 
-        return CustomResponse.successResponse(
-            data=data,
-            description="Subjects fetched successfully."
-        )
+        except Exception:
+            application_logger.exception(
+                "Error fetching curriculum subjects"
+            )
+            return CustomResponse.errorResponse(
+                description="Unable to fetch subjects."
+            )
+
 
 class CurriculumLessonListAPIView(APIView):
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request, subject_id):
+        try:
+            subject = CurriculumSubject.objects.filter(
+                id=subject_id,
+                is_active=True,
+                is_deleted=False,
+                category__is_active=True,
+                category__is_deleted=False,
+                category__curriculum__is_active=True,
+                category__curriculum__is_deleted=False
+            ).first()
 
-        subject = CurriculumSubject.objects.filter(
-            id=subject_id,
-            is_active=True,
-            is_deleted=False,
-            category__is_active=True,
-            category__is_deleted=False,
-            category__curriculum__is_active=True,
-            category__curriculum__is_deleted=False
-        ).first()
+            if not subject:
+                return CustomResponse.errorResponse(
+                    description="Subject not found."
+                )
 
-        if not subject:
-            return CustomResponse.errorResponse(
-                description="Subject not found."
+            lessons = CurriculumLesson.objects.filter(
+                subject_id=subject_id,
+                status=CurriculumLesson.Status.PUBLISHED,
+                is_active=True,
+                is_deleted=False,
+                grade__is_active=True
+            ).select_related(
+                "subject",
+                "grade"
+            ).order_by(
+                "serial_number"
             )
 
-        lessons = CurriculumLesson.objects.filter(
-            subject_id=subject_id,
-            status="PUBLISHED",
-            is_active=True,
-            is_deleted=False
-        ).order_by("serial_number")
+            data = []
 
-        data = []
+            for lesson in lessons:
+                data.append({
+                    "id": str(lesson.id),
+                    "subject_id": str(lesson.subject_id),
+                    "subject_name": lesson.subject.name,
+                    "grade_id": str(lesson.grade_id),
+                    "grade_name": lesson.grade.name,
+                    "title": lesson.title,
+                    "description": lesson.description,
+                    "thumbnail_image": lesson.thumbnail_image,
+                    "estimated_duration": lesson.estimated_duration,
+                    "total_pages": lesson.total_pages,
+                    "serial_number": lesson.serial_number
+                })
 
-        for lesson in lessons:
-            data.append({
-                "id": lesson.id,
-                "subject_id": lesson.subject_id,
-                "title": lesson.title,
-                "description": lesson.description,
-                "thumbnail_image": lesson.thumbnail_image,
-                "estimated_duration": lesson.estimated_duration,
-                "total_pages": lesson.total_pages,
-                "serial_number": lesson.serial_number
-            })
+            return CustomResponse.successResponse(
+                data=data,
+                total=len(data),
+                description="Lessons fetched successfully."
+            )
 
-        return CustomResponse.successResponse(
-            data=data,
-            description="Lessons fetched successfully."
-        )
+        except Exception:
+            application_logger.exception(
+                "Error fetching curriculum lessons"
+            )
+            return CustomResponse.errorResponse(
+                description="Unable to fetch lessons."
+            )
 
 class CurriculumLessonDetailAPIView(APIView):
 
