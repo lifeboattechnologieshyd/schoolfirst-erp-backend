@@ -9,7 +9,7 @@ urlpatterns = [
 
     path("curriculum/<uuid:curriculum_id>/categories",CurriculumCategoryListAPIView.as_view()),
 
-    path("curriculum/categories/<uuid:curriculum_id>/subjects", CurriculumSubjectListAPIView.as_view()),
+    path("curriculum/<uuid:curriculum_id>/subjects", CurriculumSubjectListAPIView.as_view()),
 
     path("curriculum/subjects/<uuid:subject_id>/lessons",CurriculumLessonListAPIView.as_view()),
 
