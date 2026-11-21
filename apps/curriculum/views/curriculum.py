@@ -124,6 +124,13 @@ class CurriculumSubjectListAPIView(APIView):
 
     def get(self, request, curriculum_id):
         try:
+            grade_id = request.query_params.get("grade_id")
+
+            if not grade_id:
+                return CustomResponse.errorResponse(
+                    description="Grade ID is required."
+                )
+
             curriculum = Curriculum.objects.filter(
                 id=curriculum_id,
                 is_active=True,
@@ -135,8 +142,19 @@ class CurriculumSubjectListAPIView(APIView):
                     description="Curriculum not found."
                 )
 
+            grade = Grades.objects.filter(
+                id=grade_id,
+                is_active=True
+            ).first()
+
+            if not grade:
+                return CustomResponse.errorResponse(
+                    description="Invalid grade ID."
+                )
+
             subjects = CurriculumSubject.objects.filter(
                 curriculum_id=curriculum_id,
+                grade_id=grade_id,
                 curriculum__is_active=True,
                 curriculum__is_deleted=False,
                 grade__is_active=True,
@@ -185,14 +203,19 @@ class CurriculumLessonListAPIView(APIView):
 
     def get(self, request, subject_id):
         try:
+            grade_id = request.query_params.get("grade_id")
+
+            if not grade_id:
+                return CustomResponse.errorResponse(
+                    description="Grade ID is required."
+                )
+
             subject = CurriculumSubject.objects.filter(
                 id=subject_id,
                 is_active=True,
                 is_deleted=False,
-                category__is_active=True,
-                category__is_deleted=False,
-                category__curriculum__is_active=True,
-                category__curriculum__is_deleted=False
+                curriculum__is_active=True,
+                curriculum__is_deleted=False
             ).first()
 
             if not subject:
@@ -200,8 +223,19 @@ class CurriculumLessonListAPIView(APIView):
                     description="Subject not found."
                 )
 
+            grade = Grades.objects.filter(
+                id=grade_id,
+                is_active=True
+            ).first()
+
+            if not grade:
+                return CustomResponse.errorResponse(
+                    description="Invalid grade ID."
+                )
+
             lessons = CurriculumLesson.objects.filter(
                 subject_id=subject_id,
+                grade_id=grade_id,
                 status=CurriculumLesson.Status.PUBLISHED,
                 is_active=True,
                 is_deleted=False,
@@ -243,6 +277,7 @@ class CurriculumLessonListAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Unable to fetch lessons."
             )
+
 
 class CurriculumLessonDetailAPIView(APIView):
 
