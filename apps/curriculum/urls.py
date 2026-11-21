@@ -11,7 +11,7 @@ urlpatterns = [
 
     path("curriculum/<uuid:curriculum_id>/subjects", CurriculumSubjectListAPIView.as_view()),
 
-    path("curriculum/subjects/<uuid:subject_id>/lessons",CurriculumLessonListAPIView.as_view()),
+    path("curriculum/<uuid:subject_id>/lessons",CurriculumLessonListAPIView.as_view()),
 
     path("curriculum/lessons/<uuid:lesson_id>",CurriculumLessonDetailAPIView.as_view()),
 
