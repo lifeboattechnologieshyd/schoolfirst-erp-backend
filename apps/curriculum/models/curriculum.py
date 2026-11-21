@@ -19,10 +19,11 @@ class Curriculum(AuditModel):
         null=True,
         blank=True
     )
-    grade = models.ForeignKey(
+
+    grades = models.ManyToManyField(
         "vocabbee.Grades",
-        on_delete=models.PROTECT,
-        related_name="curriculums"
+        related_name="curriculums",
+        blank=True
     )
 
     thumbnail_image = models.CharField(
@@ -112,10 +113,16 @@ class CurriculumSubject(AuditModel):
         editable=False
     )
 
-    category = models.ForeignKey(
-        CurriculumCategory,
+    curriculum = models.ForeignKey(
+        Curriculum,
         on_delete=models.CASCADE,
         related_name="subjects"
+    )
+
+    grade = models.ForeignKey(
+        "vocabbee.Grades",
+        on_delete=models.PROTECT,
+        related_name="curriculum_subjects"
     )
 
     name = models.CharField(max_length=150)
@@ -143,9 +150,6 @@ class CurriculumSubject(AuditModel):
         ordering = ["serial_number"]
 
 
-
-
-
 class CurriculumLesson(AuditModel):
 
     class Status(models.TextChoices):
@@ -163,6 +167,12 @@ class CurriculumLesson(AuditModel):
         CurriculumSubject,
         on_delete=models.CASCADE,
         related_name="lessons"
+    )
+
+    grade = models.ForeignKey(
+        "vocabbee.Grades",
+        on_delete=models.PROTECT,
+        related_name="curriculum_lessons"
     )
 
     title = models.CharField(max_length=200)
@@ -202,7 +212,6 @@ class CurriculumLesson(AuditModel):
 
     def __str__(self):
         return self.title
-
 
 class CurriculumLessonPage(AuditModel):
 
