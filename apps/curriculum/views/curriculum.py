@@ -290,13 +290,9 @@ class CurriculumLessonDetailAPIView(APIView):
                 id=lesson_id,
                 status=CurriculumLesson.Status.PUBLISHED,
                 is_active=True,
-                is_deleted=False,
                 subject__is_active=True,
                 subject__is_deleted=False,
-                subject__category__is_active=True,
-                subject__category__is_deleted=False,
                 subject__curriculum__is_active=True,
-                subject__curriculum__is_deleted=False
             ).prefetch_related(
                 "pages__contents"
             ).first()
