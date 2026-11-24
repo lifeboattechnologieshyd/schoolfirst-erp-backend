@@ -284,73 +284,78 @@ class CurriculumLessonDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, lesson_id):
+        try:
 
-        lesson = CurriculumLesson.objects.filter(
-            id=lesson_id,
-            status="PUBLISHED",
-            is_active=True,
-            is_deleted=False,
-            subject__is_active=True,
-            subject__is_deleted=False,
-            subject__category__is_active=True,
-            subject__category__is_deleted=False,
-            subject__category__curriculum__is_active=True,
-            subject__category__curriculum__is_deleted=False
-        ).prefetch_related(
-            "pages__contents"
-        ).first()
+            lesson = CurriculumLesson.objects.filter(
+                id=lesson_id,
+                status=CurriculumLesson.Status.PUBLISHED,
+                is_active=True,
+                is_deleted=False,
+                subject__is_active=True,
+                subject__is_deleted=False,
+                subject__category__is_active=True,
+                subject__category__is_deleted=False,
+                subject__category__curriculum__is_active=True,
+                subject__category__curriculum__is_deleted=False
+            ).prefetch_related(
+                "pages__contents"
+            ).first()
 
-        if not lesson:
-            return CustomResponse.errorResponse(
-                description="Lesson not found."
-            )
+            if not lesson:
+                return CustomResponse.errorResponse(
+                    description="Lesson not found."
+                )
 
-        pages_data = []
+            pages_data = []
 
-        pages = lesson.pages.filter(
-            is_active=True,
-            is_deleted=False
-        ).order_by("serial_number")
-
-        for page in pages:
-
-            contents_data = []
-
-            contents = page.contents.filter(
+            pages = lesson.pages.filter(
                 is_active=True,
                 is_deleted=False
             ).order_by("serial_number")
 
-            for content in contents:
-                contents_data.append({
-                    "id": content.id,
-                    "content_type": content.content_type,
-                    "title": content.title,
-                    "content": content.content,
-                    "media_url": content.media_url,
-                    "metadata": content.metadata,
-                    "serial_number": content.serial_number
+            for page in pages:
+
+                contents_data = []
+
+                contents = page.contents.filter(
+                    is_active=True,
+                    is_deleted=False
+                ).order_by("serial_number")
+
+                for content in contents:
+                    contents_data.append({
+                        "id": content.id,
+                        "content_type": content.content_type,
+                        "title": content.title,
+                        "content": content.content,
+                        "media_url": content.media_url,
+                        "metadata": content.metadata,
+                        "serial_number": content.serial_number
+                    })
+
+                pages_data.append({
+                    "id": page.id,
+                    "title": page.title,
+                    "serial_number": page.serial_number,
+                    "contents": contents_data
                 })
 
-            pages_data.append({
-                "id": page.id,
-                "title": page.title,
-                "serial_number": page.serial_number,
-                "contents": contents_data
-            })
+            data = {
+                "id": lesson.id,
+                "subject_id": lesson.subject_id,
+                "title": lesson.title,
+                "description": lesson.description,
+                "thumbnail_image": lesson.thumbnail_image,
+                "estimated_duration": lesson.estimated_duration,
+                "total_pages": lesson.total_pages,
+                "pages": pages_data
+            }
 
-        data = {
-            "id": lesson.id,
-            "subject_id": lesson.subject_id,
-            "title": lesson.title,
-            "description": lesson.description,
-            "thumbnail_image": lesson.thumbnail_image,
-            "estimated_duration": lesson.estimated_duration,
-            "total_pages": lesson.total_pages,
-            "pages": pages_data
-        }
-
-        return CustomResponse.successResponse(
-            data=data,
-            description="Lesson details fetched successfully."
-        )
+            return CustomResponse.successResponse(
+                data=data,
+                description="Lesson details fetched successfully."
+            )
+        except Exception as e:
+            application_logger.exception(
+                "Error fetching curriculum lessons"
+            )
