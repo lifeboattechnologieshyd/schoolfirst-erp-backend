@@ -81,6 +81,9 @@ class Assessment(AuditModel):
         null=True,
         blank=True,
     )
+    is_auto_generated = models.BooleanField(
+        default=False,
+    )
 
     class Meta:
         db_table = "assessments"
@@ -97,7 +100,7 @@ class Assessment(AuditModel):
                     "subject",
                     "title",
                 ],
-                condition=models.Q(is_deleted=False),
+                condition=models.Q(is_deleted=False, is_auto_generated=False),
                 name="unique_assessment_title_per_grade_subject",
             ),
         ]
@@ -105,6 +108,8 @@ class Assessment(AuditModel):
         indexes = [
             models.Index(fields=["curriculum"]),
             models.Index(fields=["status"]),
+            models.Index(fields=["is_auto_generated"]),
+
             models.Index(
                 fields=[
                     "grade",
@@ -115,6 +120,110 @@ class Assessment(AuditModel):
 
     def __str__(self):
         return self.title
+
+class AssessmentAttempt(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    class Status(models.TextChoices):
+        IN_PROGRESS = "IN_PROGRESS", "In Progress"
+        COMPLETED = "COMPLETED", "Completed"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    assessment = models.ForeignKey(
+        Assessment,
+        on_delete=models.PROTECT,
+        related_name="attempts",
+    )
+
+    kid = models.ForeignKey(
+        "vocabbee.Kids",
+        on_delete=models.CASCADE,
+        related_name="assessment_attempts",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.IN_PROGRESS,
+    )
+
+    total_questions = models.PositiveIntegerField(
+        default=0,
+    )
+
+    total_marks = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=0,
+    )
+
+    correct_count = models.PositiveIntegerField(
+        default=0,
+    )
+
+    wrong_count = models.PositiveIntegerField(
+        default=0,
+    )
+
+    skipped_count = models.PositiveIntegerField(
+        default=0,
+    )
+
+    hints_used = models.PositiveIntegerField(
+        default=0,
+    )
+
+    marks_obtained = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=0,
+    )
+
+    percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+    )
+
+    time_taken_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+    )
+
+    started_at = models.DateTimeField()
+
+    submitted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "assessment_attempts"
+
+        ordering = [
+            "-started_at",
+        ]
+
+        indexes = [
+            models.Index(fields=["assessment"]),
+            models.Index(fields=["kid"]),
+            models.Index(fields=["status"]),
+            models.Index(
+                fields=[
+                    "kid",
+                    "status",
+                ]
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.kid} - {self.assessment}"
 
 
 # =====================================================================

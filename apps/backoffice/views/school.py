@@ -1,5 +1,7 @@
 import uuid
+from collections import Counter
 from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo
 
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -10,11 +12,17 @@ from django.core.validators import validate_email
 
 from django.core.validators import validate_email
 from django.db.models import Q, Prefetch, Count
+from django.utils.dateparse import parse_date
+from rest_framework import status
+
+from apps.attendance.models import Leave, StaffAttendance, StudentAttendance
 from apps.core.models import Roles, UserMaster, UserRoles
 from apps.fee.models import FeeTemplate, StudentFeeAssignment, FeeConcession
+from apps.homework.models import AssignmentSubmission, Assignment, HomeworkSubmission, Homework
 from apps.school.models import School
 from apps.school.models.school import AcademicYear, Grade, Section, Student, StudentDocument, Staff, StaffDocument, \
     Branch, Subject, SchoolDocumentType, SchoolDocument, SubjectGrade
+from apps.timetable.models import TimetableEntry
 from shared.enums.roles import RolesEnum
 from shared.helpers.rbac import check_permission
 from shared.helpers.student import get_or_create_parent
@@ -7573,4 +7581,593 @@ class UpdateSchoolDocumentAPIView(APIView):
 
             return CustomResponse.errorResponse(
                 description="Something went wrong while updating school document.",
+            )
+
+
+SCHOOL_TIME_ZONE = ZoneInfo("Asia/Kolkata")
+
+# "3 students absent for more than 2 days"
+ABSENT_ALERT_MIN_DAYS = 3
+ABSENT_LOOKBACK_DAYS = 30
+
+PRESENT_STATUSES = [
+    StudentAttendance.AttendanceStatus.PRESENT,
+    StudentAttendance.AttendanceStatus.LATE,
+    StudentAttendance.AttendanceStatus.HALF_DAY,
+]
+
+DAY_OF_WEEK = [
+    TimetableEntry.DayOfWeek.MONDAY,
+    TimetableEntry.DayOfWeek.TUESDAY,
+    TimetableEntry.DayOfWeek.WEDNESDAY,
+    TimetableEntry.DayOfWeek.THURSDAY,
+    TimetableEntry.DayOfWeek.FRIDAY,
+    TimetableEntry.DayOfWeek.SATURDAY,
+    TimetableEntry.DayOfWeek.SUNDAY,
+]
+
+
+# =====================================================================
+#  HELPERS
+# =====================================================================
+def get_school_now():
+    return timezone.now().astimezone(SCHOOL_TIME_ZONE)
+
+
+def get_greeting(now):
+    if now.hour < 12:
+        return "Good morning"
+
+    if now.hour < 17:
+        return "Good afternoon"
+
+    return "Good evening"
+
+
+def active_timetable_entries(school, on_date):
+    """
+    Entries of ACTIVE timetables whose term covers the date.
+    """
+    return TimetableEntry.objects.filter(
+        status=TimetableEntry.Status.ACTIVE,
+        timetable__school=school,
+        timetable__status=Timetable.Status.ACTIVE,
+        timetable__is_deleted=False,
+        timetable__term__start_date__lte=on_date,
+        timetable__term__end_date__gte=on_date,
+    )
+
+
+def get_today_entries(school, teacher, on_date):
+    """
+    Teacher's classes for the date, with substitutions applied:
+    - classes handed to a substitute are removed
+    - classes the teacher is substituting are added
+    Returns list of (entry, is_substitution).
+    """
+    day_of_week = DAY_OF_WEEK[on_date.weekday()]
+
+    substitutions = TimetableSubstitution.objects.filter(
+        date=on_date,
+    ).exclude(
+        status=TimetableSubstitution.Status.CANCELLED,
+    )
+
+    handed_over_ids = set(
+        substitutions.filter(
+            original_teacher=teacher,
+        ).values_list("timetable_entry_id", flat=True)
+    )
+
+    substituting_ids = set(
+        substitutions.filter(
+            substitute_teacher=teacher,
+        ).values_list("timetable_entry_id", flat=True)
+    )
+
+    entries = active_timetable_entries(
+        school,
+        on_date,
+    ).filter(
+        Q(teacher=teacher) | Q(id__in=substituting_ids),
+        day_of_week=day_of_week,
+        period__is_break=False,
+    ).exclude(
+        id__in=handed_over_ids,
+    ).select_related(
+        "grade",
+        "section",
+        "subject",
+        "period",
+    ).order_by(
+        "period__start_time",
+        "period__period_number",
+    )
+
+    return [
+        (entry, entry.id in substituting_ids)
+        for entry in entries
+    ]
+
+
+def get_class_status(entry, on_date, now):
+    """
+    DONE / NOW / UPCOMING, compared in school-local time.
+    """
+    today = now.date()
+
+    if on_date < today:
+        return "DONE"
+
+    if on_date > today:
+        return "UPCOMING"
+
+    current_time = now.time().replace(tzinfo=None)
+
+    if entry.period.end_time <= current_time:
+        return "DONE"
+
+    if entry.period.start_time <= current_time:
+        return "NOW"
+
+    return "UPCOMING"
+
+
+def build_class_data(entry, is_substitution, class_status, attendance_taken):
+    return {
+        "timetable_entry_id": str(entry.id),
+        "status": class_status,
+        "is_substitution": is_substitution,
+        "period": {
+            "id": str(entry.period_id),
+            "name": entry.period.name,
+            "period_number": entry.period.period_number,
+            "start_time": entry.period.start_time.strftime("%H:%M"),
+            "end_time": entry.period.end_time.strftime("%H:%M"),
+        },
+        "grade": {
+            "id": str(entry.grade_id),
+            "name": entry.grade.name,
+        },
+        "section": {
+            "id": str(entry.section_id),
+            "name": entry.section.name,
+        },
+        "subject": {
+            "id": str(entry.subject_id),
+            "name": entry.subject.name,
+        } if entry.subject_id else None,
+        # TimetableEntry.room is commented out in the model
+        "room": None,
+        "notes": entry.notes,
+        "attendance_taken": attendance_taken,
+    }
+
+
+def get_absent_streaks(section_ids, on_date):
+    """
+    Students whose most recent attendance days are all ABSENT.
+    Returns list of (student, streak_days), longest streak first.
+    """
+    records = StudentAttendance.objects.filter(
+        section_id__in=section_ids,
+        attendance_date__lte=on_date,
+        attendance_date__gte=on_date - timedelta(days=ABSENT_LOOKBACK_DAYS),
+        student__status=Student.Status.ACTIVE,
+    ).select_related(
+        "student",
+        "section",
+        "grade",
+    ).order_by(
+        "student_id",
+        "-attendance_date",
+    )
+
+    streaks = {}
+    finished = set()
+
+    for record in records:
+        student_id = record.student_id
+
+        if student_id in finished:
+            continue
+
+        if record.status != StudentAttendance.AttendanceStatus.ABSENT:
+            finished.add(student_id)
+            continue
+
+        if student_id in streaks:
+            streaks[student_id][1] += 1
+        else:
+            streaks[student_id] = [record, 1]
+
+    result = [
+        (record, days)
+        for record, days in streaks.values()
+        if days >= ABSENT_ALERT_MIN_DAYS
+    ]
+
+    result.sort(key=lambda item: (-item[1], item[0].student.name))
+
+    return result
+
+
+# =====================================================================
+#  TEACHER DASHBOARD
+# =====================================================================
+class TeacherDashboardAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "teacher_dashboard.view"
+
+    def get(self, request):
+
+        school = request.school
+
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        # --------------------------------------------------
+        # DATE (optional ?date=YYYY-MM-DD, defaults to today)
+        # --------------------------------------------------
+
+        now = get_school_now()
+        on_date = now.date()
+
+        date_value = request.query_params.get("date")
+
+        if date_value:
+            on_date = parse_date(date_value)
+
+            if on_date is None:
+                return CustomResponse.errorResponse(
+                    description="Invalid date. Use YYYY-MM-DD format."
+                )
+
+        # --------------------------------------------------
+        # TEACHER
+        # --------------------------------------------------
+
+        teacher = Staff.objects.filter(
+            user=request.user,
+            school=school,
+            status=Staff.Status.ACTIVE,
+        ).first()
+
+        if teacher is None:
+            return CustomResponse.errorResponse(
+                description="Active teacher record not found.",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+
+            # --------------------------------------------------
+            # SUBJECTS + CLASSES THE TEACHER TEACHES
+            # --------------------------------------------------
+
+            teaching_entries = list(
+                active_timetable_entries(
+                    school,
+                    on_date,
+                ).filter(
+                    teacher=teacher,
+                ).values(
+                    "section_id",
+                    "subject__name",
+                )
+            )
+
+            subject_counter = Counter(
+                row["subject__name"]
+                for row in teaching_entries
+                if row["subject__name"]
+            )
+
+            subjects = [name for name, _ in subject_counter.most_common()]
+
+            classes_you_teach = len({row["section_id"] for row in teaching_entries})
+
+            # --------------------------------------------------
+            # TODAY'S CLASSES
+            # --------------------------------------------------
+
+            today_entries = get_today_entries(school, teacher, on_date)
+
+            today_section_ids = {entry.section_id for entry, _ in today_entries}
+
+            attendance_taken_section_ids = set(
+                StudentAttendance.objects.filter(
+                    school=school,
+                    section_id__in=today_section_ids,
+                    attendance_date=on_date,
+                ).values_list("section_id", flat=True).distinct()
+            )
+
+            today_classes = []
+
+            for entry, is_substitution in today_entries:
+                today_classes.append(
+                    build_class_data(
+                        entry=entry,
+                        is_substitution=is_substitution,
+                        class_status=get_class_status(entry, on_date, now),
+                        attendance_taken=entry.section_id in attendance_taken_section_ids,
+                    )
+                )
+
+            done_count = sum(1 for item in today_classes if item["status"] == "DONE")
+
+            now_class = next(
+                (item for item in today_classes if item["status"] == "NOW"),
+                None,
+            )
+
+            upcoming = [item for item in today_classes if item["status"] == "UPCOMING"]
+
+            # --------------------------------------------------
+            # ATTENDANCE CARD
+            # Class-teacher sections; if the teacher is not a class
+            # teacher, the sections they teach on this date.
+            # --------------------------------------------------
+
+            class_teacher_section_ids = set(
+                Section.objects.filter(
+                    class_teacher=teacher,
+                    status=Section.Status.ACTIVE,
+                ).values_list("id", flat=True)
+            )
+
+            if class_teacher_section_ids:
+                attendance_section_ids = class_teacher_section_ids
+                attendance_source = "CLASS_TEACHER_SECTIONS"
+            else:
+                attendance_section_ids = today_section_ids
+                attendance_source = "TODAY_CLASSES"
+
+            total_students = Student.objects.filter(
+                school=school,
+                section_id__in=attendance_section_ids,
+                status=Student.Status.ACTIVE,
+            ).count()
+
+            attendance_counts = StudentAttendance.objects.filter(
+                school=school,
+                section_id__in=attendance_section_ids,
+                attendance_date=on_date,
+            ).aggregate(
+                marked=Count("id"),
+                present=Count("id", filter=Q(status__in=PRESENT_STATUSES)),
+                absent=Count("id", filter=Q(status=StudentAttendance.AttendanceStatus.ABSENT)),
+            )
+
+            present_count = attendance_counts["present"] or 0
+            marked_count = attendance_counts["marked"] or 0
+
+            attendance_percentage = (
+                round(present_count * 100 / total_students)
+                if total_students and marked_count
+                else None
+            )
+
+            # --------------------------------------------------
+            # PENDING REVIEWS
+            # --------------------------------------------------
+
+            pending_homework = HomeworkSubmission.objects.filter(
+                homework__teacher=teacher,
+                homework__school=school,
+                homework__is_deleted=False,
+                homework__status=Homework.Status.PUBLISHED,
+                status=HomeworkSubmission.Status.SUBMITTED,
+            )
+
+            pending_assignments = AssignmentSubmission.objects.filter(
+                assignment__teacher=teacher,
+                assignment__school=school,
+                assignment__is_deleted=False,
+                assignment__status__in=[
+                    Assignment.Status.PUBLISHED,
+                    Assignment.Status.CLOSED,
+                ],
+                status__in=[
+                    AssignmentSubmission.Status.SUBMITTED,
+                    AssignmentSubmission.Status.LATE,
+                ],
+            )
+
+            pending_homework_count = pending_homework.count()
+            pending_assignment_count = pending_assignments.count()
+
+            # --------------------------------------------------
+            # TEACHER DESK (my attendance + leaves)
+            # --------------------------------------------------
+
+            my_attendance = StaffAttendance.objects.filter(
+                school=school,
+                staff=teacher,
+                attendance_date=on_date,
+            ).first()
+
+            pending_leaves = Leave.objects.filter(
+                school=school,
+                staff=teacher,
+                status=Leave.LeaveStatus.PENDING,
+            ).count()
+
+            # --------------------------------------------------
+            # PRIORITY ALERTS
+            # --------------------------------------------------
+
+            alerts = []
+
+            alert_section_ids = class_teacher_section_ids or today_section_ids
+
+            absent_streaks = get_absent_streaks(alert_section_ids, on_date) if alert_section_ids else []
+
+            if absent_streaks:
+                alerts.append({
+                    "type": "STUDENTS_ABSENT",
+                    "severity": "HIGH",
+                    "title": (
+                        f"{len(absent_streaks)} students absent for more than "
+                        f"{ABSENT_ALERT_MIN_DAYS - 1} days"
+                    ),
+                    "count": len(absent_streaks),
+                    "students": [
+                        {
+                            "id": str(record.student_id),
+                            "name": record.student.name,
+                            "admission_number": record.student.admission_number,
+                            "grade": record.grade.name,
+                            "section": record.section.name,
+                            "absent_days": days,
+                        }
+                        for record, days in absent_streaks
+                    ],
+                })
+
+            top_assignment = (
+                pending_assignments.values(
+                    "assignment_id",
+                    "assignment__title",
+                ).annotate(
+                    pending=Count("id"),
+                ).order_by(
+                    "-pending",
+                ).first()
+            )
+
+            if top_assignment:
+                alerts.append({
+                    "type": "ASSIGNMENT_REVIEW_PENDING",
+                    "severity": "MEDIUM",
+                    "title": (
+                        f"{top_assignment['pending']} pending submissions for "
+                        f"{top_assignment['assignment__title']}"
+                    ),
+                    "count": top_assignment["pending"],
+                    "assignment_id": str(top_assignment["assignment_id"]),
+                })
+
+            top_homework = (
+                pending_homework.values(
+                    "homework_id",
+                    "homework__title",
+                ).annotate(
+                    pending=Count("id"),
+                ).order_by(
+                    "-pending",
+                ).first()
+            )
+
+            if top_homework:
+                alerts.append({
+                    "type": "HOMEWORK_REVIEW_PENDING",
+                    "severity": "MEDIUM",
+                    "title": (
+                        f"{top_homework['pending']} pending submissions for "
+                        f"{top_homework['homework__title']}"
+                    ),
+                    "count": top_homework["pending"],
+                    "homework_id": str(top_homework["homework_id"]),
+                })
+
+            # --------------------------------------------------
+            # RESPONSE
+            # --------------------------------------------------
+
+            data = {
+                "greeting": get_greeting(now),
+                "date": on_date,
+                "day_of_week": DAY_OF_WEEK[on_date.weekday()],
+                "school": {
+                    "id": str(school.id),
+                    "name": school.name,
+                },
+                "teacher": {
+                    "id": str(teacher.id),
+                    "name": teacher.name,
+                    "employee_id": teacher.employee_id,
+                    "profile_image": teacher.profile_image,
+                    "department": teacher.department,
+                    "subjects": subjects,
+                    "primary_subject": subjects[0] if subjects else None,
+                    "classes_you_teach": classes_you_teach,
+                    "is_class_teacher": bool(class_teacher_section_ids),
+                },
+                "stats": {
+                    "classes_today": {
+                        "total": len(today_classes),
+                        "done": done_count,
+                    },
+                    "attendance": {
+                        "percentage": attendance_percentage,
+                        "present": present_count,
+                        "absent": attendance_counts["absent"] or 0,
+                        "marked": marked_count,
+                        "total_students": total_students,
+                        "source": attendance_source,
+                    },
+                    "pending_homework": {
+                        "total": pending_homework_count + pending_assignment_count,
+                        "homework": pending_homework_count,
+                        "assignments": pending_assignment_count,
+                    },
+                },
+                "coming_up": {
+                    "now": now_class,
+                    "next": upcoming[0] if upcoming else None,
+                },
+                "today_classes": today_classes,
+                "manage": {
+                    "student_attendance": {
+                        "taken": len(attendance_taken_section_ids),
+                        "total": len(today_section_ids),
+                    },
+                    "teacher_desk": {
+                        "my_attendance": {
+                            "status": my_attendance.status,
+                            "check_in": my_attendance.check_in,
+                            "check_out": my_attendance.check_out,
+                        } if my_attendance else None,
+                        "pending_leaves": pending_leaves,
+                    },
+                    "homework": {
+                        "pending_review": pending_homework_count,
+                    },
+                    "assignments": {
+                        "pending_review": pending_assignment_count,
+                    },
+                },
+                "alerts": alerts,
+            }
+
+            application_logger.info(
+                "teacher_dashboard_fetched",
+                school_id=str(school.id),
+                teacher_id=str(teacher.id),
+                date=str(on_date),
+                classes_today=len(today_classes),
+                alerts=len(alerts),
+                requested_by=str(request.user.id),
+            )
+
+            return CustomResponse.successResponse(
+                data=data,
+                description="Teacher dashboard fetched successfully.",
+            )
+
+        except Exception:
+            application_logger.exception(
+                "teacher_dashboard_failed",
+                school_id=str(school.id),
+                teacher_id=str(teacher.id),
+                requested_by=str(request.user.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Unable to fetch teacher dashboard.",
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

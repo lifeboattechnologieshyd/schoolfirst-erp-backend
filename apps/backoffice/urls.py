@@ -78,7 +78,8 @@ from apps.backoffice.views.school import AcademicYearListAPIView, CreateAcademic
     SubjectUpdateAPIView, SchoolAPIView, SchoolUpdateAPIView, BranchAPIView, BranchLISTAPIView, BranchUpdateAPIView, \
     CreateSchoolDocumentAPIView, SchoolDocumentListAPIView, UpdateSchoolDocumentAPIView, \
     CreateSchoolDocumentTypeAPIView, SchoolDocumentTypeListAPIView, UpdateSchoolDocumentTypeAPIView, \
-    UpdateStudentAPIView, GradeSubjectAssignAPIView, BulkUploadStaffAPIView, DownloadStaffTemplateAPIView
+    UpdateStudentAPIView, GradeSubjectAssignAPIView, BulkUploadStaffAPIView, DownloadStaffTemplateAPIView, \
+    TeacherDashboardAPIView
 from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdminRequestOTPAPIView, \
     SuperAdminVerifyOTPAPIView, SchoolLeadUpdateAPIView, OrganizationListAPIView, CreateOrganizationAPIView, \
     UpdateOrganizationAPIView, SchoolListAPIView, CreateSchoolAPIView, UpdateSchoolAPIView, CreateBranchAPIView, \
@@ -881,6 +882,8 @@ urlpatterns = [
 
     path("assessment/question-bank/download-template", DownloadAssessmentQuestionTemplateAPIView.as_view(),),
     path("assessment/question-bank/bulk-upload", BulkUploadAssessmentQuestionAPIView.as_view(),),
+
+    path("teacher/dashboard", TeacherDashboardAPIView.as_view(),),
 
 
 
