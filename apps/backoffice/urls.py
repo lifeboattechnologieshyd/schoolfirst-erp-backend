@@ -121,9 +121,7 @@ from apps.backoffice.views.assessment import (
     AssessmentQuestionBankDetailAPIView,
     AssessmentQuestionBankUpdateAPIView,
     AssessmentQuestionBankDeleteAPIView,
-    AssessmentQuestionImportTemplateAPIView,
-    AssessmentQuestionImportValidateAPIView,
-    AssessmentQuestionImportAPIView,
+    DownloadAssessmentQuestionTemplateAPIView, BulkUploadAssessmentQuestionAPIView,
 )
 from apps.fee.views.fee import CompletedStudentFeePaymentsAPIView
 
@@ -877,9 +875,12 @@ urlpatterns = [
     path("assessment/question-bank/delete/<uuid:question_id>", AssessmentQuestionBankDeleteAPIView.as_view(),),
 
     # Bulk upload (1 Upload -> 2 Validate -> 3 Import)
-    path("assessment/question-bank/import/template", AssessmentQuestionImportTemplateAPIView.as_view(),),
-    path("assessment/question-bank/import/validate", AssessmentQuestionImportValidateAPIView.as_view(),),
-    path("assessment/question-bank/import/<uuid:import_id>", AssessmentQuestionImportAPIView.as_view(),),
+    # path("assessment/question-bank/import/template", AssessmentQuestionImportTemplateAPIView.as_view(),),
+    # path("assessment/question-bank/import/validate", AssessmentQuestionImportValidateAPIView.as_view(),),
+    # path("assessment/question-bank/import/<uuid:import_id>", AssessmentQuestionImportAPIView.as_view(),),
+
+    path("assessment/question-bank/download-template", DownloadAssessmentQuestionTemplateAPIView.as_view(),),
+    path("assessment/question-bank/bulk-upload", BulkUploadAssessmentQuestionAPIView.as_view(),),
 
 
 

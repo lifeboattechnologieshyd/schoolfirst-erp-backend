@@ -1,13 +1,17 @@
-import io
 import uuid
 from decimal import Decimal, InvalidOperation
+from io import BytesIO
 
-import pandas as pd
+from django.conf import settings
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.db import transaction
 from django.db.models import Count, Q, Sum
-from django.http import HttpResponse
 from django.utils import timezone
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment, Font, PatternFill
 from rest_framework import status
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
@@ -23,7 +27,7 @@ from apps.curriculum.models import Curriculum, CurriculumLesson, CurriculumSubje
 from apps.vocabbee.models import Grades
 from shared.mixins import CustomPageNumberPagination, CustomResponse
 from shared.permissions import HasPermission
-from shared.utils.logger import application_logger
+from shared.utils.logger import application_logger, audit_logger
 from shared.utils.s3 import save_to_s3
 
 
@@ -43,19 +47,31 @@ COVER_IMAGE_EXTENSIONS = ("png", "jpg", "jpeg")
 
 IMPORT_FILE_MAX_SIZE = 5 * 1024 * 1024  # 5 MB
 IMPORT_MAX_ROWS = 1000
-IMPORT_FILE_EXTENSIONS = ("csv", "xlsx")
-IMPORT_REQUIRED_COLUMNS = [
-    "question",
-    "option_a",
-    "option_b",
-    "option_c",
-    "option_d",
-    "correct",
-    "level",
+
+QUESTION_TEMPLATE_PATH = "templates/assessment_question_template.xlsx"
+
+QUESTION_TEMPLATE_HEADERS = [
+    "Question",
+    "Option A",
+    "Option B",
+    "Option C",
+    "Option D",
+    "Correct Option",
+    "Level",
+    "Marks",
+    "Lesson",
+    "Hint",
+    "Explanation",
 ]
-IMPORT_OPTIONAL_COLUMNS = [
-    "hint",
-    "explanation",
+
+QUESTION_REQUIRED_HEADERS = [
+    "Question",
+    "Option A",
+    "Option B",
+    "Option C",
+    "Option D",
+    "Correct Option",
+    "Level",
 ]
 
 
@@ -189,6 +205,45 @@ def resolve_cover_image(request):
         return None, "Invalid cover image."
 
     return cover_image.strip(), None
+
+
+def parse_lesson_ids(request):
+    """
+    Reads lesson_ids from JSON (list) or multipart
+    (repeated lesson_ids fields, or one comma separated value).
+
+    Returns (lesson_uuids, error). Empty list when not sent.
+    """
+    if hasattr(request.data, "getlist"):
+        lesson_ids = request.data.getlist("lesson_ids")
+
+        # multipart with a single comma separated value
+        if len(lesson_ids) == 1 and isinstance(lesson_ids[0], str) and "," in lesson_ids[0]:
+            lesson_ids = lesson_ids[0].split(",")
+    else:
+        lesson_ids = request.data.get("lesson_ids")
+
+    if lesson_ids in (None, "", []):
+        return [], None
+
+    if not isinstance(lesson_ids, list):
+        return None, "lesson_ids must be a list."
+
+    lesson_uuids = []
+
+    for lesson_id in lesson_ids:
+        if isinstance(lesson_id, str) and not lesson_id.strip():
+            continue
+
+        lesson_uuid = parse_uuid(str(lesson_id).strip())
+
+        if lesson_uuid is None:
+            return None, "Invalid lesson ID."
+
+        if lesson_uuid not in lesson_uuids:
+            lesson_uuids.append(lesson_uuid)
+
+    return lesson_uuids, None
 
 
 def validate_options(options):
@@ -2623,422 +2678,649 @@ class AssessmentQuestionBankDeleteAPIView(APIView):
             )
 
 
+
+
 # =====================================================================
-#  BULK UPLOAD - DOWNLOAD CSV TEMPLATE
+#  BULK UPLOAD - DOWNLOAD TEMPLATE
+#  Same pattern as DownloadStudentTemplateAPIView:
+#  generate .xlsx -> save to S3 -> return file_url
 # =====================================================================
-class AssessmentQuestionImportTemplateAPIView(APIView):
+class DownloadAssessmentQuestionTemplateAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "assessment.question.import"
 
     def get(self, request):
-        columns = IMPORT_REQUIRED_COLUMNS + IMPORT_OPTIONAL_COLUMNS
 
-        sample = pd.DataFrame(
-            [
-                {
-                    "question": "Which part of the plant absorbs water?",
-                    "option_a": "Leaf",
-                    "option_b": "Root",
-                    "option_c": "Flower",
-                    "option_d": "Fruit",
-                    "correct": "B",
-                    "level": "Basic",
-                    "hint": "It grows under the soil.",
-                    "explanation": "Roots absorb water and minerals from the soil.",
-                }
-            ],
-            columns=columns,
+        application_logger.info(
+            "assessment_question_template_download_started",
+            requested_by=str(request.user.id),
         )
 
-        response = HttpResponse(
-            sample.to_csv(index=False),
-            content_type="text/csv",
-        )
-        response["Content-Disposition"] = 'attachment; filename="assessment_questions_template.csv"'
+        try:
 
-        return response
+            # --------------------------------------------------
+            # CREATE WORKBOOK
+            # --------------------------------------------------
+            workbook = Workbook()
+
+            sheet = workbook.active
+            sheet.title = "Questions"
+
+            headers = QUESTION_TEMPLATE_HEADERS
+
+            for column_number, header in enumerate(headers, start=1):
+                sheet.cell(
+                    row=1,
+                    column=column_number,
+                    value=header
+                )
+
+            # --------------------------------------------------
+            # SAMPLE ROWS
+            # --------------------------------------------------
+            sample_rows = [
+                [
+                    "Which part of the plant absorbs water?",
+                    "Leaf",
+                    "Root",
+                    "Flower",
+                    "Fruit",
+                    "B",
+                    "Basic",
+                    1,
+                    "The Amazing World of Plants",
+                    "It grows under the soil.",
+                    "Roots absorb water and minerals from the soil.",
+                ],
+                [
+                    "Which animal gives us milk?",
+                    "Cow",
+                    "Lion",
+                    "Tiger",
+                    "Fox",
+                    "A",
+                    "Intermediate",
+                    1,
+                    "The Useful Animals",
+                    "",
+                    "",
+                ],
+            ]
+
+            for row_number, sample_row in enumerate(sample_rows, start=2):
+                for column_number, value in enumerate(sample_row, start=1):
+                    sheet.cell(
+                        row=row_number,
+                        column=column_number,
+                        value=value
+                    )
+
+            # Header styling
+            for cell in sheet[1]:
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill(
+                    start_color="366092",
+                    end_color="366092",
+                    fill_type="solid"
+                )
+                cell.alignment = Alignment(horizontal="center")
+
+            # Column widths
+            for column in sheet.columns:
+                max_length = max(
+                    len(str(cell.value or ""))
+                    for cell in column
+                )
+
+                sheet.column_dimensions[
+                    column[0].column_letter
+                ].width = min(max_length + 5, 60)
+
+            # Options as text, so values like 10 or 1/2 are not converted
+            for row_number in range(2, IMPORT_MAX_ROWS + 2):
+                for column_letter in ["B", "C", "D", "E"]:
+                    sheet[f"{column_letter}{row_number}"].number_format = "@"
+
+            # --------------------------------------------------
+            # INSTRUCTIONS SHEET
+            # --------------------------------------------------
+            instruction_sheet = workbook.create_sheet("Instructions")
+
+            instructions = [
+                [
+                    "Field",
+                    "Type",
+                    "Required",
+                    "Max Length",
+                    "Allowed Values / Instructions"
+                ],
+                ["Question", "Text", "Yes", "-", "Question text. Must not already exist in the question bank"],
+                ["Option A", "String", "Yes", str(OPTION_MAX_LENGTH), "Option A text"],
+                ["Option B", "String", "Yes", str(OPTION_MAX_LENGTH), "Option B text"],
+                ["Option C", "String", "Yes", str(OPTION_MAX_LENGTH), "Option C text"],
+                ["Option D", "String", "Yes", str(OPTION_MAX_LENGTH), "Option D text"],
+                ["Correct Option", "Choice", "Yes", "1", "A, B, C or D"],
+                ["Level", "Choice", "Yes", "-", "Basic, Intermediate, Advanced"],
+                ["Marks", "Decimal", "No", "-", "Defaults to 1. Must be greater than 0 and at most 100"],
+                [
+                    "Lesson",
+                    "String",
+                    "No",
+                    "200",
+                    "Existing lesson name under the selected subject. "
+                    "Ignored when a lesson is selected while uploading"
+                ],
+                ["Hint", "String", "No", str(HINT_MAX_LENGTH), "Short hint shown to the student"],
+                ["Explanation", "Text", "No", "-", "Shown after the answer"],
+                [],
+                ["Notes", "", "", "", f"Only .xlsx files. Maximum {IMPORT_MAX_ROWS} rows and 5 MB"],
+                ["", "", "", "", "Grade and subject are selected while uploading, not in the file"],
+            ]
+
+            for row in instructions:
+                instruction_sheet.append(row)
+
+            for cell in instruction_sheet[1]:
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill(
+                    start_color="366092",
+                    end_color="366092",
+                    fill_type="solid"
+                )
+
+            for column in instruction_sheet.columns:
+                max_length = max(
+                    len(str(cell.value or ""))
+                    for cell in column
+                )
+
+                instruction_sheet.column_dimensions[
+                    column[0].column_letter
+                ].width = min(max_length + 5, 65)
+
+            # --------------------------------------------------
+            # SAVE EXCEL FILE
+            # --------------------------------------------------
+            excel_file = BytesIO()
+            workbook.save(excel_file)
+            excel_file.seek(0)
+
+            file_name = QUESTION_TEMPLATE_PATH
+
+            if default_storage.exists(file_name):
+                default_storage.delete(file_name)
+
+            file_path = default_storage.save(
+                file_name,
+                ContentFile(excel_file.getvalue())
+            )
+
+            file_url = settings.MEDIA_URL + file_path
+
+        except Exception as e:
+
+            application_logger.exception(
+                "assessment_question_template_download_failed",
+                requested_by=str(request.user.id),
+                reason="template_generation_failed",
+                error=str(e),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Unable to generate question template.",
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        application_logger.info(
+            "assessment_question_template_generated",
+            requested_by=str(request.user.id),
+            file_path=file_path,
+            file_url=file_url,
+            total_columns=len(headers),
+        )
+
+        return CustomResponse.successResponse(
+            description="Question template generated successfully.",
+            data={
+                "file_url": file_url,
+                "file_path": file_path,
+            },
+        )
 
 
 # =====================================================================
-#  BULK UPLOAD - STEP 1 + 2 (UPLOAD & VALIDATE)
+#  BULK UPLOAD - QUESTIONS
+#  Same pattern as BulkUploadStudentAPIView:
+#  one .xlsx upload, each row saved on its own,
+#  response has success / failed counts and row errors.
+#  The uploaded file is saved to S3 and logged in AssessmentQuestionImport.
 # =====================================================================
-class AssessmentQuestionImportValidateAPIView(APIView):
+class BulkUploadAssessmentQuestionAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "assessment.question.import"
+    parser_classes = [MultiPartParser]
+
+    # --------------------------------------------------
+    # HELPER FUNCTIONS
+    # --------------------------------------------------
+
+    def cell_text(self, value):
+
+        if value is None:
+            return ""
+
+        # Excel stores whole numbers as floats (10 -> 10.0)
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
+
+        return str(value).strip()
+
+    # --------------------------------------------------
+    # POST - BULK UPLOAD QUESTIONS
+    # --------------------------------------------------
 
     def post(self, request):
-        grade_id = request.data.get("grade_id")
-        subject_id = request.data.get("subject_id")
-        lesson_id = request.data.get("lesson_id")
-        upload_file = request.FILES.get("file")
 
-        # -----------------------------------------
-        # Target
-        # -----------------------------------------
-        if not grade_id or not subject_id:
+        audit_logger.info(
+            "assessment_question_bulk_upload_started",
+            performed_by=str(request.user.id),
+        )
+
+        # --------------------------------------------------
+        # QUERY PARAMETERS
+        # --------------------------------------------------
+
+        grade_id = request.query_params.get("grade_id")
+        subject_id = request.query_params.get("subject_id")
+        lesson_id = request.query_params.get("lesson_id")
+
+        grade_uuid = parse_uuid(grade_id) if grade_id else None
+        subject_uuid = parse_uuid(subject_id) if subject_id else None
+
+        if not grade_uuid:
             return CustomResponse.errorResponse(
-                description="Grade and subject are required."
+                description="Valid grade_id is required."
             )
 
-        grade_uuid = parse_uuid(grade_id)
-        subject_uuid = parse_uuid(subject_id)
-
-        if not grade_uuid or not subject_uuid:
+        if not subject_uuid:
             return CustomResponse.errorResponse(
-                description="Invalid grade or subject ID."
+                description="Valid subject_id is required."
             )
 
-        lesson_uuid = None
+        grade = get_active_grade(grade_uuid)
 
-        if lesson_id not in (None, ""):
+        if grade is None:
+            return CustomResponse.errorResponse(
+                description="Grade not found."
+            )
+
+        subject = get_active_subject(subject_uuid)
+
+        if subject is None or subject.grade_id != grade.id:
+            return CustomResponse.errorResponse(
+                description="Subject not found for this grade."
+            )
+
+        # Lesson is optional ("All lessons").
+        # When selected, every row goes to this lesson.
+        selected_lesson = None
+
+        if lesson_id:
             lesson_uuid = parse_uuid(lesson_id)
 
             if lesson_uuid is None:
                 return CustomResponse.errorResponse(
-                    description="Invalid lesson ID."
+                    description="Valid lesson_id is required."
                 )
 
-        # -----------------------------------------
-        # File
-        # -----------------------------------------
-        if upload_file is None:
+            selected_lesson = get_active_lesson(lesson_uuid)
+
+            if selected_lesson is None or selected_lesson.subject_id != subject.id:
+                return CustomResponse.errorResponse(
+                    description="Lesson not found for this subject."
+                )
+
+        # --------------------------------------------------
+        # FILE VALIDATION
+        # --------------------------------------------------
+
+        file = request.FILES.get("file")
+
+        if not file:
             return CustomResponse.errorResponse(
-                description="Please upload a CSV or XLSX file."
+                description="Excel file is required."
             )
 
-        extension = get_file_extension(upload_file.name)
-
-        if extension not in IMPORT_FILE_EXTENSIONS:
+        if not file.name.lower().endswith(".xlsx"):
             return CustomResponse.errorResponse(
-                description="Only CSV or XLSX files are allowed."
+                description="Only .xlsx files are supported."
             )
 
-        if upload_file.size > IMPORT_FILE_MAX_SIZE:
+        if file.size > IMPORT_FILE_MAX_SIZE:
             return CustomResponse.errorResponse(
                 description="File cannot exceed 5 MB."
             )
 
         try:
-            grade = get_active_grade(grade_uuid)
-
-            if grade is None:
-                return CustomResponse.errorResponse(
-                    description="Grade not found."
-                )
-
-            subject = get_active_subject(subject_uuid)
-
-            if subject is None or subject.grade_id != grade.id:
-                return CustomResponse.errorResponse(
-                    description="Subject not found for this grade."
-                )
-
-            lesson = None
-
-            if lesson_uuid:
-                lesson = get_active_lesson(lesson_uuid)
-
-                if lesson is None or lesson.subject_id != subject.id:
-                    return CustomResponse.errorResponse(
-                        description="Lesson not found for this subject."
-                    )
-
-            # -----------------------------------------
-            # Read file
-            # -----------------------------------------
-            file_bytes = upload_file.read()
-
-            try:
-                if extension == "csv":
-                    dataframe = pd.read_csv(
-                        io.BytesIO(file_bytes),
-                        dtype=str,
-                        keep_default_na=False,
-                    )
-                else:
-                    dataframe = pd.read_excel(
-                        io.BytesIO(file_bytes),
-                        dtype=str,
-                        keep_default_na=False,
-                        engine="openpyxl",
-                    )
-            except Exception:
-                return CustomResponse.errorResponse(
-                    description="Unable to read the file. Please use the CSV template."
-                )
-
-            dataframe.columns = [str(column).strip().lower() for column in dataframe.columns]
-
-            missing_columns = [
-                column
-                for column in IMPORT_REQUIRED_COLUMNS
-                if column not in dataframe.columns
-            ]
-
-            if missing_columns:
-                return CustomResponse.errorResponse(
-                    description=f"Missing columns: {', '.join(missing_columns)}."
-                )
-
-            if dataframe.empty:
-                return CustomResponse.errorResponse(
-                    description="The file has no rows."
-                )
-
-            if len(dataframe) > IMPORT_MAX_ROWS:
-                return CustomResponse.errorResponse(
-                    description=f"The file cannot have more than {IMPORT_MAX_ROWS} rows."
-                )
-
-            # -----------------------------------------
-            # Validate rows
-            # -----------------------------------------
-            existing_questions = set(
-                question.strip().lower()
-                for question in AssessmentQuestion.objects.filter(
-                    grade=grade,
-                    subject=subject,
-                ).values_list("question", flat=True)
+            workbook = load_workbook(
+                file,
+                data_only=True
             )
 
-            seen_questions = set()
-            parsed_rows = []
-            errors = []
+            # Use the first active worksheet.
+            sheet = workbook.active
 
-            for index, row in dataframe.iterrows():
-                row_number = index + 2  # header is row 1
-                row_errors = []
+        except Exception:
+            return CustomResponse.errorResponse(
+                description="Invalid Excel file."
+            )
 
-                question_text = str(row.get("question", "")).strip()
-                correct = str(row.get("correct", "")).strip().upper()
-                level = parse_level(str(row.get("level", "")))
-                hint = str(row.get("hint", "")).strip() if "hint" in dataframe.columns else ""
-                explanation = (
-                    str(row.get("explanation", "")).strip()
-                    if "explanation" in dataframe.columns
-                    else ""
-                )
+        # --------------------------------------------------
+        # READ HEADERS
+        # --------------------------------------------------
+
+        headers = [
+            str(cell.value).strip()
+            if cell.value is not None else ""
+            for cell in sheet[1]
+        ]
+
+        while headers and headers[-1] == "":
+            headers.pop()
+
+        if not headers:
+            return CustomResponse.errorResponse(
+                description="Excel file has no headers."
+            )
+
+        if len(headers) != len(set(headers)):
+            return CustomResponse.errorResponse(
+                description="Duplicate column headers found."
+            )
+
+        missing_headers = [
+            header for header in QUESTION_REQUIRED_HEADERS
+            if header not in headers
+        ]
+
+        if missing_headers:
+            return CustomResponse.errorResponse(
+                description="Required columns are missing.",
+                data={
+                    "missing_headers": missing_headers
+                }
+            )
+
+        # --------------------------------------------------
+        # ROW LIMIT
+        # --------------------------------------------------
+
+        rows = [
+            (row_number, row)
+            for row_number, row in enumerate(
+                sheet.iter_rows(min_row=2, values_only=True),
+                start=2
+            )
+            if any(
+                value is not None and str(value).strip() != ""
+                for value in row
+            )
+        ]
+
+        if not rows:
+            return CustomResponse.errorResponse(
+                description="Excel file has no rows."
+            )
+
+        if len(rows) > IMPORT_MAX_ROWS:
+            return CustomResponse.errorResponse(
+                description=f"Excel file cannot have more than {IMPORT_MAX_ROWS} rows."
+            )
+
+        # --------------------------------------------------
+        # LOOKUPS
+        # --------------------------------------------------
+
+        lessons_by_title = {
+            lesson.title.strip().lower(): lesson
+            for lesson in CurriculumLesson.objects.filter(
+                subject=subject,
+                is_active=True,
+                is_deleted=False,
+            )
+        }
+
+        existing_questions = set(
+            question.strip().lower()
+            for question in AssessmentQuestion.objects.filter(
+                grade=grade,
+                subject=subject,
+            ).values_list("question", flat=True)
+        )
+
+        # --------------------------------------------------
+        # COUNTERS
+        # --------------------------------------------------
+
+        success_count = 0
+        failed_count = 0
+        errors = []
+
+        # --------------------------------------------------
+        # PROCESS EXCEL ROWS
+        # --------------------------------------------------
+
+        for row_number, row in rows:
+
+            data = {}
+
+            try:
+
+                data = dict(zip(headers, row))
+
+                # ------------------------------------------
+                # BASIC DETAILS
+                # ------------------------------------------
+
+                question_text = self.cell_text(data.get("Question"))
+                correct_option = self.cell_text(data.get("Correct Option")).upper()
+                level = parse_level(self.cell_text(data.get("Level")))
+                lesson_name = self.cell_text(data.get("Lesson"))
+                hint = self.cell_text(data.get("Hint"))
+                explanation = self.cell_text(data.get("Explanation"))
 
                 options = {
-                    label: str(row.get(f"option_{label.lower()}", "")).strip()
+                    label: self.cell_text(data.get(f"Option {label}"))
                     for label in OPTION_LABELS
                 }
 
+                # ------------------------------------------
+                # REQUIRED FIELD VALIDATION
+                # ------------------------------------------
+
                 if not question_text:
-                    row_errors.append({"field": "question", "message": "Question is required."})
-                elif question_text.lower() in existing_questions:
-                    row_errors.append({"field": "question", "message": "Question already exists in the bank."})
-                elif question_text.lower() in seen_questions:
-                    row_errors.append({"field": "question", "message": "Question is repeated in this file."})
+                    raise ValueError("Question is required.")
 
                 for label, option_text in options.items():
                     if not option_text:
-                        row_errors.append({
-                            "field": f"option_{label.lower()}",
-                            "message": f"Option {label} is required.",
-                        })
-                    elif len(option_text) > OPTION_MAX_LENGTH:
-                        row_errors.append({
-                            "field": f"option_{label.lower()}",
-                            "message": f"Option {label} cannot exceed {OPTION_MAX_LENGTH} characters.",
-                        })
+                        raise ValueError(f"Option {label} is required.")
 
-                if correct not in OPTION_LABELS:
-                    row_errors.append({"field": "correct", "message": "Correct must be A, B, C or D."})
-
-                if level is None:
-                    row_errors.append({
-                        "field": "level",
-                        "message": "Level must be Basic, Intermediate or Advanced.",
-                    })
-
-                if len(hint) > HINT_MAX_LENGTH:
-                    row_errors.append({
-                        "field": "hint",
-                        "message": f"Hint cannot exceed {HINT_MAX_LENGTH} characters.",
-                    })
-
-                if row_errors:
-                    for row_error in row_errors:
-                        errors.append({"row": row_number, **row_error})
-                    continue
-
-                seen_questions.add(question_text.lower())
-
-                parsed_rows.append({
-                    "row": row_number,
-                    "question": question_text,
-                    "options": options,
-                    "correct": correct,
-                    "level": level,
-                    "hint": hint or None,
-                    "explanation": explanation or None,
-                })
-
-            total_rows = len(dataframe)
-            error_row_numbers = {error["row"] for error in errors}
-
-            # -----------------------------------------
-            # Save file + import record
-            # -----------------------------------------
-            upload_file.seek(0)
-            file_url = save_to_s3("assessments/imports", upload_file)
-
-            with transaction.atomic():
-                question_import = AssessmentQuestionImport.objects.create(
-                    grade=grade,
-                    subject=subject,
-                    lesson=lesson,
-                    file_name=upload_file.name,
-                    file_url=file_url,
-                    total_rows=total_rows,
-                    valid_rows=len(parsed_rows),
-                    error_rows=len(error_row_numbers),
-                    errors=errors,
-                    parsed_rows=parsed_rows,
-                    status=AssessmentQuestionImport.Status.VALIDATED,
-                )
-
-            application_logger.info(
-                "assessment_question_import_validated",
-                import_id=str(question_import.id),
-                total_rows=total_rows,
-                valid_rows=len(parsed_rows),
-                error_rows=len(error_row_numbers),
-                user_id=str(request.user.id),
-            )
-
-            return CustomResponse.successResponse(
-                data={
-                    "id": str(question_import.id),
-                    "file_name": question_import.file_name,
-                    "total_rows": total_rows,
-                    "valid_rows": len(parsed_rows),
-                    "error_rows": len(error_row_numbers),
-                    "errors": errors,
-                    "preview": parsed_rows[:20],
-                    "status": question_import.status,
-                },
-                description="File validated successfully.",
-            )
-
-        except Exception:
-            application_logger.exception(
-                "assessment_question_import_validate_failed",
-                user_id=str(request.user.id),
-            )
-
-            return CustomResponse.errorResponse(
-                description="Unable to validate file.",
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-
-# =====================================================================
-#  BULK UPLOAD - STEP 3 (IMPORT VALID ROWS)
-# =====================================================================
-class AssessmentQuestionImportAPIView(APIView):
-    permission_classes = [IsAuthenticated, HasPermission]
-    required_permission = "assessment.question.import"
-
-    def post(self, request, import_id):
-        import_uuid = parse_uuid(import_id)
-
-        if import_uuid is None:
-            return CustomResponse.errorResponse(
-                description="Invalid import ID."
-            )
-
-        try:
-            with transaction.atomic():
-                question_import = AssessmentQuestionImport.objects.select_for_update().filter(
-                    id=import_uuid,
-                ).first()
-
-                if question_import is None:
-                    return CustomResponse.errorResponse(
-                        description="Import not found.",
-                        status=status.HTTP_404_NOT_FOUND,
-                    )
-
-                if question_import.status != AssessmentQuestionImport.Status.VALIDATED:
-                    return CustomResponse.errorResponse(
-                        description="This file has already been imported or is not validated."
-                    )
-
-                if not question_import.parsed_rows:
-                    return CustomResponse.errorResponse(
-                        description="There are no valid rows to import."
-                    )
-
-                user_id = str(request.user.id)
-                questions = []
-                options = []
-
-                for row in question_import.parsed_rows:
-                    question = AssessmentQuestion(
-                        grade_id=question_import.grade_id,
-                        subject_id=question_import.subject_id,
-                        lesson_id=question_import.lesson_id,
-                        question=row["question"],
-                        level=row["level"],
-                        marks=Decimal("1"),
-                        hint=row.get("hint"),
-                        explanation=row.get("explanation"),
-                        created_by=user_id,
-                        updated_by=user_id,
-                    )
-                    questions.append(question)
-
-                    for serial_number, label in enumerate(OPTION_LABELS, start=1):
-                        options.append(
-                            AssessmentQuestionOption(
-                                question=question,
-                                label=label,
-                                option_text=row["options"][label],
-                                is_correct=row["correct"] == label,
-                                serial_number=serial_number,
-                                created_by=user_id,
-                                updated_by=user_id,
-                            )
+                    if len(option_text) > OPTION_MAX_LENGTH:
+                        raise ValueError(
+                            f"Option {label} cannot exceed {OPTION_MAX_LENGTH} characters."
                         )
 
-                # bulk_create skips AuditModel.save(),
-                # so created_by / updated_by are set above.
-                AssessmentQuestion.objects.bulk_create(questions)
-                AssessmentQuestionOption.objects.bulk_create(options)
+                if correct_option not in OPTION_LABELS:
+                    raise ValueError(
+                        "Invalid correct option. Allowed values: A, B, C, D."
+                    )
 
-                question_import.imported_rows = len(questions)
-                question_import.status = AssessmentQuestionImport.Status.IMPORTED
-                question_import.imported_at = timezone.now()
-                question_import.parsed_rows = []
-                question_import.save()
+                if level is None:
+                    raise ValueError(
+                        "Invalid level. Allowed values: Basic, Intermediate, Advanced."
+                    )
 
-            application_logger.info(
-                "assessment_question_import_completed",
-                import_id=str(question_import.id),
-                imported_rows=question_import.imported_rows,
-                user_id=str(request.user.id),
+                marks, marks_error = parse_marks(data.get("Marks"))
+
+                if marks_error:
+                    raise ValueError(marks_error)
+
+                if len(hint) > HINT_MAX_LENGTH:
+                    raise ValueError(
+                        f"Hint cannot exceed {HINT_MAX_LENGTH} characters."
+                    )
+
+                # ------------------------------------------
+                # DUPLICATE VALIDATION
+                # ------------------------------------------
+
+                if question_text.lower() in existing_questions:
+                    raise ValueError(
+                        "Question already exists in the question bank."
+                    )
+
+                # ------------------------------------------
+                # LESSON VALIDATION
+                # ------------------------------------------
+
+                lesson = selected_lesson
+
+                if lesson is None and lesson_name:
+                    lesson = lessons_by_title.get(lesson_name.lower())
+
+                    if lesson is None:
+                        raise ValueError(
+                            f"Lesson '{lesson_name}' not found in {subject.name}."
+                        )
+
+                # ------------------------------------------
+                # CREATE QUESTION + OPTIONS
+                # ------------------------------------------
+
+                with transaction.atomic():
+
+                    question = AssessmentQuestion.objects.create(
+                        grade=grade,
+                        subject=subject,
+                        lesson=lesson,
+                        question=question_text,
+                        level=level,
+                        marks=marks,
+                        hint=hint or None,
+                        explanation=explanation or None,
+                    )
+
+                    for serial_number, label in enumerate(OPTION_LABELS, start=1):
+                        AssessmentQuestionOption.objects.create(
+                            question=question,
+                            label=label,
+                            option_text=options[label],
+                            is_correct=label == correct_option,
+                            serial_number=serial_number,
+                        )
+
+                existing_questions.add(question_text.lower())
+                success_count += 1
+
+            except ValueError as e:
+
+                failed_count += 1
+
+                errors.append({
+                    "row": row_number,
+                    "question": self.cell_text(data.get("Question")),
+                    "message": str(e),
+                })
+
+            except Exception as e:
+
+                failed_count += 1
+
+                errors.append({
+                    "row": row_number,
+                    "question": self.cell_text(data.get("Question")),
+                    "message": "Unable to save this row.",
+                })
+
+                audit_logger.exception(
+                    "assessment_question_bulk_upload_row_failed",
+                    performed_by=str(request.user.id),
+                    file_name=file.name,
+                    row_number=row_number,
+                    error=str(e),
+                )
+
+        # --------------------------------------------------
+        # SAVE FILE TO S3 + IMPORT LOG
+        # --------------------------------------------------
+
+        import_id = None
+        file_url = None
+
+        try:
+            file.seek(0)
+            file_url = save_to_s3("assessments/imports", file)
+
+            question_import = AssessmentQuestionImport.objects.create(
+                grade=grade,
+                subject=subject,
+                lesson=selected_lesson,
+                file_name=file.name,
+                file_url=file_url,
+                total_rows=success_count + failed_count,
+                valid_rows=success_count,
+                error_rows=failed_count,
+                imported_rows=success_count,
+                errors=errors,
+                status=(
+                    AssessmentQuestionImport.Status.IMPORTED
+                    if success_count
+                    else AssessmentQuestionImport.Status.FAILED
+                ),
+                imported_at=timezone.now(),
             )
 
-            return CustomResponse.successResponse(
-                data={
-                    "id": str(question_import.id),
-                    "imported_rows": question_import.imported_rows,
-                    "skipped_rows": question_import.error_rows,
-                    "status": question_import.status,
-                },
-                description=f"{question_import.imported_rows} questions imported.",
+            import_id = str(question_import.id)
+
+        except Exception as e:
+
+            # Questions are already saved; do not fail the response.
+            audit_logger.exception(
+                "assessment_question_bulk_upload_log_failed",
+                performed_by=str(request.user.id),
+                file_name=file.name,
+                error=str(e),
             )
 
-        except Exception:
-            application_logger.exception(
-                "assessment_question_import_failed",
-                import_id=str(import_uuid),
-                user_id=str(request.user.id),
-            )
+        # --------------------------------------------------
+        # FINAL LOG
+        # --------------------------------------------------
 
-            return CustomResponse.errorResponse(
-                description="Unable to import questions.",
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        audit_logger.info(
+            "assessment_question_bulk_upload_completed",
+            performed_by=str(request.user.id),
+            grade_id=str(grade.id),
+            subject_id=str(subject.id),
+            lesson_id=str(selected_lesson.id) if selected_lesson else None,
+            file_name=file.name,
+            file_url=file_url,
+            total_records=success_count + failed_count,
+            success_count=success_count,
+            failed_count=failed_count,
+        )
+
+        # --------------------------------------------------
+        # FINAL RESPONSE
+        # --------------------------------------------------
+
+        return CustomResponse.successResponse(
+            description="Question bulk upload completed.",
+            data={
+                "import_id": import_id,
+                "file_url": file_url,
+                "total_records": success_count + failed_count,
+                "success_count": success_count,
+                "failed_count": failed_count,
+                "errors": errors,
+            },
+        )
