@@ -5,13 +5,14 @@ from zoneinfo import ZoneInfo
 
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 
 
 from django.core.validators import validate_email
 from django.db.models import Q, Prefetch, Count
+from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework import status
 
@@ -22,7 +23,7 @@ from apps.homework.models import AssignmentSubmission, Assignment, HomeworkSubmi
 from apps.school.models import School
 from apps.school.models.school import AcademicYear, Grade, Section, Student, StudentDocument, Staff, StaffDocument, \
     Branch, Subject, SchoolDocumentType, SchoolDocument, SubjectGrade
-from apps.timetable.models import TimetableEntry
+from apps.timetable.models import TimetableEntry, Timetable, TimetableSubstitution
 from shared.enums.roles import RolesEnum
 from shared.helpers.rbac import check_permission
 from shared.helpers.student import get_or_create_parent
