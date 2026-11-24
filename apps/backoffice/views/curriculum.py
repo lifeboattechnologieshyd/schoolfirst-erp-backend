@@ -922,6 +922,13 @@ class CurriculumLessonCreateAPIView(APIView):
                 is_active=data.get("is_active", True)
             )
 
+            # Update total lessons count
+            subject.total_lessons = subject.lessons.filter(
+                is_deleted=False
+            ).count()
+
+            subject.save(update_fields=["total_lessons"])
+
             return CustomResponse.successResponse(
                 data={
                     "id": str(lesson.id),
@@ -937,6 +944,7 @@ class CurriculumLessonCreateAPIView(APIView):
                     "serial_number": lesson.serial_number,
                     "status": lesson.status,
                     "is_active": lesson.is_active,
+                    "total_lessons": subject.total_lessons,
                 },
                 description="Lesson created successfully."
             )
@@ -948,7 +956,6 @@ class CurriculumLessonCreateAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Unable to create lesson."
             )
-
 
 class CurriculumLessonUpdateAPIView(APIView):
 

@@ -35,7 +35,6 @@ class Curriculum(AuditModel):
     serial_number = models.PositiveIntegerField(default=1)
 
     is_active = models.BooleanField(default=True)
-    is_deleted = models.BooleanField(default=False)
 
     class Meta:
         db_table = "curriculum"
@@ -61,7 +60,6 @@ class CurriculumLevel(AuditModel):
     serial_number = models.PositiveIntegerField(default=1)
 
     is_active = models.BooleanField(default=True)
-    is_deleted = models.BooleanField(default=False)
 
     class Meta:
         db_table = "curriculum_levels"
@@ -98,7 +96,6 @@ class CurriculumCategory(AuditModel):
     serial_number = models.PositiveIntegerField(default=1)
 
     is_active = models.BooleanField(default=True)
-    is_deleted = models.BooleanField(default=False)
 
     class Meta:
         db_table = "curriculum_categories"
@@ -143,7 +140,6 @@ class CurriculumSubject(AuditModel):
     serial_number = models.PositiveIntegerField(default=1)
 
     is_active = models.BooleanField(default=True)
-    is_deleted = models.BooleanField(default=False)
 
     class Meta:
         db_table = "curriculum_subjects"
@@ -204,7 +200,6 @@ class CurriculumLesson(AuditModel):
     )
 
     is_active = models.BooleanField(default=True)
-    is_deleted = models.BooleanField(default=False)
 
     class Meta:
         db_table = "curriculum_lessons"
@@ -236,7 +231,6 @@ class CurriculumLessonPage(AuditModel):
     serial_number = models.PositiveIntegerField(default=1)
 
     is_active = models.BooleanField(default=True)
-    is_deleted = models.BooleanField(default=False)
 
     class Meta:
         db_table = "curriculum_lesson_pages"
@@ -306,7 +300,6 @@ class CurriculumPageContent(AuditModel):
     serial_number = models.PositiveIntegerField(default=1)
 
     is_active = models.BooleanField(default=True)
-    is_deleted = models.BooleanField(default=False)
 
     class Meta:
         db_table = "curriculum_page_contents"
