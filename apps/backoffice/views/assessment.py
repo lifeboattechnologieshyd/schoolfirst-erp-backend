@@ -543,6 +543,14 @@ class AssessmentCreateAPIView(APIView):
         if error:
             return CustomResponse.errorResponse(description=error)
 
+        # -----------------------------------------
+        # Lessons (optional - can also be saved in Step 2)
+        # -----------------------------------------
+        lesson_uuids, error = parse_lesson_ids(request)
+
+        if error:
+            return CustomResponse.errorResponse(description=error)
+
         try:
             # -----------------------------------------
             # Program / grade / subject
@@ -591,6 +599,28 @@ class AssessmentCreateAPIView(APIView):
                 )
 
             # -----------------------------------------
+            # Lessons must belong to the selected subject
+            # -----------------------------------------
+            lessons = []
+
+            if lesson_uuids:
+                lessons = list(
+                    CurriculumLesson.objects.filter(
+                        id__in=lesson_uuids,
+                        subject=subject,
+                        is_active=True,
+                        is_deleted=False,
+                    ).order_by(
+                        "serial_number",
+                    )
+                )
+
+                if len(lessons) != len(lesson_uuids):
+                    return CustomResponse.errorResponse(
+                        description="One or more lessons are invalid or do not belong to this subject."
+                    )
+
+            # -----------------------------------------
             # Cover image
             # -----------------------------------------
             cover_image, error = resolve_cover_image(request)
@@ -610,14 +640,38 @@ class AssessmentCreateAPIView(APIView):
                     status=Assessment.Status.DRAFT,
                 )
 
+                for lesson in lessons:
+                    AssessmentLesson.objects.create(
+                        assessment=assessment,
+                        lesson=lesson,
+                    )
+
+            questions_available = AssessmentQuestion.objects.filter(
+                lesson_id__in=[lesson.id for lesson in lessons],
+                is_active=True,
+            ).count() if lessons else 0
+
             application_logger.info(
                 "assessment_created",
                 assessment_id=str(assessment.id),
+                lessons_count=len(lessons),
                 user_id=str(request.user.id),
             )
 
+            data = build_assessment_summary(assessment)
+            data["lessons"] = [
+                {
+                    "id": str(lesson.id),
+                    "title": lesson.title,
+                    "serial_number": lesson.serial_number,
+                }
+                for lesson in lessons
+            ]
+            data["lessons_selected"] = len(lessons)
+            data["questions_available"] = questions_available
+
             return CustomResponse.successResponse(
-                data=build_assessment_summary(assessment),
+                data=data,
                 description="Assessment saved as draft.",
             )
 
