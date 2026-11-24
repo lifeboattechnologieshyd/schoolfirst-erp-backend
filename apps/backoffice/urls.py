@@ -102,6 +102,29 @@ from apps.backoffice.views.transport import CreateVehicleAPIView, VehicleListAPI
 from apps.backoffice.views.vocabbee import GradesList, SubjectCrud, SubjectDeleteAPIView, WordsCrud, \
     UploadWords, DashboardAPIView, TournamentCreateAPIView, TournamentDetailsAPIView, TournamentAssignGradesAPIView, \
     TournamentAvailableWordsAPIView, TournamentAssignQuestionsAPIView, TournamentCancelAPIView, TournamentPublishAPIView
+
+from apps.backoffice.views.assessment import (
+    AssessmentCreateAPIView,
+    AssessmentListAPIView,
+    AssessmentDetailAPIView,
+    AssessmentUpdateAPIView,
+    AssessmentDeleteAPIView,
+    AssessmentLessonListAPIView,
+    AssessmentLessonUpdateAPIView,
+    AssessmentQuestionAddAPIView,
+    AssessmentQuestionRemoveAPIView,
+    AssessmentQuestionReorderAPIView,
+    AssessmentPublishAPIView,
+    AssessmentStatusUpdateAPIView,
+    AssessmentQuestionBankCreateAPIView,
+    AssessmentQuestionBankListAPIView,
+    AssessmentQuestionBankDetailAPIView,
+    AssessmentQuestionBankUpdateAPIView,
+    AssessmentQuestionBankDeleteAPIView,
+    AssessmentQuestionImportTemplateAPIView,
+    AssessmentQuestionImportValidateAPIView,
+    AssessmentQuestionImportAPIView,
+)
 from apps.fee.views.fee import CompletedStudentFeePaymentsAPIView
 
 urlpatterns = [
@@ -826,6 +849,37 @@ urlpatterns = [
     path("curriculum/pages/<uuid:page_id>/contents/create", CurriculumPageContentCreateAPIView.as_view()),
     path("curriculum/contents/<uuid:content_id>/update", CurriculumPageContentUpdateAPIView.as_view()),
     path("curriculum/contents/<uuid:content_id>/delete", CurriculumPageContentDeleteAPIView.as_view()),
+
+    path("assessment/create", AssessmentCreateAPIView.as_view(),),
+    path("assessment", AssessmentListAPIView.as_view(),),
+    path("assessment/detail/<uuid:assessment_id>", AssessmentDetailAPIView.as_view(),),
+    path("assessment/<uuid:assessment_id>", AssessmentUpdateAPIView.as_view(),),
+    path("assessment/delete/<uuid:assessment_id>", AssessmentDeleteAPIView.as_view(),),
+
+    # Step 2 - Lessons
+    path("assessment/lessons", AssessmentLessonListAPIView.as_view(),),
+    path("assessment/<uuid:assessment_id>/lessons", AssessmentLessonUpdateAPIView.as_view(),),
+
+    # Step 3 - Questions
+    path("assessment/<uuid:assessment_id>/questions/add", AssessmentQuestionAddAPIView.as_view(),),
+    path("assessment/<uuid:assessment_id>/questions/reorder", AssessmentQuestionReorderAPIView.as_view(),),
+    path("assessment/<uuid:assessment_id>/questions/delete/<uuid:question_id>", AssessmentQuestionRemoveAPIView.as_view(),),
+
+    # Step 4 - Publish / status
+    path("assessment/<uuid:assessment_id>/publish", AssessmentPublishAPIView.as_view(),),
+    path("assessment/<uuid:assessment_id>/status", AssessmentStatusUpdateAPIView.as_view(),),
+
+    # Question bank + Question editor
+    path("assessment/question-bank/create", AssessmentQuestionBankCreateAPIView.as_view(),),
+    path("assessment/question-bank", AssessmentQuestionBankListAPIView.as_view(),),
+    path("assessment/question-bank/detail/<uuid:question_id>", AssessmentQuestionBankDetailAPIView.as_view(),),
+    path("assessment/question-bank/<uuid:question_id>", AssessmentQuestionBankUpdateAPIView.as_view(),),
+    path("assessment/question-bank/delete/<uuid:question_id>", AssessmentQuestionBankDeleteAPIView.as_view(),),
+
+    # Bulk upload (1 Upload -> 2 Validate -> 3 Import)
+    path("assessment/question-bank/import/template", AssessmentQuestionImportTemplateAPIView.as_view(),),
+    path("assessment/question-bank/import/validate", AssessmentQuestionImportValidateAPIView.as_view(),),
+    path("assessment/question-bank/import/<uuid:import_id>", AssessmentQuestionImportAPIView.as_view(),),
 
 
 
