@@ -804,6 +804,7 @@ class CurriculumLessonListAPIView(APIView):
                 is_deleted=False
             ).select_related(
                 "subject",
+                "subject__curriculum",
                 "grade"
             )
 
