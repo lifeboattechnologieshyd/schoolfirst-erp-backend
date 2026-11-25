@@ -1,6 +1,6 @@
 import random
 import uuid
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
 from django.db.models import Count, Q
@@ -12,14 +12,16 @@ from rest_framework.views import APIView
 from apps.assessment.models import (
     Assessment,
     AssessmentAttempt,
+    AssessmentAttemptAnswer,
     AssessmentLesson,
     AssessmentQuestion,
     AssessmentQuestionMapping,
     AssessmentQuestionOption,
 )
 from apps.curriculum.models import Curriculum, CurriculumLesson, CurriculumSubject
+from apps.school.models.school import Student
 from apps.vocabbee.models import Grades
-from shared.mixins import CustomResponse
+from shared.mixins import CustomPageNumberPagination, CustomResponse
 from shared.utils.logger import application_logger
 
 
@@ -46,21 +48,66 @@ def parse_uuid(value):
         return None
 
 
-def get_parent_kid(request, kid_id):
+def get_kid(kid_id):
     """
-    Same check as vocabbee: the kid must belong to the logged-in parent.
+    Family Zone kid = school Student.
+    The app passes the student id from verify OTP as kid_id.
     """
     kid_uuid = parse_uuid(kid_id)
 
     if kid_uuid is None:
         return None
 
-    return request.user.kids.filter(
+    return Student.objects.filter(
         id=kid_uuid,
-        is_active=True,
+        status=Student.Status.ACTIVE,
     ).select_related(
         "grade",
     ).first()
+
+
+def get_kid_attempt(kid, attempt_id, for_update=False):
+    """
+    The attempt must belong to the kid (student) sent by the app.
+    """
+    attempt_uuid = parse_uuid(attempt_id)
+
+    if attempt_uuid is None:
+        return None
+
+    attempts = AssessmentAttempt.objects.filter(
+        id=attempt_uuid,
+        kid=kid,
+    )
+
+    if for_update:
+        attempts = attempts.select_for_update()
+
+    return attempts.select_related(
+        "kid",
+        "assessment",
+        "assessment__grade",
+        "assessment__subject",
+        "assessment__curriculum",
+    ).first()
+
+
+def to_percentage(obtained, total):
+    if not total:
+        return Decimal("0.00")
+
+    return (
+        Decimal(obtained) * Decimal("100") / Decimal(total)
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def get_stars(percentage):
+    """
+    0-5 stars. 80% -> 4 stars (A8 Assessment result).
+    """
+    return int(
+        (Decimal(percentage) / Decimal("20")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    )
 
 
 def questions_with_correct_answer():
@@ -209,6 +256,46 @@ def build_attempt_payload(attempt):
     return data
 
 
+def build_attempt_result(attempt):
+    """
+    A8 Assessment result + A9 Past assessments row.
+    """
+    assessment = attempt.assessment
+
+    return {
+        "attempt_id": str(attempt.id),
+        "status": attempt.status,
+        "assessment": {
+            "id": str(assessment.id),
+            "title": assessment.title,
+            "description": assessment.description,
+            "cover_image": assessment.cover_image,
+            "is_auto_generated": assessment.is_auto_generated,
+        },
+        "grade": {
+            "id": str(assessment.grade_id),
+            "name": assessment.grade.name,
+        },
+        "subject": {
+            "id": str(assessment.subject_id),
+            "name": assessment.subject.name,
+        },
+        "total_questions": attempt.total_questions,
+        "total_marks": attempt.total_marks,
+        "marks_obtained": attempt.marks_obtained,
+        "correct_count": attempt.correct_count,
+        "wrong_count": attempt.wrong_count,
+        "skipped_count": attempt.skipped_count,
+        "hints_used": attempt.hints_used,
+        "percentage": attempt.percentage,
+        "accuracy": attempt.percentage,
+        "stars": get_stars(attempt.percentage) if attempt.status == AssessmentAttempt.Status.COMPLETED else 0,
+        "time_taken_seconds": attempt.time_taken_seconds,
+        "started_at": attempt.started_at,
+        "submitted_at": attempt.submitted_at,
+    }
+
+
 def find_reusable_generated_assessment(kid, curriculum, grade, subject, lesson_ids, target_questions):
     """
     Same idea as the old GenerateAssessmentAPIView:
@@ -336,8 +423,8 @@ class GenerateAssessmentAPIView(APIView):
             field
             for field, value in required_fields.items()
             if value is None
-               or (isinstance(value, str) and not value.strip())
-               or (isinstance(value, list) and not value)
+            or (isinstance(value, str) and not value.strip())
+            or (isinstance(value, list) and not value)
         ]
 
         if missing_fields:
@@ -391,7 +478,7 @@ class GenerateAssessmentAPIView(APIView):
                 description="Invalid curriculum, grade, or subject ID."
             )
 
-        kid = get_parent_kid(request, kid_id)
+        kid = get_kid(kid_id)
 
         if kid is None:
             return CustomResponse.errorResponse(
@@ -575,5 +662,456 @@ class GenerateAssessmentAPIView(APIView):
 
             return CustomResponse.errorResponse(
                 description="Unable to generate assessment.",
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+# =====================================================================
+#  A6 / A8 - SUBMIT ANSWERS + RESULT
+#  Payload: kid_id, attempt_id, answers, time_taken_seconds (optional)
+#  answers: [{"question_id", "option_id" (null = skipped), "hint_used"}]
+#  Questions not sent are counted as skipped.
+# =====================================================================
+class SubmitAssessmentAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        kid_id = request.data.get("kid_id")
+        attempt_id = request.data.get("attempt_id")
+        answers = request.data.get("answers")
+        time_taken_seconds = request.data.get("time_taken_seconds")
+
+        # -----------------------------------------
+        # Required fields
+        # (answers can be an empty list = everything skipped)
+        # -----------------------------------------
+        required_fields = {
+            "kid_id": kid_id,
+            "attempt_id": attempt_id,
+            "answers": answers,
+        }
+
+        missing_fields = [
+            field
+            for field, value in required_fields.items()
+            if value is None
+            or (isinstance(value, str) and not value.strip())
+        ]
+
+        if missing_fields:
+            return CustomResponse.errorResponse(
+                description=(
+                    f"{missing_fields[0]} is required."
+                    if len(missing_fields) == 1
+                    else f"{', '.join(missing_fields)} are required."
+                ),
+                data={
+                    "missing_fields": missing_fields
+                },
+            )
+
+        if parse_uuid(attempt_id) is None:
+            return CustomResponse.errorResponse(
+                description="Invalid attempt_id."
+            )
+
+        if not isinstance(answers, list):
+            return CustomResponse.errorResponse(
+                description="answers must be a list."
+            )
+
+        if time_taken_seconds not in (None, ""):
+            try:
+                time_taken_seconds = int(time_taken_seconds)
+
+                if time_taken_seconds < 0:
+                    raise ValueError
+            except (ValueError, TypeError):
+                return CustomResponse.errorResponse(
+                    description="time_taken_seconds must be a positive number."
+                )
+        else:
+            time_taken_seconds = None
+
+        # -----------------------------------------
+        # Validate answer payload shape
+        # -----------------------------------------
+        submitted = {}
+
+        for answer in answers:
+            if not isinstance(answer, dict):
+                return CustomResponse.errorResponse(
+                    description="Each answer must be an object."
+                )
+
+            question_uuid = parse_uuid(answer.get("question_id"))
+
+            if question_uuid is None:
+                return CustomResponse.errorResponse(
+                    description="Invalid question_id in answers."
+                )
+
+            if question_uuid in submitted:
+                return CustomResponse.errorResponse(
+                    description="A question is answered more than once."
+                )
+
+            option_id = answer.get("option_id")
+            option_uuid = None
+
+            if option_id not in (None, ""):
+                option_uuid = parse_uuid(option_id)
+
+                if option_uuid is None:
+                    return CustomResponse.errorResponse(
+                        description="Invalid option_id in answers."
+                    )
+
+            hint_used = answer.get("hint_used", False)
+
+            if not isinstance(hint_used, bool):
+                return CustomResponse.errorResponse(
+                    description="hint_used must be a boolean."
+                )
+
+            submitted[question_uuid] = {
+                "option_id": option_uuid,
+                "hint_used": hint_used,
+            }
+
+        kid = get_kid(kid_id)
+
+        if kid is None:
+            return CustomResponse.errorResponse(
+                description="Invalid kid."
+            )
+
+        try:
+            with transaction.atomic():
+                attempt = get_kid_attempt(kid, attempt_id, for_update=True)
+
+                if attempt is None:
+                    return CustomResponse.errorResponse(
+                        description="Attempt not found.",
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+
+                if attempt.status == AssessmentAttempt.Status.COMPLETED:
+                    return CustomResponse.errorResponse(
+                        description="This assessment has already been submitted."
+                    )
+
+                mappings = get_assessment_mappings(attempt.assessment)
+                question_ids = {mapping.question_id for mapping in mappings}
+
+                unknown = set(submitted.keys()) - question_ids
+
+                if unknown:
+                    return CustomResponse.errorResponse(
+                        description="Some answers are for questions that are not in this assessment."
+                    )
+
+                # -----------------------------------------
+                # Check answers + snapshot
+                # -----------------------------------------
+                correct_count = 0
+                wrong_count = 0
+                skipped_count = 0
+                hints_used = 0
+                marks_obtained = Decimal("0")
+                total_marks = Decimal("0")
+                answer_rows = []
+
+                for serial_number, mapping in enumerate(mappings, start=1):
+                    question = mapping.question
+                    options = list(question.options.all())
+                    options_by_id = {option.id: option for option in options}
+                    correct_option = next((option for option in options if option.is_correct), None)
+
+                    answer = submitted.get(question.id, {"option_id": None, "hint_used": False})
+                    selected_option = None
+
+                    if answer["option_id"]:
+                        selected_option = options_by_id.get(answer["option_id"])
+
+                        if selected_option is None:
+                            return CustomResponse.errorResponse(
+                                description=f"Selected option does not belong to question {serial_number}."
+                            )
+
+                    is_skipped = selected_option is None
+                    is_correct = bool(
+                        selected_option
+                        and correct_option
+                        and selected_option.id == correct_option.id
+                    )
+                    marks_awarded = question.marks if is_correct else Decimal("0")
+
+                    total_marks += question.marks
+                    marks_obtained += marks_awarded
+
+                    if is_skipped:
+                        skipped_count += 1
+                    elif is_correct:
+                        correct_count += 1
+                    else:
+                        wrong_count += 1
+
+                    if answer["hint_used"]:
+                        hints_used += 1
+
+                    answer_rows.append(dict(
+                        attempt=attempt,
+                        question=question,
+                        selected_option=selected_option,
+                        serial_number=serial_number,
+                        is_correct=is_correct,
+                        is_skipped=is_skipped,
+                        hint_used=answer["hint_used"],
+                        marks_awarded=marks_awarded,
+                        question_text=question.question,
+                        level=question.level,
+                        marks=question.marks,
+                        options=[
+                            {
+                                "label": option.label,
+                                "option_text": option.option_text,
+                            }
+                            for option in options
+                        ],
+                        selected_label=selected_option.label if selected_option else None,
+                        correct_label=correct_option.label if correct_option else None,
+                        hint=question.hint,
+                        explanation=question.explanation,
+                    ))
+
+                # Write only after every answer is valid,
+                # so an error above never leaves partial answers.
+                for row in answer_rows:
+                    AssessmentAttemptAnswer.objects.create(**row)
+
+                # -----------------------------------------
+                # Save result
+                # -----------------------------------------
+                attempt.status = AssessmentAttempt.Status.COMPLETED
+                attempt.total_questions = len(mappings)
+                attempt.total_marks = total_marks
+                attempt.correct_count = correct_count
+                attempt.wrong_count = wrong_count
+                attempt.skipped_count = skipped_count
+                attempt.hints_used = hints_used
+                attempt.marks_obtained = marks_obtained
+                attempt.percentage = to_percentage(marks_obtained, total_marks)
+                attempt.submitted_at = timezone.now()
+                attempt.time_taken_seconds = (
+                    time_taken_seconds
+                    if time_taken_seconds is not None
+                    else int((attempt.submitted_at - attempt.started_at).total_seconds())
+                )
+                attempt.save()
+
+            application_logger.info(
+                "app_assessment_submitted",
+                attempt_id=str(attempt.id),
+                assessment_id=str(attempt.assessment_id),
+                kid_id=str(kid.id),
+                correct_count=correct_count,
+                total_questions=attempt.total_questions,
+                requested_by=str(request.user.id),
+            )
+
+            return CustomResponse.successResponse(
+                data=build_attempt_result(attempt),
+                description="Assessment submitted successfully.",
+            )
+
+        except Exception:
+            application_logger.exception(
+                "app_assessment_submit_failed",
+                attempt_id=str(attempt_id),
+                kid_id=str(kid.id),
+                requested_by=str(request.user.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Unable to submit assessment.",
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+# =====================================================================
+#  A9 - PAST ASSESSMENTS
+# =====================================================================
+class AssessmentAttemptLISTAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        kid_id = request.query_params.get("kid_id")
+
+        if not kid_id:
+            return CustomResponse.errorResponse(
+                description="kid_id is required.",
+                data={
+                    "missing_fields": ["kid_id"]
+                },
+            )
+
+        kid = get_kid(kid_id)
+
+        if kid is None:
+            return CustomResponse.errorResponse(
+                description="Invalid kid."
+            )
+
+        try:
+            attempts = AssessmentAttempt.objects.filter(
+                kid=kid,
+            ).select_related(
+                "assessment",
+                "assessment__grade",
+                "assessment__subject",
+            ).order_by(
+                "-started_at",
+            )
+
+            for field, lookup in {
+                "grade_id": "assessment__grade_id",
+                "subject_id": "assessment__subject_id",
+                "assessment_id": "assessment_id",
+            }.items():
+                value = request.query_params.get(field)
+
+                if not value:
+                    continue
+
+                if parse_uuid(value) is None:
+                    return CustomResponse.errorResponse(
+                        description=f"Invalid {field}."
+                    )
+
+                attempts = attempts.filter(**{lookup: value})
+
+            status_filter = request.query_params.get("status")
+
+            if status_filter:
+                status_filter = status_filter.strip().upper()
+
+                if status_filter not in AssessmentAttempt.Status.values:
+                    return CustomResponse.errorResponse(
+                        description="Status must be IN_PROGRESS or COMPLETED."
+                    )
+
+                attempts = attempts.filter(status=status_filter)
+
+            total = attempts.count()
+
+            paginator = CustomPageNumberPagination()
+
+            page = paginator.paginate_queryset(
+                attempts,
+                request,
+                view=self,
+            )
+
+            data = [build_attempt_result(attempt) for attempt in page]
+
+            return CustomResponse.successResponse(
+                data=data,
+                total=total,
+                description="Past assessments fetched successfully.",
+            )
+
+        except Exception:
+            application_logger.exception(
+                "app_assessment_attempt_list_failed",
+                kid_id=str(kid.id),
+                requested_by=str(request.user.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Unable to fetch past assessments.",
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+# =====================================================================
+#  A10 - ANSWER REVIEW
+# =====================================================================
+class AssessmentAttemptDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, attempt_id):
+        kid_id = request.query_params.get("kid_id")
+
+        if not kid_id:
+            return CustomResponse.errorResponse(
+                description="kid_id is required.",
+                data={
+                    "missing_fields": ["kid_id"]
+                },
+            )
+
+        kid = get_kid(kid_id)
+
+        if kid is None:
+            return CustomResponse.errorResponse(
+                description="Invalid kid."
+            )
+
+        try:
+            attempt = get_kid_attempt(kid, attempt_id)
+
+            if attempt is None:
+                return CustomResponse.errorResponse(
+                    description="Attempt not found.",
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            if attempt.status != AssessmentAttempt.Status.COMPLETED:
+                return CustomResponse.errorResponse(
+                    description="Submit the assessment to see the answers."
+                )
+
+            answers = AssessmentAttemptAnswer.objects.filter(
+                attempt=attempt,
+            ).order_by(
+                "serial_number",
+            )
+
+            data = build_attempt_result(attempt)
+            data["answers"] = [
+                {
+                    "question_id": str(answer.question_id),
+                    "serial_number": answer.serial_number,
+                    "question": answer.question_text,
+                    "level": answer.level,
+                    "marks": answer.marks,
+                    "marks_awarded": answer.marks_awarded,
+                    "options": answer.options,
+                    "selected_option": answer.selected_label,
+                    "correct_option": answer.correct_label,
+                    "is_correct": answer.is_correct,
+                    "is_skipped": answer.is_skipped,
+                    "hint_used": answer.hint_used,
+                    "hint": answer.hint,
+                    "explanation": answer.explanation,
+                }
+                for answer in answers
+            ]
+
+            return CustomResponse.successResponse(
+                data=data,
+                description="Answers fetched successfully.",
+            )
+
+        except Exception:
+            application_logger.exception(
+                "app_assessment_attempt_detail_failed",
+                attempt_id=str(attempt_id),
+                requested_by=str(request.user.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Unable to fetch answers.",
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

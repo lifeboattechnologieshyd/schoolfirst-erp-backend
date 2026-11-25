@@ -141,8 +141,9 @@ class AssessmentAttempt(AuditModel):
         related_name="attempts",
     )
 
+    # Family Zone kid = school Student
     kid = models.ForeignKey(
-        "vocabbee.Kids",
+        "school.Student",
         on_delete=models.CASCADE,
         related_name="assessment_attempts",
     )
@@ -610,3 +611,131 @@ class AssessmentQuestionImport(AuditModel):
 
     def __str__(self):
         return self.file_name
+
+
+# =====================================================================
+#  ASSESSMENT ATTEMPT ANSWER
+#  A10 Answer review
+#  The question, options and correct answer are copied at submit time,
+#  so later edits in the question bank do not change past results.
+# =====================================================================
+class AssessmentAttemptAnswer(AuditModel):
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    attempt = models.ForeignKey(
+        AssessmentAttempt,
+        on_delete=models.CASCADE,
+        related_name="answers",
+    )
+
+    question = models.ForeignKey(
+        AssessmentQuestion,
+        on_delete=models.PROTECT,
+        related_name="attempt_answers",
+    )
+
+    selected_option = models.ForeignKey(
+        AssessmentQuestionOption,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="attempt_answers",
+    )
+
+    serial_number = models.PositiveIntegerField(
+        default=1,
+    )
+
+    is_correct = models.BooleanField(
+        default=False,
+    )
+
+    is_skipped = models.BooleanField(
+        default=False,
+    )
+
+    hint_used = models.BooleanField(
+        default=False,
+    )
+
+    marks_awarded = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+    )
+
+    # ---- Snapshot at submit time ----
+    question_text = models.TextField()
+
+    level = models.CharField(
+        max_length=20,
+        choices=AssessmentQuestion.Level.choices,
+    )
+
+    marks = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=1,
+    )
+
+    # [{"label": "A", "option_text": "Dal"}, ...]
+    options = models.JSONField(
+        default=list,
+        blank=True,
+    )
+
+    selected_label = models.CharField(
+        max_length=2,
+        null=True,
+        blank=True,
+    )
+
+    correct_label = models.CharField(
+        max_length=2,
+        null=True,
+        blank=True,
+    )
+
+    hint = models.CharField(
+        max_length=80,
+        null=True,
+        blank=True,
+    )
+
+    explanation = models.TextField(
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "assessment_attempt_answers"
+
+        ordering = [
+            "serial_number",
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "attempt",
+                    "question",
+                ],
+                condition=models.Q(is_deleted=False),
+                name="unique_assessment_attempt_answer",
+            ),
+        ]
+
+        indexes = [
+            models.Index(fields=["attempt"]),
+            models.Index(fields=["question"]),
+        ]
+
+    def __str__(self):
+        return f"{self.attempt_id} - Q{self.serial_number}"
