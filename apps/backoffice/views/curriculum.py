@@ -843,6 +843,7 @@ class CurriculumLessonListAPIView(APIView):
                     "subject": lesson.subject.name,
                     "grade_id": str(lesson.grade_id),
                     "grade": lesson.grade.name,
+                    "curriculum_name":lesson.subject.curriculum.name,
                     "title": lesson.title,
                     "description": lesson.description,
                     "thumbnail_image": lesson.thumbnail_image,
@@ -851,6 +852,7 @@ class CurriculumLessonListAPIView(APIView):
                     "serial_number": lesson.serial_number,
                     "status": lesson.status,
                     "is_active": lesson.is_active,
+                    "created_at":lesson.created_at,
                 }
                 for lesson in queryset
             ]
