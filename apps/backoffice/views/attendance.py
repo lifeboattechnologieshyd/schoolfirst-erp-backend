@@ -1,8 +1,9 @@
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.db.models import Count, Q, Prefetch, Max
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
@@ -991,6 +992,135 @@ class BulkMarkStaffAttendanceAPIView(APIView):
                 },
                 "attendance_summary": attendance_summary,
             },
+        )
+
+SCHOOL_TIME_ZONE = ZoneInfo("Asia/Kolkata")
+
+
+# =====================================================================
+#  STAFF - MARK MY ATTENDANCE
+#  The logged-in staff member is marked PRESENT for today.
+#  First call = check-in, second call = check-out.
+# =====================================================================
+class MarkMyStaffAttendanceAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        school = request.school
+
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        staff = Staff.objects.filter(
+            user=request.user,
+            school=school,
+            status=Staff.Status.ACTIVE,
+        ).first()
+
+        if staff is None:
+            return CustomResponse.errorResponse(
+                description="Active staff record not found.",
+            )
+
+        now = timezone.now().astimezone(SCHOOL_TIME_ZONE)
+        today = now.date()
+        current_time = now.time().replace(microsecond=0, tzinfo=None)
+
+        try:
+            with transaction.atomic():
+
+                attendance = StaffAttendance.objects.select_for_update().filter(
+                    school=school,
+                    staff=staff,
+                    attendance_date=today,
+                ).first()
+
+                # -----------------------------------------
+                # Check-in
+                # -----------------------------------------
+                if attendance is None:
+                    attendance = StaffAttendance.objects.create(
+                        school=school,
+                        branch_id=staff.branch_id,
+                        staff=staff,
+                        attendance_date=today,
+                        status=StaffAttendance.AttendanceStatus.PRESENT,
+                        check_in=current_time,
+                        marked_by=staff,
+                    )
+
+                    action = "CHECK_IN"
+
+                elif attendance.status == StaffAttendance.AttendanceStatus.LEAVE:
+                    return CustomResponse.errorResponse(
+                        description="You are on leave today."
+                    )
+
+                # Admin created the row without a check-in time
+                elif attendance.check_in is None:
+                    attendance.status = StaffAttendance.AttendanceStatus.PRESENT
+                    attendance.check_in = current_time
+                    attendance.marked_by = staff
+                    attendance.save()
+
+                    action = "CHECK_IN"
+
+                # -----------------------------------------
+                # Check-out
+                # -----------------------------------------
+                elif attendance.check_out is None:
+                    attendance.check_out = current_time
+                    attendance.save()
+
+                    action = "CHECK_OUT"
+
+                else:
+                    return CustomResponse.errorResponse(
+                        description="Attendance already marked for today."
+                    )
+
+        except IntegrityError:
+            return CustomResponse.errorResponse(
+                description="Attendance already marked for today."
+            )
+
+        except Exception:
+            application_logger.exception(
+                "staff_self_attendance_failed",
+                school_id=str(school.id),
+                staff_id=str(staff.id),
+                requested_by=str(request.user.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Unable to mark attendance.",
+            )
+
+        application_logger.info(
+            "staff_self_attendance_marked",
+            school_id=str(school.id),
+            staff_id=str(staff.id),
+            action=action,
+            requested_by=str(request.user.id),
+        )
+
+        return CustomResponse.successResponse(
+            data={
+                "id": str(attendance.id),
+                "action": action,
+                "attendance_date": attendance.attendance_date,
+                "status": attendance.status,
+                "check_in": attendance.check_in.strftime("%H:%M:%S") if attendance.check_in else None,
+                "check_out": attendance.check_out.strftime("%H:%M:%S") if attendance.check_out else None,
+            },
+            description=(
+                "Checked in successfully."
+                if action == "CHECK_IN"
+                else "Checked out successfully."
+            ),
         )
 
 

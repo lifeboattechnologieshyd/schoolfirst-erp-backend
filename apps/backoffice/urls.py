@@ -7,7 +7,7 @@ from apps.backoffice.views.attendance import StaffAttendanceListAPIView, BulkMar
     UpdateStaffAttendanceAPIView, StaffAttendanceSummaryAPIView, StudentAttendanceListAPIView, \
     UpdateStudentAttendanceAPIView, BulkMarkStudentAttendanceAPIView, StudentLeaveListAPIView, StaffLeaveListAPIView, \
     StaffLeaveRequestAPIView, StudentLeaveReviewAPIView, StaffLeaveReviewAPIView, StudentAttendanceSummaryAPIView, \
-    StudentAttendanceProfileAPIView
+    StudentAttendanceProfileAPIView, MarkMyStaffAttendanceAPIView
 from apps.backoffice.views.bulletin import BulletinCategoryListAPIView, BulletinCategoryCreateAPIView, \
     BulletinCategoryDeleteAPIView, BulletinCategoryUpdateAPIView, BulletinListAPIView, BulletinCreateAPIView, \
     BulletinUpdateAPIView, BulletinDeleteAPIView
@@ -663,6 +663,8 @@ urlpatterns = [
     path("student-attendance/<uuid:attendance_id>",UpdateStudentAttendanceAPIView.as_view(),),
 
     path("staff-attendance/create",BulkMarkStaffAttendanceAPIView.as_view(),),
+
+    path("staff-attendance/mark", MarkMyStaffAttendanceAPIView.as_view(),),
 
     path("staff-attendance",StaffAttendanceListAPIView.as_view(),),
 
