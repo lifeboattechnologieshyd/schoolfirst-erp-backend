@@ -2847,9 +2847,7 @@ class DownloadAssessmentQuestionTemplateAPIView(APIView):
 
             file_name = QUESTION_TEMPLATE_PATH
 
-            # Delete existing file if required
-            if default_storage.exists(file_name):
-                default_storage.delete(file_name)
+
 
             # Prepare Excel binary
             excel_content = ContentFile(
@@ -2857,14 +2855,15 @@ class DownloadAssessmentQuestionTemplateAPIView(APIView):
                 name="assessment_question_template.xlsx"
             )
 
-            # Upload to S3
+            if default_storage.exists(file_name):
+                default_storage.delete(file_name)
+
             file_path = default_storage.save(
                 file_name,
-                excel_content
+                ContentFile(excel_file.getvalue())
             )
 
-            # Get actual S3 URL
-            file_url = default_storage.url(file_path)
+            file_url = settings.MEDIA_URL + file_path
 
         except Exception as e:
 
