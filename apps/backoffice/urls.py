@@ -886,7 +886,7 @@ urlpatterns = [
 
     path("teacher/dashboard", TeacherDashboardAPIView.as_view(),),
 
-    path("school/dashboard",SchoolDashboardAPIView.as_view(),),
+    path("dashboard/school",SchoolDashboardAPIView.as_view(),),
 
 
 
