@@ -1,13 +1,9 @@
-from datetime import date, datetime, time, timedelta
+from datetime import date
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 from django.db.models import Count, DecimalField, F, Q, Sum, Value
 from django.db.models.functions import Coalesce, TruncMonth
-from django.utils import timezone
-from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView
+
 
 from apps.attendance.models import Leave, StudentAttendance
 from apps.bulletin.models import Bulletin
@@ -16,10 +12,20 @@ from apps.core.models import UserRoles
 from apps.fee.models import StudentFee, StudentFeePayment
 from apps.ptm.models import ParentTeacherMeeting
 from apps.school.models.school import AcademicYear, Staff, Student
+
+import uuid
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
+
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+
+from apps.homework.models import Homework, HomeworkSubmission
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
-
 
 # =====================================================================
 #  CONSTANTS
@@ -706,5 +712,300 @@ class SchoolDashboardAPIView(APIView):
 
             return CustomResponse.errorResponse(
                 description="Unable to fetch dashboard.",
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+
+
+
+
+
+# Mini bar charts on the cards: last N weeks, oldest first
+TREND_WEEKS = 8
+
+RESPONDED_STATUSES = [
+    HomeworkSubmission.Status.SUBMITTED,
+    HomeworkSubmission.Status.CHECKED,
+]
+
+
+# =====================================================================
+#  HELPERS
+# =====================================================================
+def get_school_today():
+    return timezone.now().astimezone(SCHOOL_TIME_ZONE).date()
+
+
+
+
+
+def week_buckets(today, weeks):
+    """
+    [(week_start, week_end), ...] for the last N weeks (Mon-Sun), oldest first.
+    """
+    this_week_start = today - timedelta(days=today.weekday())
+
+    return [
+        (
+            this_week_start - timedelta(weeks=back),
+            this_week_start - timedelta(weeks=back) + timedelta(days=6),
+        )
+        for back in range(weeks - 1, -1, -1)
+    ]
+
+
+def bucket_dates(values, buckets):
+    """
+    Counts dates into week buckets.
+    """
+    counts = [0] * len(buckets)
+
+    for value in values:
+        if isinstance(value, datetime):
+            value = value.astimezone(SCHOOL_TIME_ZONE).date()
+
+        for index, (start, end) in enumerate(buckets):
+            if start <= value <= end:
+                counts[index] += 1
+                break
+
+    return counts
+
+
+
+
+
+# =====================================================================
+#  HOMEWORK DASHBOARD
+# =====================================================================
+class HomeworkDashboardAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "homework.view"
+
+    def get(self, request):
+
+        school = request.school
+        branch_id = request.headers.get("X-Branch-Id")
+
+        if school is None:
+            return CustomResponse.errorResponse(
+                description="School not found."
+            )
+
+        if branch_id:
+            try:
+                branch_id = uuid.UUID(str(branch_id))
+            except (ValueError, TypeError, AttributeError):
+                return CustomResponse.errorResponse(
+                    description="Invalid branch ID."
+                )
+
+        today = get_school_today()
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=6)
+
+        try:
+            academic_year = get_current_academic_year(school, today)
+
+            if academic_year is None:
+                return CustomResponse.errorResponse(
+                    description="No active academic year found."
+                )
+
+            # --------------------------------------------------
+            # BASE QUERYSETS (published homework, this academic year)
+            # --------------------------------------------------
+
+            homeworks = Homework.objects.filter(
+                school=school,
+                academic_year=academic_year,
+                status=Homework.Status.PUBLISHED,
+            )
+
+            if branch_id:
+                homeworks = homeworks.filter(branch_id=branch_id)
+
+            submissions = HomeworkSubmission.objects.filter(
+                homework__in=homeworks,
+            )
+
+            # --------------------------------------------------
+            # CARDS
+            # --------------------------------------------------
+
+            total_assigned = homeworks.count()
+
+            # Due this week and not yet past due
+            active = homeworks.filter(
+                due_date__gte=today,
+                due_date__lte=week_end,
+            )
+
+            responded = submissions.filter(
+                status__in=RESPONDED_STATUSES,
+            )
+
+            # Not submitted, due date not passed yet
+            pending = submissions.filter(
+                status=HomeworkSubmission.Status.PENDING,
+                homework__due_date__gte=today,
+            )
+
+            # Not submitted, due date passed
+            overdue = submissions.filter(
+                status=HomeworkSubmission.Status.PENDING,
+                homework__due_date__lt=today,
+            )
+
+            response_counts = submissions.aggregate(
+                checked=Count("id", filter=Q(status=HomeworkSubmission.Status.CHECKED)),
+                awaiting_review=Count("id", filter=Q(status=HomeworkSubmission.Status.SUBMITTED)),
+            )
+
+            # --------------------------------------------------
+            # WEEKLY TRENDS (mini bar charts)
+            # --------------------------------------------------
+
+            buckets = week_buckets(today, TREND_WEEKS)
+            trend_start = buckets[0][0]
+
+            trends = {
+                "total_assigned": bucket_dates(
+                    homeworks.filter(
+                        assigned_date__gte=trend_start,
+                    ).values_list("assigned_date", flat=True),
+                    buckets,
+                ),
+                "active": bucket_dates(
+                    homeworks.filter(
+                        due_date__gte=trend_start,
+                        due_date__lte=week_end,
+                    ).values_list("due_date", flat=True),
+                    buckets,
+                ),
+                "submitted": bucket_dates(
+                    responded.filter(
+                        submitted_at__gte=local_start(trend_start),
+                    ).values_list("submitted_at", flat=True),
+                    buckets,
+                ),
+                "pending": bucket_dates(
+                    submissions.filter(
+                        status=HomeworkSubmission.Status.PENDING,
+                        homework__due_date__gte=trend_start,
+                        homework__due_date__lte=week_end,
+                    ).values_list("homework__due_date", flat=True),
+                    buckets,
+                ),
+                "overdue": bucket_dates(
+                    overdue.filter(
+                        homework__due_date__gte=trend_start,
+                    ).values_list("homework__due_date", flat=True),
+                    buckets,
+                ),
+            }
+
+            # --------------------------------------------------
+            # ASSIGNMENTS BY SUBJECT
+            # --------------------------------------------------
+
+            subject_rows = list(
+                homeworks.values(
+                    "subject_id",
+                    "subject__name",
+                ).annotate(
+                    total=Count("id"),
+                ).order_by(
+                    "-total",
+                    "subject__name",
+                )
+            )
+
+            max_total = subject_rows[0]["total"] if subject_rows else 0
+
+            by_subject = [
+                {
+                    "subject": {
+                        "id": str(row["subject_id"]),
+                        "name": row["subject__name"],
+                    },
+                    "count": row["total"],
+                    "percentage": round(row["total"] * 100 / total_assigned, 1) if total_assigned else 0,
+                    # bar width relative to the top subject
+                    "bar_percentage": round(row["total"] * 100 / max_total, 1) if max_total else 0,
+                }
+                for row in subject_rows
+            ]
+
+            # --------------------------------------------------
+            # RESPONSE
+            # --------------------------------------------------
+
+            data = {
+                "date": today,
+                "week_start": week_start,
+                "week_end": week_end,
+                "academic_year": {
+                    "id": str(academic_year.id),
+                    "name": academic_year.name,
+                },
+                "branch_id": str(branch_id) if branch_id else None,
+                "stats": {
+                    "total_assigned": {
+                        "value": total_assigned,
+                        "label": "This academic year",
+                        "trend": trends["total_assigned"],
+                    },
+                    "active": {
+                        "value": active.count(),
+                        "label": "Due this week",
+                        "trend": trends["active"],
+                    },
+                    "submitted": {
+                        "value": responded.count(),
+                        "label": "Student responses",
+                        "checked": response_counts["checked"],
+                        "awaiting_review": response_counts["awaiting_review"],
+                        "trend": trends["submitted"],
+                    },
+                    "pending": {
+                        "value": pending.count(),
+                        "label": "Awaiting submission",
+                        "trend": trends["pending"],
+                    },
+                    "overdue": {
+                        "value": overdue.count(),
+                        "label": "Past due date",
+                        "homeworks": overdue.values("homework_id").distinct().count(),
+                        "trend": trends["overdue"],
+                    },
+                },
+                "assignments_by_subject": by_subject,
+            }
+
+            application_logger.info(
+                "homework_dashboard_fetched",
+                school_id=str(school.id),
+                branch_id=str(branch_id) if branch_id else None,
+                academic_year_id=str(academic_year.id),
+                total_assigned=total_assigned,
+                requested_by=str(request.user.id),
+            )
+
+            return CustomResponse.successResponse(
+                data=data,
+                description="Homework dashboard fetched successfully.",
+            )
+
+        except Exception:
+            application_logger.exception(
+                "homework_dashboard_failed",
+                school_id=str(school.id),
+                requested_by=str(request.user.id),
+            )
+
+            return CustomResponse.errorResponse(
+                description="Unable to fetch homework dashboard.",
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
