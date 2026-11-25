@@ -843,7 +843,7 @@ class CurriculumLessonListAPIView(APIView):
                     "subject": lesson.subject.name,
                     "grade_id": str(lesson.grade_id),
                     "grade": lesson.grade.name,
-                    "curriculum_name":lesson.subject.curriculum.name,
+                    "curriculum_name":lesson.subject.curriculum.title,
                     "title": lesson.title,
                     "description": lesson.description,
                     "thumbnail_image": lesson.thumbnail_image,
