@@ -966,12 +966,13 @@ class AssessmentAttemptLISTAPIView(APIView):
         try:
             attempts = AssessmentAttempt.objects.filter(
                 kid=kid,
+                status=AssessmentAttempt.Status.COMPLETED,
             ).select_related(
                 "assessment",
                 "assessment__grade",
                 "assessment__subject",
             ).order_by(
-                "-started_at",
+                "-submitted_at",
             )
 
             for field, lookup in {
@@ -998,7 +999,7 @@ class AssessmentAttemptLISTAPIView(APIView):
 
                 if status_filter not in AssessmentAttempt.Status.values:
                     return CustomResponse.errorResponse(
-                        description="Status must be IN_PROGRESS or COMPLETED."
+                        description="Status must be COMPLETED."
                     )
 
                 attempts = attempts.filter(status=status_filter)
