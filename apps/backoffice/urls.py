@@ -25,6 +25,7 @@ from apps.backoffice.views.curriculum import CurriculumListAPIView, CurriculumCr
     CurriculumLessonDeleteAPIView, CurriculumLessonPageListAPIView, CurriculumLessonPageCreateAPIView, \
     CurriculumLessonPageUpdateAPIView, CurriculumLessonPageDeleteAPIView, CurriculumPageContentListAPIView, \
     CurriculumPageContentCreateAPIView, CurriculumPageContentUpdateAPIView, CurriculumPageContentDeleteAPIView
+from apps.backoffice.views.dashboard import SchoolDashboardAPIView
 from apps.backoffice.views.edutainment import  \
     FeedCategoryDetailAPIView, DIYMaterialsAPIView, DIYStepsAPIView, \
     DIYContentUpdateAPIView, FeedCategoryCreateAPIView, FeedCategoryListAPIView, FeedCreateAPIView, FeedListAPIView, \
@@ -885,7 +886,7 @@ urlpatterns = [
 
     path("teacher/dashboard", TeacherDashboardAPIView.as_view(),),
 
-    path("school/dashboard",DashboardAPIView.as_view(),),
+    path("school/dashboard",SchoolDashboardAPIView.as_view(),),
 
 
 

@@ -594,7 +594,7 @@ def build_insights(school, today, weekly_attendance, fee_overview):
 # =====================================================================
 #  MAIN DASHBOARD
 # =====================================================================
-class DashboardAPIView(APIView):
+class SchoolDashboardAPIView(APIView):
     permission_classes = [IsAuthenticated, HasPermission]
     required_permission = "dashboard.view"
 
