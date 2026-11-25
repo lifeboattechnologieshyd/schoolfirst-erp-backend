@@ -324,14 +324,37 @@ class GenerateAssessmentAPIView(APIView):
         # -----------------------------------------
         # Required fields
         # -----------------------------------------
-        if not kid_id or not curriculum_id or not grade_id or not subject_id:
+        required_fields = {
+            "kid_id": kid_id,
+            "curriculum_id": curriculum_id,
+            "grade_id": grade_id,
+            "subject_id": subject_id,
+            "lesson_ids": lesson_ids,
+        }
+
+        missing_fields = [
+            field
+            for field, value in required_fields.items()
+            if value is None
+               or (isinstance(value, str) and not value.strip())
+               or (isinstance(value, list) and not value)
+        ]
+
+        if missing_fields:
             return CustomResponse.errorResponse(
-                description="kid_id, curriculum_id, grade_id, subject_id and lesson_ids are required."
+                description=(
+                    f"{missing_fields[0]} is required."
+                    if len(missing_fields) == 1
+                    else f"{', '.join(missing_fields)} are required."
+                ),
+                data={
+                    "missing_fields": missing_fields
+                },
             )
 
-        if not isinstance(lesson_ids, list) or not lesson_ids:
+        if not isinstance(lesson_ids, list):
             return CustomResponse.errorResponse(
-                description="Select at least one lesson."
+                description="lesson_ids must be a list."
             )
 
         lesson_uuids = []
