@@ -2839,7 +2839,7 @@ class DownloadAssessmentQuestionTemplateAPIView(APIView):
                 ].width = min(max_length + 5, 65)
 
             # --------------------------------------------------
-            # SAVE EXCEL FILE
+            # SAVE EXCEL FILE TO S3
             # --------------------------------------------------
             excel_file = BytesIO()
             workbook.save(excel_file)
@@ -2847,15 +2847,24 @@ class DownloadAssessmentQuestionTemplateAPIView(APIView):
 
             file_name = QUESTION_TEMPLATE_PATH
 
+            # Delete existing file if required
             if default_storage.exists(file_name):
                 default_storage.delete(file_name)
 
-            file_path = default_storage.save(
-                file_name,
-                ContentFile(excel_file.getvalue())
+            # Prepare Excel binary
+            excel_content = ContentFile(
+                excel_file.getvalue(),
+                name="assessment_question_template.xlsx"
             )
 
-            file_url = settings.MEDIA_URL + file_path
+            # Upload to S3
+            file_path = default_storage.save(
+                file_name,
+                excel_content
+            )
+
+            # Get actual S3 URL
+            file_url = default_storage.url(file_path)
 
         except Exception as e:
 
@@ -2884,6 +2893,7 @@ class DownloadAssessmentQuestionTemplateAPIView(APIView):
             data={
                 "file_url": file_url,
                 "file_path": file_path,
+                "file_name": "assessment_question_template.xlsx"
             },
         )
 
