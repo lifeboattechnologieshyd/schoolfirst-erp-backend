@@ -24,6 +24,7 @@ from apps.school.models import School
 from apps.school.models.school import AcademicYear, Grade, Section, Student, StudentDocument, Staff, StaffDocument, \
     Branch, Subject, SchoolDocumentType, SchoolDocument, SubjectGrade
 from apps.timetable.models import TimetableEntry, Timetable, TimetableSubstitution
+from apps.vocabbee.models import Grades
 from shared.enums.roles import RolesEnum
 from shared.helpers.rbac import check_permission
 from shared.helpers.student import get_or_create_parent
@@ -842,6 +843,27 @@ class CreateGradeAPIView(APIView):
                 return CustomResponse.errorResponse(
                     description="Branch not found."
                 )
+        standard_grade_id = request.data.get("standard_grade_id")
+        standard_grade = None
+
+        if standard_grade_id:
+            standard_grade = Grades.objects.filter(
+                id=standard_grade_id,
+                is_active=True,
+                is_deleted=False,
+            ).first()
+
+            if standard_grade is None:
+                audit_logger.warning(
+                    "grade_create_failed",
+                    performed_by=str(request.user.id),
+                    school_id=str(school.id),
+                    standard_grade_id=str(standard_grade_id),
+                    reason="standard_grade_not_found",
+                )
+                return CustomResponse.errorResponse(
+                    description="Standard grade not found."
+                )
 
         grade_name = request.data.get("name")
 
@@ -862,6 +884,7 @@ class CreateGradeAPIView(APIView):
             branch=branch,
             name=grade_name,
             display_order=request.data.get("display_order"),
+            standard_grade=standard_grade,
             status=request.data.get("status", Grade.Status.ACTIVE),
         )
 
@@ -873,6 +896,8 @@ class CreateGradeAPIView(APIView):
             academic_year_id=str(academic_year.id),
             grade_name=grade.name,
             status=grade.status,
+            standard_grade_id=str(standard_grade.id) if standard_grade else None,
+
         )
 
         return CustomResponse.successResponse(
@@ -914,6 +939,8 @@ class GradeListAPIView(APIView):
             "school",
             "academic_year",
             "branch",
+            "standard_grade",
+
         ).filter(
             school=school,
         )
@@ -965,6 +992,14 @@ class GradeListAPIView(APIView):
                 "academic_year": grade.academic_year.name,
                 "name": grade.name,
                 "display_order": grade.display_order,
+                "standard_grade": (
+                    {
+                        "id": str(grade.standard_grade.id),
+                        "name": grade.standard_grade.name,
+                    }
+                    if grade.standard_grade
+                    else None
+                ),
                 "status": grade.status,
             }
             for grade in grades
@@ -1034,6 +1069,7 @@ class UpdateGradeAPIView(APIView):
         old_academic_year_id = grade.academic_year_id
         old_display_order = grade.display_order
         old_status = grade.status
+        old_standard_grade_id = grade.standard_grade_id
 
         # --------------------------------------------------
         # Academic Year
@@ -1103,6 +1139,41 @@ class UpdateGradeAPIView(APIView):
 
             else:
                 branch = None
+        # --------------------------------------------------
+        # Standard Grade (Family Zone mapping)
+        # --------------------------------------------------
+
+        standard_grade = grade.standard_grade
+
+        if "standard_grade_id" in request.data:
+
+            standard_grade_id = request.data.get("standard_grade_id")
+
+            if standard_grade_id:
+
+                standard_grade = Grades.objects.filter(
+                    id=standard_grade_id,
+                    is_active=True,
+                    is_deleted=False,
+                ).first()
+
+                if standard_grade is None:
+
+                    audit_logger.warning(
+                        "grade_update_failed",
+                        performed_by=str(request.user.id),
+                        grade_id=str(grade_id),
+                        school_id=str(school.id),
+                        standard_grade_id=str(standard_grade_id),
+                        reason="standard_grade_not_found",
+                    )
+
+                    return CustomResponse.errorResponse(
+                        description="Standard grade not found."
+                    )
+
+            else:
+                standard_grade = None
 
         # --------------------------------------------------
         # Grade Name
@@ -1159,6 +1230,7 @@ class UpdateGradeAPIView(APIView):
         grade.name = grade_name
         grade.branch = branch
         grade.academic_year = academic_year
+        grade.standard_grade = standard_grade
 
         if "display_order" in request.data:
             grade.display_order = request.data.get(
@@ -1212,6 +1284,8 @@ class UpdateGradeAPIView(APIView):
 
             old_status=old_status,
             new_status=grade.status,
+            old_standard_grade_id=str(old_standard_grade_id) if old_standard_grade_id else None,
+            new_standard_grade_id=str(grade.standard_grade_id) if grade.standard_grade_id else None,
         )
 
         return CustomResponse.successResponse(data={},

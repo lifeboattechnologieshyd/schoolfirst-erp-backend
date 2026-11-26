@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "8d3397e6-17fa-4574-963b-71c1ca3ecb8e",
+    "_postman_id": "1043ff18-e038-4f60-80cb-6f9df39ba7fe",
     "name": "SchoolFirst ERP - All APIs",
     "description": "Generated from the project's urls.py and views (every endpoint, method, query and body field).\n1. Fill baseUrl, mobile/otp (admin or staff), parentMobile/parentOtp (parent).\n2. Run 'Auth & Profile > Admin verify OTP' -> saves token (backoffice APIs).\n3. Run 'Parent verify OTP' -> saves parentToken, kidId, schoolId (app APIs).\n4. Optional query params are included but disabled; enable what you need.\nExample values are placeholders - replace with real data.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -15762,7 +15762,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"branch_id\": \"{{branchId}}\",\n  \"name\": \"Sample name\",\n  \"display_order\": 1,\n  \"status\": \"ACTIVE\",\n  \"academic_year_id\": \"{{academicYearId}}\"\n}",
+              "raw": "{\n  \"branch_id\": \"{{branchId}}\",\n  \"standard_grade_id\": \"{{standardGradeId}}\",\n  \"name\": \"Sample name\",\n  \"display_order\": 1,\n  \"status\": \"ACTIVE\",\n  \"academic_year_id\": \"{{academicYearId}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -15837,7 +15837,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"academic_year_id\": \"{{academicYearId}}\",\n  \"branch_id\": \"{{branchId}}\",\n  \"name\": \"Sample name\",\n  \"display_order\": 1,\n  \"status\": \"ACTIVE\"\n}",
+              "raw": "{\n  \"academic_year_id\": \"{{academicYearId}}\",\n  \"branch_id\": \"{{branchId}}\",\n  \"standard_grade_id\": \"{{standardGradeId}}\",\n  \"name\": \"Sample name\",\n  \"display_order\": 1,\n  \"status\": \"ACTIVE\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -21115,6 +21115,11 @@
     },
     {
       "key": "documentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "standardGradeId",
       "value": "",
       "type": "string"
     },

@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
-
+from shared.helpers.family_zone import get_family_zone_grade
 from apps.assessment.models import (
     Assessment,
     AssessmentAttempt,
@@ -48,21 +48,27 @@ def parse_uuid(value):
         return None
 
 
-def get_kid(kid_id):
+def get_kid(kid_id, user):
     """
-    Family Zone kid = school Student.
+    Family Zone kid = school Student linked to this parent by mobile.
     The app passes the student id from verify OTP as kid_id.
     """
     kid_uuid = parse_uuid(kid_id)
 
-    if kid_uuid is None:
+    if kid_uuid is None or not user.mobile:
         return None
 
+    mobile = str(user.mobile)
+
     return Student.objects.filter(
+        Q(father_mobile=mobile)
+        | Q(mother_mobile=mobile)
+        | Q(guardian_mobile=mobile),
         id=kid_uuid,
         status=Student.Status.ACTIVE,
     ).select_related(
         "grade",
+        "grade__standard_grade",
     ).first()
 
 
@@ -383,7 +389,7 @@ def get_or_start_attempt(kid, assessment):
 
 # =====================================================================
 #  A5 - GENERATE TEST FROM SELECTED LESSONS
-#  Payload: kid_id, curriculum_id, grade_id, subject_id, lesson_ids
+#  Payload: kid_id, curriculum_id, subject_id, lesson_ids, grade_id (optional, defaults to student's mapped grade)
 #  Reuses a matching generated test the kid has not completed,
 #  otherwise creates a new test + question mappings from the bank.
 # =====================================================================
@@ -402,7 +408,6 @@ class GenerateAssessmentAPIView(APIView):
             "app_assessment_generate_called",
             kid_id=str(kid_id),
             curriculum_id=str(curriculum_id),
-            grade_id=str(grade_id),
             subject_id=str(subject_id),
             lesson_ids=lesson_ids,
             requested_by=str(request.user.id),
@@ -414,7 +419,6 @@ class GenerateAssessmentAPIView(APIView):
         required_fields = {
             "kid_id": kid_id,
             "curriculum_id": curriculum_id,
-            "grade_id": grade_id,
             "subject_id": subject_id,
             "lesson_ids": lesson_ids,
         }
@@ -470,15 +474,15 @@ class GenerateAssessmentAPIView(APIView):
             )
 
         curriculum_uuid = parse_uuid(curriculum_id)
-        grade_uuid = parse_uuid(grade_id)
+        grade_uuid = parse_uuid(grade_id) if grade_id else None
         subject_uuid = parse_uuid(subject_id)
 
-        if not curriculum_uuid or not grade_uuid or not subject_uuid:
+        if not curriculum_uuid or not subject_uuid or (grade_id and not grade_uuid):
             return CustomResponse.errorResponse(
                 description="Invalid curriculum, grade, or subject ID."
             )
 
-        kid = get_kid(kid_id)
+        kid = get_kid(kid_id, request.user)
 
         if kid is None:
             return CustomResponse.errorResponse(
@@ -500,15 +504,22 @@ class GenerateAssessmentAPIView(APIView):
                     description="Curriculum not found."
                 )
 
-            grade = Grades.objects.filter(
-                id=grade_uuid,
-                is_active=True,
-                is_deleted=False,
-            ).first()
+            if grade_uuid:
+                grade = Grades.objects.filter(
+                    id=grade_uuid,
+                    is_active=True,
+                    is_deleted=False,
+                ).first()
+            else:
+                grade = get_family_zone_grade(kid)
 
             if grade is None:
                 return CustomResponse.errorResponse(
-                    description="Grade not found."
+                    description=(
+                        "Grade not found."
+                        if grade_uuid
+                        else "Grade is not mapped for Family Zone. Please contact school admin."
+                    )
                 )
 
             subject = CurriculumSubject.objects.filter(
@@ -779,7 +790,7 @@ class SubmitAssessmentAPIView(APIView):
                 "hint_used": hint_used,
             }
 
-        kid = get_kid(kid_id)
+        kid = get_kid(kid_id, request.user)
 
         if kid is None:
             return CustomResponse.errorResponse(
@@ -956,7 +967,7 @@ class AssessmentAttemptLISTAPIView(APIView):
                 },
             )
 
-        kid = get_kid(kid_id)
+        kid = get_kid(kid_id, request.user)
 
         if kid is None:
             return CustomResponse.errorResponse(
@@ -1052,7 +1063,7 @@ class AssessmentAttemptDetailAPIView(APIView):
                 },
             )
 
-        kid = get_kid(kid_id)
+        kid = get_kid(kid_id, request.user)
 
         if kid is None:
             return CustomResponse.errorResponse(
