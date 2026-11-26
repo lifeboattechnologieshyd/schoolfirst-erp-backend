@@ -3,6 +3,7 @@ from rest_framework.views import APIView
 
 from apps.curriculum.models import Curriculum, CurriculumCategory, CurriculumSubject, CurriculumLesson, \
     CurriculumLessonPage, CurriculumPageContent
+from apps.vocabbee.models import Grades
 from shared.mixins import CustomResponse
 from shared.permissions import HasPermission
 from shared.utils.logger import application_logger
@@ -74,14 +75,18 @@ class CurriculumListAPIView(APIView):
     def get(self, request):
         try:
             grade_id = request.query_params.get("grade_id")
+            search = request.query_params.get("search")
 
             queryset = Curriculum.objects.filter(
-                grade_id=grade_id,
                 is_active=True,
                 is_deleted=False
-            ).select_related("grade").order_by("serial_number")
+            ).prefetch_related("grades").order_by("serial_number")
 
-            search = request.query_params.get("search")
+            if grade_id:
+                queryset = queryset.filter(
+                    grades__id=grade_id,
+                    grades__is_active=True
+                ).distinct()
 
             if search:
                 queryset = queryset.filter(
@@ -92,10 +97,20 @@ class CurriculumListAPIView(APIView):
             data = []
 
             for obj in queryset:
+                grade_data = []
+
+                for grade in obj.grades.filter(is_active=True):
+                    grade_data.append({
+                        "id": str(grade.id),
+                        "name": grade.name,
+                        "sort_order": grade.sort_order
+                    })
+
                 data.append({
                     "id": str(obj.id),
                     "title": obj.title,
                     "description": obj.description,
+                    "grades": grade_data,
                     "thumbnail_image": obj.thumbnail_image,
                     "serial_number": obj.serial_number,
                     "is_active": obj.is_active,
@@ -104,7 +119,7 @@ class CurriculumListAPIView(APIView):
 
             return CustomResponse.successResponse(
                 data=data,
-                total=queryset.count(),
+                total=len(data),
                 description="Curriculums fetched successfully."
             )
 
@@ -117,7 +132,6 @@ class CurriculumListAPIView(APIView):
             )
 
 
-
 class CurriculumCreateAPIView(APIView):
 
     permission_classes = [IsAuthenticated, HasPermission]
@@ -128,26 +142,55 @@ class CurriculumCreateAPIView(APIView):
             data = request.data
 
             error = validate_required_fields(
-                data, ["title"]
+                data, ["title", "grade_ids"]
             )
             if error:
                 return CustomResponse.errorResponse(
                     description=error
                 )
 
+            grade_ids = data.get("grade_ids")
+
+            if not isinstance(grade_ids, list) or not grade_ids:
+                return CustomResponse.errorResponse(
+                    description="Please provide at least one grade."
+                )
+
+            grade_ids = list(set(grade_ids))
+
+            grades = Grades.objects.filter(
+                id__in=grade_ids,
+                is_active=True
+            )
+
+            if grades.count() != len(grade_ids):
+                return CustomResponse.errorResponse(
+                    description="One or more invalid grade IDs."
+                )
+
             curriculum = Curriculum.objects.create(
                 title=data.get("title"),
                 description=data.get("description"),
-                grade_id=data.get("grade_id"),
                 thumbnail_image=data.get("thumbnail_image"),
                 serial_number=data.get("serial_number", 1),
                 is_active=data.get("is_active", True)
             )
 
+            curriculum.grades.set(grades)
+
+            grade_data = [
+                {
+                    "id": str(grade.id),
+                    "name": grade.name
+                }
+                for grade in grades
+            ]
+
             return CustomResponse.successResponse(
                 data={
                     "id": str(curriculum.id),
                     "title": curriculum.title,
+                    "grades": grade_data
                 },
                 description="Curriculum created successfully."
             )
@@ -159,8 +202,6 @@ class CurriculumCreateAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Unable to create curriculum."
             )
-
-
 
 class CurriculumUpdateAPIView(APIView):
 
@@ -178,29 +219,64 @@ class CurriculumUpdateAPIView(APIView):
                     description="Curriculum not found."
                 )
 
+            data = request.data
+
             allowed_fields = [
                 "title",
                 "description",
                 "thumbnail_image",
                 "serial_number",
-                "is_active",
-                "grade_id",
+                "is_active"
             ]
 
             for field in allowed_fields:
-                if field in request.data:
+                if field in data:
                     setattr(
                         curriculum,
                         field,
-                        request.data.get(field)
+                        data.get(field)
                     )
 
+            if "grade_ids" in data:
+
+                grade_ids = data.get("grade_ids")
+
+                if not isinstance(grade_ids, list):
+                    return CustomResponse.errorResponse(
+                        description="Grade IDs must be a list."
+                    )
+
+                grade_ids = list(set(grade_ids))
+
+                grades = Grades.objects.filter(
+                    id__in=grade_ids,
+                    is_active=True
+                )
+
+                if grades.count() != len(grade_ids):
+                    return CustomResponse.errorResponse(
+                        description="One or more invalid grade IDs."
+                    )
+
+                curriculum.grades.set(grades)
+
             curriculum.save()
+
+            grade_data = [
+                {
+                    "id": str(grade.id),
+                    "name": grade.name
+                }
+                for grade in curriculum.grades.filter(
+                    is_active=True
+                )
+            ]
 
             return CustomResponse.successResponse(
                 data={
                     "id": str(curriculum.id),
                     "title": curriculum.title,
+                    "grades": grade_data
                 },
                 description="Curriculum updated successfully."
             )
@@ -212,8 +288,6 @@ class CurriculumUpdateAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Unable to update curriculum."
             )
-
-
 
 class CurriculumDeleteAPIView(APIView):
 
@@ -459,14 +533,23 @@ class CurriculumSubjectListAPIView(APIView):
         try:
             queryset = CurriculumSubject.objects.filter(
                 is_deleted=False
-            ).select_related("category", "category__curriculum")
+            ).select_related(
+                "curriculum",
+                "grade"
+            )
 
-            category_id = request.query_params.get("category_id")
+            curriculum_id = request.query_params.get("curriculum_id")
+            grade_id = request.query_params.get("grade_id")
             search = request.query_params.get("search")
 
-            if category_id:
+            if curriculum_id:
                 queryset = queryset.filter(
-                    category_id=category_id
+                    curriculum_id=curriculum_id
+                )
+
+            if grade_id:
+                queryset = queryset.filter(
+                    grade_id=grade_id
                 )
 
             if search:
@@ -479,24 +562,24 @@ class CurriculumSubjectListAPIView(APIView):
             data = [
                 {
                     "id": str(obj.id),
-                    "category_id": str(obj.category_id),
-                    "category": obj.category.name,
-                    "curriculum_id": str(
-                        obj.category.curriculum_id
-                    ),
+                    "curriculum_id": str(obj.curriculum_id),
+                    "curriculum": obj.curriculum.title,
+                    "grade_id": str(obj.grade_id),
+                    "grade": obj.grade.name,
                     "name": obj.name,
                     "description": obj.description,
                     "thumbnail_image": obj.thumbnail_image,
                     "total_lessons": obj.total_lessons,
                     "serial_number": obj.serial_number,
                     "is_active": obj.is_active,
+                    "created_at": obj.created_at,
                 }
                 for obj in queryset
             ]
 
             return CustomResponse.successResponse(
                 data=data,
-                total=queryset.count(),
+                total=len(data),
                 description="Subjects fetched successfully."
             )
 
@@ -519,24 +602,46 @@ class CurriculumSubjectCreateAPIView(APIView):
             data = request.data
 
             error = validate_required_fields(
-                data, ["category_id", "name"]
+                data,
+                ["curriculum_id", "grade_id", "name"]
             )
+
             if error:
                 return CustomResponse.errorResponse(
                     description=error
                 )
 
-            category = validate_parent(
-                CurriculumCategory, data.get("category_id")
+            curriculum = validate_parent(
+                Curriculum,
+                data.get("curriculum_id")
             )
 
-            if not category:
+            if not curriculum:
                 return CustomResponse.errorResponse(
-                    description="Category not found."
+                    description="Curriculum not found."
+                )
+
+            grade = Grades.objects.filter(
+                id=data.get("grade_id"),
+                is_active=True
+            ).first()
+
+            if not grade:
+                return CustomResponse.errorResponse(
+                    description="Grade not found."
+                )
+
+            if not curriculum.grades.filter(
+                id=grade.id,
+                is_active=True
+            ).exists():
+                return CustomResponse.errorResponse(
+                    description="Selected grade is not assigned to this curriculum."
                 )
 
             subject = CurriculumSubject.objects.create(
-                category=category,
+                curriculum=curriculum,
+                grade=grade,
                 name=data.get("name"),
                 description=data.get("description"),
                 thumbnail_image=data.get("thumbnail_image"),
@@ -547,7 +652,9 @@ class CurriculumSubjectCreateAPIView(APIView):
             return CustomResponse.successResponse(
                 data={
                     "id": str(subject.id),
-                    "category_id": str(category.id),
+                    "curriculum_id": str(curriculum.id),
+                    "grade_id": str(grade.id),
+                    "grade": grade.name,
                     "name": subject.name,
                 },
                 description="Subject created successfully."
@@ -562,7 +669,6 @@ class CurriculumSubjectCreateAPIView(APIView):
             )
 
 
-
 class CurriculumSubjectUpdateAPIView(APIView):
 
     permission_classes = [IsAuthenticated, HasPermission]
@@ -571,7 +677,8 @@ class CurriculumSubjectUpdateAPIView(APIView):
     def put(self, request, subject_id):
         try:
             subject = get_active_record(
-                CurriculumSubject, subject_id
+                CurriculumSubject,
+                subject_id
             )
 
             if not subject:
@@ -581,15 +688,41 @@ class CurriculumSubjectUpdateAPIView(APIView):
 
             data = request.data
 
-            if "category_id" in data:
-                category = validate_parent(
-                    CurriculumCategory, data.get("category_id")
+            curriculum = subject.curriculum
+            grade = subject.grade
+
+            if "curriculum_id" in data:
+                curriculum = validate_parent(
+                    Curriculum,
+                    data.get("curriculum_id")
                 )
-                if not category:
+
+                if not curriculum:
                     return CustomResponse.errorResponse(
-                        description="Category not found."
+                        description="Curriculum not found."
                     )
-                subject.category = category
+
+            if "grade_id" in data:
+                grade = Grades.objects.filter(
+                    id=data.get("grade_id"),
+                    is_active=True
+                ).first()
+
+                if not grade:
+                    return CustomResponse.errorResponse(
+                        description="Grade not found."
+                    )
+
+            if not curriculum.grades.filter(
+                id=grade.id,
+                is_active=True
+            ).exists():
+                return CustomResponse.errorResponse(
+                    description="Selected grade is not assigned to this curriculum."
+                )
+
+            subject.curriculum = curriculum
+            subject.grade = grade
 
             for field in [
                 "name",
@@ -599,13 +732,20 @@ class CurriculumSubjectUpdateAPIView(APIView):
                 "is_active",
             ]:
                 if field in data:
-                    setattr(subject, field, data.get(field))
+                    setattr(
+                        subject,
+                        field,
+                        data.get(field)
+                    )
 
             subject.save()
 
             return CustomResponse.successResponse(
                 data={
                     "id": str(subject.id),
+                    "curriculum_id": str(subject.curriculum_id),
+                    "grade_id": str(subject.grade_id),
+                    "grade": subject.grade.name,
                     "name": subject.name,
                 },
                 description="Subject updated successfully."
@@ -618,7 +758,6 @@ class CurriculumSubjectUpdateAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Unable to update subject."
             )
-
 
 
 class CurriculumSubjectDeleteAPIView(APIView):
@@ -663,9 +802,14 @@ class CurriculumLessonListAPIView(APIView):
         try:
             queryset = CurriculumLesson.objects.filter(
                 is_deleted=False
-            ).select_related("subject")
+            ).select_related(
+                "subject",
+                "subject__curriculum",
+                "grade"
+            )
 
             subject_id = request.query_params.get("subject_id")
+            grade_id = request.query_params.get("grade_id")
             status = request.query_params.get("status")
             search = request.query_params.get("search")
 
@@ -674,36 +818,49 @@ class CurriculumLessonListAPIView(APIView):
                     subject_id=subject_id
                 )
 
+            if grade_id:
+                queryset = queryset.filter(
+                    grade_id=grade_id
+                )
+
             if status:
-                queryset = queryset.filter(status=status)
+                queryset = queryset.filter(
+                    status=status
+                )
 
             if search:
                 queryset = queryset.filter(
                     title__icontains=search
                 )
 
+            total = queryset.count()
+
             queryset = queryset.order_by("serial_number")
 
             data = [
                 {
-                    "id": str(obj.id),
-                    "subject_id": str(obj.subject_id),
-                    "subject": obj.subject.name,
-                    "title": obj.title,
-                    "description": obj.description,
-                    "thumbnail_image": obj.thumbnail_image,
-                    "estimated_duration": obj.estimated_duration,
-                    "total_pages": obj.total_pages,
-                    "serial_number": obj.serial_number,
-                    "status": obj.status,
-                    "is_active": obj.is_active,
+                    "id": str(lesson.id),
+                    "subject_id": str(lesson.subject_id),
+                    "subject": lesson.subject.name,
+                    "grade_id": str(lesson.grade_id),
+                    "grade": lesson.grade.name,
+                    "curriculum_name":lesson.subject.curriculum.title,
+                    "title": lesson.title,
+                    "description": lesson.description,
+                    "thumbnail_image": lesson.thumbnail_image,
+                    "estimated_duration": lesson.estimated_duration,
+                    "total_pages": lesson.total_pages,
+                    "serial_number": lesson.serial_number,
+                    "status": lesson.status,
+                    "is_active": lesson.is_active,
+                    "created_at":lesson.created_at,
                 }
-                for obj in queryset
+                for lesson in queryset
             ]
 
             return CustomResponse.successResponse(
                 data=data,
-                total=queryset.count(),
+                total=total,
                 description="Lessons fetched successfully."
             )
 
@@ -726,15 +883,18 @@ class CurriculumLessonCreateAPIView(APIView):
             data = request.data
 
             error = validate_required_fields(
-                data, ["subject_id", "title"]
+                data,
+                ["subject_id", "grade_id", "title"]
             )
+
             if error:
                 return CustomResponse.errorResponse(
                     description=error
                 )
 
             subject = validate_parent(
-                CurriculumSubject, data.get("subject_id")
+                CurriculumSubject,
+                data.get("subject_id")
             )
 
             if not subject:
@@ -742,25 +902,52 @@ class CurriculumLessonCreateAPIView(APIView):
                     description="Subject not found."
                 )
 
+            grade = validate_parent(
+                Grades,
+                data.get("grade_id")
+            )
+
+            if not grade:
+                return CustomResponse.errorResponse(
+                    description="Grade not found."
+                )
+
             lesson = CurriculumLesson.objects.create(
                 subject=subject,
+                grade=grade,
                 title=data.get("title"),
                 description=data.get("description"),
                 thumbnail_image=data.get("thumbnail_image"),
-                estimated_duration=data.get(
-                    "estimated_duration", 0
-                ),
+                estimated_duration=data.get("estimated_duration", 0),
                 total_pages=0,
                 serial_number=data.get("serial_number", 1),
                 status=data.get("status", "DRAFT"),
                 is_active=data.get("is_active", True)
             )
 
+            # Update total lessons count
+            subject.total_lessons = subject.lessons.filter(
+                is_deleted=False
+            ).count()
+
+            subject.save(update_fields=["total_lessons"])
+
             return CustomResponse.successResponse(
                 data={
                     "id": str(lesson.id),
                     "subject_id": str(subject.id),
+                    "subject": subject.name,
+                    "grade_id": str(grade.id),
+                    "grade": grade.name,
                     "title": lesson.title,
+                    "description": lesson.description,
+                    "thumbnail_image": lesson.thumbnail_image,
+                    "estimated_duration": lesson.estimated_duration,
+                    "total_pages": lesson.total_pages,
+                    "serial_number": lesson.serial_number,
+                    "status": lesson.status,
+                    "is_active": lesson.is_active,
+                    "total_lessons": subject.total_lessons,
                 },
                 description="Lesson created successfully."
             )
@@ -773,8 +960,6 @@ class CurriculumLessonCreateAPIView(APIView):
                 description="Unable to create lesson."
             )
 
-
-
 class CurriculumLessonUpdateAPIView(APIView):
 
     permission_classes = [IsAuthenticated, HasPermission]
@@ -783,7 +968,8 @@ class CurriculumLessonUpdateAPIView(APIView):
     def put(self, request, lesson_id):
         try:
             lesson = get_active_record(
-                CurriculumLesson, lesson_id
+                CurriculumLesson,
+                lesson_id
             )
 
             if not lesson:
@@ -795,13 +981,29 @@ class CurriculumLessonUpdateAPIView(APIView):
 
             if "subject_id" in data:
                 subject = validate_parent(
-                    CurriculumSubject, data.get("subject_id")
+                    CurriculumSubject,
+                    data.get("subject_id")
                 )
+
                 if not subject:
                     return CustomResponse.errorResponse(
                         description="Subject not found."
                     )
+
                 lesson.subject = subject
+
+            if "grade_id" in data:
+                grade = validate_parent(
+                    Grades,
+                    data.get("grade_id")
+                )
+
+                if not grade:
+                    return CustomResponse.errorResponse(
+                        description="Grade not found."
+                    )
+
+                lesson.grade = grade
 
             allowed_fields = [
                 "title",
@@ -815,15 +1017,29 @@ class CurriculumLessonUpdateAPIView(APIView):
 
             for field in allowed_fields:
                 if field in data:
-                    setattr(lesson, field, data.get(field))
+                    setattr(
+                        lesson,
+                        field,
+                        data.get(field)
+                    )
 
             lesson.save()
 
             return CustomResponse.successResponse(
                 data={
                     "id": str(lesson.id),
+                    "subject_id": str(lesson.subject_id),
+                    "subject": lesson.subject.name,
+                    "grade_id": str(lesson.grade_id),
+                    "grade": lesson.grade.name,
                     "title": lesson.title,
+                    "description": lesson.description,
+                    "thumbnail_image": lesson.thumbnail_image,
+                    "estimated_duration": lesson.estimated_duration,
+                    "total_pages": lesson.total_pages,
+                    "serial_number": lesson.serial_number,
                     "status": lesson.status,
+                    "is_active": lesson.is_active,
                 },
                 description="Lesson updated successfully."
             )
@@ -835,8 +1051,6 @@ class CurriculumLessonUpdateAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="Unable to update lesson."
             )
-
-
 
 class CurriculumLessonDeleteAPIView(APIView):
 

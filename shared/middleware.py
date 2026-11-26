@@ -82,6 +82,7 @@ class SchoolMiddleware:
             "/vocabbee",
             "/backoffice/curriculum",
             "/curriculum/curriculum",
+            "/backoffice/assessment",
 
 
         )

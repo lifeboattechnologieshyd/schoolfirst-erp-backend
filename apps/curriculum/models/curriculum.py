@@ -19,10 +19,11 @@ class Curriculum(AuditModel):
         null=True,
         blank=True
     )
-    grade = models.ForeignKey(
+
+    grades = models.ManyToManyField(
         "vocabbee.Grades",
-        on_delete=models.PROTECT,
-        related_name="curriculums"
+        related_name="curriculums",
+        blank=True
     )
 
     thumbnail_image = models.CharField(
@@ -34,7 +35,6 @@ class Curriculum(AuditModel):
     serial_number = models.PositiveIntegerField(default=1)
 
     is_active = models.BooleanField(default=True)
-    is_deleted = models.BooleanField(default=False)
 
     class Meta:
         db_table = "curriculum"
@@ -60,7 +60,6 @@ class CurriculumLevel(AuditModel):
     serial_number = models.PositiveIntegerField(default=1)
 
     is_active = models.BooleanField(default=True)
-    is_deleted = models.BooleanField(default=False)
 
     class Meta:
         db_table = "curriculum_levels"
@@ -97,7 +96,6 @@ class CurriculumCategory(AuditModel):
     serial_number = models.PositiveIntegerField(default=1)
 
     is_active = models.BooleanField(default=True)
-    is_deleted = models.BooleanField(default=False)
 
     class Meta:
         db_table = "curriculum_categories"
@@ -112,10 +110,16 @@ class CurriculumSubject(AuditModel):
         editable=False
     )
 
-    category = models.ForeignKey(
-        CurriculumCategory,
+    curriculum = models.ForeignKey(
+        Curriculum,
         on_delete=models.CASCADE,
         related_name="subjects"
+    )
+
+    grade = models.ForeignKey(
+        "vocabbee.Grades",
+        on_delete=models.PROTECT,
+        related_name="curriculum_subjects"
     )
 
     name = models.CharField(max_length=150)
@@ -136,14 +140,10 @@ class CurriculumSubject(AuditModel):
     serial_number = models.PositiveIntegerField(default=1)
 
     is_active = models.BooleanField(default=True)
-    is_deleted = models.BooleanField(default=False)
 
     class Meta:
         db_table = "curriculum_subjects"
         ordering = ["serial_number"]
-
-
-
 
 
 class CurriculumLesson(AuditModel):
@@ -163,6 +163,12 @@ class CurriculumLesson(AuditModel):
         CurriculumSubject,
         on_delete=models.CASCADE,
         related_name="lessons"
+    )
+
+    grade = models.ForeignKey(
+        "vocabbee.Grades",
+        on_delete=models.PROTECT,
+        related_name="curriculum_lessons"
     )
 
     title = models.CharField(max_length=200)
@@ -194,7 +200,6 @@ class CurriculumLesson(AuditModel):
     )
 
     is_active = models.BooleanField(default=True)
-    is_deleted = models.BooleanField(default=False)
 
     class Meta:
         db_table = "curriculum_lessons"
@@ -202,7 +207,6 @@ class CurriculumLesson(AuditModel):
 
     def __str__(self):
         return self.title
-
 
 class CurriculumLessonPage(AuditModel):
 
@@ -227,7 +231,6 @@ class CurriculumLessonPage(AuditModel):
     serial_number = models.PositiveIntegerField(default=1)
 
     is_active = models.BooleanField(default=True)
-    is_deleted = models.BooleanField(default=False)
 
     class Meta:
         db_table = "curriculum_lesson_pages"
@@ -297,7 +300,6 @@ class CurriculumPageContent(AuditModel):
     serial_number = models.PositiveIntegerField(default=1)
 
     is_active = models.BooleanField(default=True)
-    is_deleted = models.BooleanField(default=False)
 
     class Meta:
         db_table = "curriculum_page_contents"

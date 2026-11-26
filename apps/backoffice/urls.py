@@ -7,7 +7,7 @@ from apps.backoffice.views.attendance import StaffAttendanceListAPIView, BulkMar
     UpdateStaffAttendanceAPIView, StaffAttendanceSummaryAPIView, StudentAttendanceListAPIView, \
     UpdateStudentAttendanceAPIView, BulkMarkStudentAttendanceAPIView, StudentLeaveListAPIView, StaffLeaveListAPIView, \
     StaffLeaveRequestAPIView, StudentLeaveReviewAPIView, StaffLeaveReviewAPIView, StudentAttendanceSummaryAPIView, \
-    StudentAttendanceProfileAPIView
+    StudentAttendanceProfileAPIView, MarkMyStaffAttendanceAPIView
 from apps.backoffice.views.bulletin import BulletinCategoryListAPIView, BulletinCategoryCreateAPIView, \
     BulletinCategoryDeleteAPIView, BulletinCategoryUpdateAPIView, BulletinListAPIView, BulletinCreateAPIView, \
     BulletinUpdateAPIView, BulletinDeleteAPIView
@@ -25,6 +25,7 @@ from apps.backoffice.views.curriculum import CurriculumListAPIView, CurriculumCr
     CurriculumLessonDeleteAPIView, CurriculumLessonPageListAPIView, CurriculumLessonPageCreateAPIView, \
     CurriculumLessonPageUpdateAPIView, CurriculumLessonPageDeleteAPIView, CurriculumPageContentListAPIView, \
     CurriculumPageContentCreateAPIView, CurriculumPageContentUpdateAPIView, CurriculumPageContentDeleteAPIView
+from apps.backoffice.views.dashboard import SchoolDashboardAPIView, HomeworkDashboardAPIView
 from apps.backoffice.views.edutainment import  \
     FeedCategoryDetailAPIView, DIYMaterialsAPIView, DIYStepsAPIView, \
     DIYContentUpdateAPIView, FeedCategoryCreateAPIView, FeedCategoryListAPIView, FeedCreateAPIView, FeedListAPIView, \
@@ -62,6 +63,9 @@ from apps.backoffice.views.homework import CreateHomeworkAPIView, HomeworkListAP
     TeacherHomeworkSubmissionListAPIView, TeacherCheckHomeworkAPIView
 from apps.backoffice.views.leads import \
     SchoolLeadRequestOTPAPIView, SchoolLeadListAPIView, SchoolLeadVerifyOTPAPIView
+from apps.backoffice.views.messaging import TeacherInboxAPIView, TeacherConversationParentAPIView, \
+    TeacherMessageLISTAPIView, TeacherMessageSendAPIView, TeacherConversationPriorityAPIView, \
+    MyChatProfileAPIView, SaveMyChatProfileAPIView
 from apps.backoffice.views.ptm import CreateParentTeacherMeetingAPIView, ParentTeacherMeetingListAPIView, \
     UpdateParentTeacherMeetingAPIView, BulkPTMAttendanceAPIView
 from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCreateAPIView, RoleListCreateAPIView, \
@@ -78,7 +82,8 @@ from apps.backoffice.views.school import AcademicYearListAPIView, CreateAcademic
     SubjectUpdateAPIView, SchoolAPIView, SchoolUpdateAPIView, BranchAPIView, BranchLISTAPIView, BranchUpdateAPIView, \
     CreateSchoolDocumentAPIView, SchoolDocumentListAPIView, UpdateSchoolDocumentAPIView, \
     CreateSchoolDocumentTypeAPIView, SchoolDocumentTypeListAPIView, UpdateSchoolDocumentTypeAPIView, \
-    UpdateStudentAPIView, GradeSubjectAssignAPIView, BulkUploadStaffAPIView, DownloadStaffTemplateAPIView
+    UpdateStudentAPIView, GradeSubjectAssignAPIView, BulkUploadStaffAPIView, DownloadStaffTemplateAPIView, \
+    TeacherDashboardAPIView
 from apps.backoffice.views.superadmin import CreateSuperAdminAPIView, SuperAdminRequestOTPAPIView, \
     SuperAdminVerifyOTPAPIView, SchoolLeadUpdateAPIView, OrganizationListAPIView, CreateOrganizationAPIView, \
     UpdateOrganizationAPIView, SchoolListAPIView, CreateSchoolAPIView, UpdateSchoolAPIView, CreateBranchAPIView, \
@@ -102,6 +107,27 @@ from apps.backoffice.views.transport import CreateVehicleAPIView, VehicleListAPI
 from apps.backoffice.views.vocabbee import GradesList, SubjectCrud, SubjectDeleteAPIView, WordsCrud, \
     UploadWords, DashboardAPIView, TournamentCreateAPIView, TournamentDetailsAPIView, TournamentAssignGradesAPIView, \
     TournamentAvailableWordsAPIView, TournamentAssignQuestionsAPIView, TournamentCancelAPIView, TournamentPublishAPIView
+
+from apps.backoffice.views.assessment import (
+    AssessmentCreateAPIView,
+    AssessmentListAPIView,
+    AssessmentDetailAPIView,
+    AssessmentUpdateAPIView,
+    AssessmentDeleteAPIView,
+    AssessmentLessonListAPIView,
+    AssessmentLessonUpdateAPIView,
+    AssessmentQuestionAddAPIView,
+    AssessmentQuestionRemoveAPIView,
+    AssessmentQuestionReorderAPIView,
+    AssessmentPublishAPIView,
+    AssessmentStatusUpdateAPIView,
+    AssessmentQuestionBankCreateAPIView,
+    AssessmentQuestionBankListAPIView,
+    AssessmentQuestionBankDetailAPIView,
+    AssessmentQuestionBankUpdateAPIView,
+    AssessmentQuestionBankDeleteAPIView,
+    DownloadAssessmentQuestionTemplateAPIView, BulkUploadAssessmentQuestionAPIView,
+)
 from apps.fee.views.fee import CompletedStudentFeePaymentsAPIView
 
 urlpatterns = [
@@ -641,6 +667,8 @@ urlpatterns = [
 
     path("staff-attendance/create",BulkMarkStaffAttendanceAPIView.as_view(),),
 
+    path("staff-attendance/mark", MarkMyStaffAttendanceAPIView.as_view(),),
+
     path("staff-attendance",StaffAttendanceListAPIView.as_view(),),
 
     path("staff-attendance/<uuid:attendance_id>",UpdateStaffAttendanceAPIView.as_view(),),
@@ -826,6 +854,61 @@ urlpatterns = [
     path("curriculum/pages/<uuid:page_id>/contents/create", CurriculumPageContentCreateAPIView.as_view()),
     path("curriculum/contents/<uuid:content_id>/update", CurriculumPageContentUpdateAPIView.as_view()),
     path("curriculum/contents/<uuid:content_id>/delete", CurriculumPageContentDeleteAPIView.as_view()),
+
+    path("assessment/create", AssessmentCreateAPIView.as_view(),),
+    path("assessment", AssessmentListAPIView.as_view(),),
+    path("assessment/detail/<uuid:assessment_id>", AssessmentDetailAPIView.as_view(),),
+    path("assessment/<uuid:assessment_id>", AssessmentUpdateAPIView.as_view(),),
+    path("assessment/delete/<uuid:assessment_id>", AssessmentDeleteAPIView.as_view(),),
+
+    # Step 2 - Lessons
+    path("assessment/lessons", AssessmentLessonListAPIView.as_view(),),
+    path("assessment/<uuid:assessment_id>/lessons", AssessmentLessonUpdateAPIView.as_view(),),
+
+    # Step 3 - Questions
+    path("assessment/<uuid:assessment_id>/questions/add", AssessmentQuestionAddAPIView.as_view(),),
+    path("assessment/<uuid:assessment_id>/questions/reorder", AssessmentQuestionReorderAPIView.as_view(),),
+    path("assessment/<uuid:assessment_id>/questions/delete/<uuid:question_id>", AssessmentQuestionRemoveAPIView.as_view(),),
+
+    # Step 4 - Publish / status
+    path("assessment/<uuid:assessment_id>/publish", AssessmentPublishAPIView.as_view(),),
+    path("assessment/<uuid:assessment_id>/status", AssessmentStatusUpdateAPIView.as_view(),),
+
+    # Question bank + Question editor
+    path("assessment/question-bank/create", AssessmentQuestionBankCreateAPIView.as_view(),),
+    path("assessment/question-bank", AssessmentQuestionBankListAPIView.as_view(),),
+    path("assessment/question-bank/detail/<uuid:question_id>", AssessmentQuestionBankDetailAPIView.as_view(),),
+    path("assessment/question-bank/<uuid:question_id>", AssessmentQuestionBankUpdateAPIView.as_view(),),
+    path("assessment/question-bank/delete/<uuid:question_id>", AssessmentQuestionBankDeleteAPIView.as_view(),),
+
+    # Bulk upload (1 Upload -> 2 Validate -> 3 Import)
+    # path("assessment/question-bank/import/template", AssessmentQuestionImportTemplateAPIView.as_view(),),
+    # path("assessment/question-bank/import/validate", AssessmentQuestionImportValidateAPIView.as_view(),),
+    # path("assessment/question-bank/import/<uuid:import_id>", AssessmentQuestionImportAPIView.as_view(),),
+
+    path("assessment/question-bank/download-template", DownloadAssessmentQuestionTemplateAPIView.as_view(),),
+    path("assessment/question-bank/bulk-upload", BulkUploadAssessmentQuestionAPIView.as_view(),),
+
+    path("teacher/dashboard", TeacherDashboardAPIView.as_view(),),
+
+    path("dashboard/school",SchoolDashboardAPIView.as_view(),),
+
+    path("dashboard/homework", HomeworkDashboardAPIView.as_view(),),
+
+
+    path("messaging/inbox", TeacherInboxAPIView.as_view(),),
+
+    path("messaging/conversations/<uuid:conversation_id>/parent", TeacherConversationParentAPIView.as_view(),),
+
+    path("messaging/conversations/<uuid:conversation_id>/messages", TeacherMessageLISTAPIView.as_view(),),
+
+    path("messaging/conversations/<uuid:conversation_id>/messages/send", TeacherMessageSendAPIView.as_view(),),
+
+    path("messaging/conversations/<uuid:conversation_id>/priority", TeacherConversationPriorityAPIView.as_view(),),
+
+    path("messaging/profile", MyChatProfileAPIView.as_view(),),
+
+    path("messaging/profile/save", SaveMyChatProfileAPIView.as_view(),),
 
 
 
