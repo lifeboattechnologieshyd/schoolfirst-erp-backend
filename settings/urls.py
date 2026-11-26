@@ -118,6 +118,8 @@ if "apps.feels" in settings.INSTALLED_APPS:
     urlpatterns.append(path("feels/", include("apps.feels.urls")))
 if "apps.assessment" in settings.INSTALLED_APPS:
     urlpatterns.append(path("assessment/", include("apps.assessment.urls")))
+if "apps.messaging" in settings.INSTALLED_APPS:
+    urlpatterns.append(path("messaging/",include("apps.messaging.urls")))
 
 
 

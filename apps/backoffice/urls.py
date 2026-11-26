@@ -63,6 +63,9 @@ from apps.backoffice.views.homework import CreateHomeworkAPIView, HomeworkListAP
     TeacherHomeworkSubmissionListAPIView, TeacherCheckHomeworkAPIView
 from apps.backoffice.views.leads import \
     SchoolLeadRequestOTPAPIView, SchoolLeadListAPIView, SchoolLeadVerifyOTPAPIView
+from apps.backoffice.views.messaging import TeacherInboxAPIView, TeacherConversationParentAPIView, \
+    TeacherMessageLISTAPIView, TeacherMessageSendAPIView, TeacherConversationPriorityAPIView, \
+    MyChatProfileAPIView, SaveMyChatProfileAPIView
 from apps.backoffice.views.ptm import CreateParentTeacherMeetingAPIView, ParentTeacherMeetingListAPIView, \
     UpdateParentTeacherMeetingAPIView, BulkPTMAttendanceAPIView
 from apps.backoffice.views.rbac import ModuleListCreateAPIView, PermissionListCreateAPIView, RoleListCreateAPIView, \
@@ -891,6 +894,21 @@ urlpatterns = [
     path("dashboard/school",SchoolDashboardAPIView.as_view(),),
 
     path("dashboard/homework", HomeworkDashboardAPIView.as_view(),),
+
+
+    path("messaging/inbox", TeacherInboxAPIView.as_view(),),
+
+    path("messaging/conversations/<uuid:conversation_id>/parent", TeacherConversationParentAPIView.as_view(),),
+
+    path("messaging/conversations/<uuid:conversation_id>/messages", TeacherMessageLISTAPIView.as_view(),),
+
+    path("messaging/conversations/<uuid:conversation_id>/messages/send", TeacherMessageSendAPIView.as_view(),),
+
+    path("messaging/conversations/<uuid:conversation_id>/priority", TeacherConversationPriorityAPIView.as_view(),),
+
+    path("messaging/profile", MyChatProfileAPIView.as_view(),),
+
+    path("messaging/profile/save", SaveMyChatProfileAPIView.as_view(),),
 
 
 
