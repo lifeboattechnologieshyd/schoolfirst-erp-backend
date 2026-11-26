@@ -485,6 +485,14 @@ class Grade(AuditModel):
 
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE,)
 
+    standard_grade = models.ForeignKey(
+        "vocabbee.Grades",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="school_grades",
+    )
+
     class Meta:
 
         db_table = "grades"
