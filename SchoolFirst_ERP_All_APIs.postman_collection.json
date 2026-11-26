@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "1043ff18-e038-4f60-80cb-6f9df39ba7fe",
+    "_postman_id": "44619e25-3294-4987-8cf5-4e7ae29a10f5",
     "name": "SchoolFirst ERP - All APIs",
     "description": "Generated from the project's urls.py and views (every endpoint, method, query and body field).\n1. Fill baseUrl, mobile/otp (admin or staff), parentMobile/parentOtp (parent).\n2. Run 'Auth & Profile > Admin verify OTP' -> saves token (backoffice APIs).\n3. Run 'Parent verify OTP' -> saves parentToken, kidId, schoolId (app APIs).\n4. Optional query params are included but disabled; enable what you need.\nExample values are placeholders - replace with real data.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -4422,21 +4422,28 @@
               ],
               "query": [
                 {
-                  "key": "page",
-                  "value": "1",
-                  "disabled": false
-                },
-                {
                   "key": "kid_id",
                   "value": "{{kidId}}",
                   "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
                 }
               ]
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parentToken}}",
+                  "type": "string"
+                }
+              ]
             },
-            "description": "View: DailyChallengesAPIView (apps.vocabbee.views.vocabbee)\nPublic (no token).\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: DailyChallengesAPIView (apps.vocabbee.views.vocabbee)\nApp API: uses {{parentToken}}.\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {

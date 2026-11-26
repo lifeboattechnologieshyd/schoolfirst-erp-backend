@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
-from shared.helpers.family_zone import get_family_zone_grade
+from shared.helpers.family_zone import get_family_zone_grade, get_kid, parse_uuid
 from apps.assessment.models import (
     Assessment,
     AssessmentAttempt,
@@ -41,35 +41,9 @@ LEVEL_ORDER = [
 # =====================================================================
 #  HELPERS
 # =====================================================================
-def parse_uuid(value):
-    try:
-        return uuid.UUID(str(value))
-    except (ValueError, TypeError, AttributeError):
-        return None
 
 
-def get_kid(kid_id, user):
-    """
-    Family Zone kid = school Student linked to this parent by mobile.
-    The app passes the student id from verify OTP as kid_id.
-    """
-    kid_uuid = parse_uuid(kid_id)
 
-    if kid_uuid is None or not user.mobile:
-        return None
-
-    mobile = str(user.mobile)
-
-    return Student.objects.filter(
-        Q(father_mobile=mobile)
-        | Q(mother_mobile=mobile)
-        | Q(guardian_mobile=mobile),
-        id=kid_uuid,
-        status=Student.Status.ACTIVE,
-    ).select_related(
-        "grade",
-        "grade__standard_grade",
-    ).first()
 
 
 def get_kid_attempt(kid, attempt_id, for_update=False):
