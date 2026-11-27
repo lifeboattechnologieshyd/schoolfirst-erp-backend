@@ -96,6 +96,15 @@ class HasPermission(BasePermission):
             None,
         )
 
+        method_permissions = getattr(
+            view,
+            "required_permissions",
+            None,
+        )
+
+        if method_permissions:
+            required_permission = method_permissions.get(request.method)
+
         school = getattr(
             request,
             "school",
