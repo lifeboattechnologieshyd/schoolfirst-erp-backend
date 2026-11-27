@@ -25,6 +25,7 @@ from apps.school.models.school import Student, StudentDocument
 from shared.enums.roles import RolesEnum
 from shared.helpers import get_user_roles, get_user_permissions
 from shared.helpers.family_zone import get_family_zone_grade
+from shared.helpers.school_schedule import get_school_schedule
 from shared.mixins import CustomResponse
 
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -772,6 +773,7 @@ class VerifyOTPAPIView(APIView):
                         role=role,
                         school=None,
                     )
+                    schedule_cache = {}
 
                     for student in students:
 
@@ -784,6 +786,14 @@ class VerifyOTPAPIView(APIView):
                             relationship = "Guardian"
                         family_zone_grade = get_family_zone_grade(student)
 
+                        schedule_key = (
+                            student.school_id,
+                            student.branch_id,
+                            student.academic_year_id,
+                        )
+                        if schedule_key not in schedule_cache:
+                            schedule_cache[schedule_key] = get_school_schedule(*schedule_key)
+
                         student_data.append({
                             "student_id": str(student.id),
                             "admission_number": student.admission_number,
@@ -795,6 +805,11 @@ class VerifyOTPAPIView(APIView):
                             "school": {
                                 "id": str(student.school.id),
                                 "name": student.school.name,
+                                "email": student.school.email,
+                                "website": student.school.website,
+                                "longitude": student.school.longitude,
+                                "latitude": student.school.latitude,
+                                "schedule": schedule_cache[schedule_key],
                             },
                             "grade": {
                                 "id": str(student.grade.id),

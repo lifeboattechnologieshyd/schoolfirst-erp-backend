@@ -214,6 +214,21 @@ class School(AuditModel):
 
     logo = models.CharField(max_length=300,blank=True,null=True)
 
+    # ---- Location ----
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+    )
+
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+    )
+
     primary_color = models.CharField(max_length=100, null=True,blank=True,)
 
     secondary_color = models.CharField(max_length=100, null=True,blank=True,)
