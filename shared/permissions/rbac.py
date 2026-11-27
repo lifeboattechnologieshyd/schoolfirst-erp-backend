@@ -160,15 +160,28 @@ class HasPermission(BasePermission):
 
             if school is None or school_id is None:
 
-                auth_logger.warning(
-                    "permission_check_denied",
-                    user_id=str(request.user.id),
-                    required_permission=required_permission,
-                    view_name=view.__class__.__name__,
-                    reason="school_context_not_found",
+                result = required_permission in get_global_permissions(
+                    request.user
                 )
 
-                return False
+                if result:
+                    auth_logger.info(
+                        "permission_check_allowed",
+                        user_id=str(request.user.id),
+                        required_permission=required_permission,
+                        view_name=view.__class__.__name__,
+                        reason="global_permission",
+                    )
+                else:
+                    auth_logger.warning(
+                        "permission_check_denied",
+                        user_id=str(request.user.id),
+                        required_permission=required_permission,
+                        view_name=view.__class__.__name__,
+                        reason="global_permission_not_assigned",
+                    )
+
+                return result
 
             result = has_permission(
                 user=request.user,
