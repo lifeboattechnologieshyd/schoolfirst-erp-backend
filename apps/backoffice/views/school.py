@@ -160,6 +160,8 @@ class SchoolAPIView(APIView):
                 "is_email_verified": school.is_email_verified,
                 "is_phone_verified": school.is_phone_verified,
                 "status": school.status,
+                "latitude": school.latitude,
+                "longitude": school.longitude,
                 "branches": branches,
             }
 
@@ -315,6 +317,14 @@ class SchoolUpdateAPIView(APIView):
             school.pincode = request.data.get(
                 "pincode",
                 school.pincode,
+            )
+            school.latitude = request.data.get(
+                "latitude",
+                school.latitude,
+            )
+            school.longitude = request.data.get(
+                "longitude",
+                school.longitude,
             )
 
             school.save()
