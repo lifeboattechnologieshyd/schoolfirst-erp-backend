@@ -1,10 +1,11 @@
+from django.utils import cache
 from rest_framework.permissions import BasePermission
 
-from apps.core.models import UserRoles
+from apps.core.models import UserRoles, UserPermissions, RolePermissions
 from apps.school.models import School
 from shared.helpers.rbac import (
     get_user_roles,
-    has_permission, get_user_permissions,
+    has_permission, get_user_permissions, CACHE_TIMEOUT,
 )
 from shared.utils.logger import auth_logger
 
@@ -274,3 +275,57 @@ class HasPermission(BasePermission):
 #         print("=" * 80)
 #
 #         return has_access
+
+
+def get_global_permissions(user):
+    """
+    Permissions from roles / direct grants NOT tied to a school
+    (school = NULL), e.g. CONTENT_MANAGER. Used for global APIs
+    and the superadmin panel menu.
+
+    Do NOT use get_user_permissions(user, None) for this: with no
+    school_id it returns permissions from ALL roles, including
+    school-level ones.
+    """
+
+    cache_key = f"user_permissions:{user.id}:global"
+
+    permissions = cache.get(cache_key)
+
+    if permissions is not None:
+        return permissions
+
+    role_ids = UserRoles.objects.filter(
+        user=user,
+        school__isnull=True,
+        is_deleted=False,
+    ).values("role_id")
+
+    role_permissions = RolePermissions.objects.filter(
+        role_id__in=role_ids,
+        is_deleted=False,
+    ).values_list(
+        "permission__permission_name",
+        flat=True,
+    )
+
+    direct_permissions = UserPermissions.objects.filter(
+        user=user,
+        school__isnull=True,
+        is_deleted=False,
+    ).values_list(
+        "permission__permission_name",
+        flat=True,
+    )
+
+    permissions = list(
+        set(role_permissions) | set(direct_permissions)
+    )
+
+    cache.set(
+        cache_key,
+        permissions,
+        CACHE_TIMEOUT,
+    )
+
+    return permissions
