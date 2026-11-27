@@ -426,7 +426,7 @@ class DailyChallengeAttempts(AuditModel):
         editable=False
     )
     kid = models.ForeignKey(
-        Kids,
+        "school.Student",
         on_delete=models.CASCADE,
         related_name="daily_challenge_attempts"
     )
@@ -501,7 +501,7 @@ class KidWordProgress(AuditModel):
     )
 
     kid = models.ForeignKey(
-        Kids,
+        "school.Student",
         on_delete=models.CASCADE,
         related_name="word_progress"
     )
@@ -555,7 +555,7 @@ class PracticeAttempts(AuditModel):
     )
 
     kid = models.ForeignKey(
-        Kids,
+        "school.Student",
         on_delete=models.CASCADE,
         related_name="practice_attempts"
     )
@@ -814,7 +814,7 @@ class TournamentParticipants(AuditModel):
     )
 
     kid = models.ForeignKey(
-        Kids,
+        "school.Student",
         on_delete=models.CASCADE
     )
 

@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
@@ -6,7 +8,8 @@ from rest_framework.views import APIView
 
 from apps.vocabbee.models import PracticeAttempts, PracticeAttemptAnswers, KidWordProgress, Words, \
     DailyChallengeAttempts, Kids, DailyChallengeAttemptAnswers, DailyChallengeWords, Grades, TournamentParticipants, \
-    TournamentAnswers, Tournaments, TournamentQuestions, TournamentGrades
+    TournamentAnswers, Tournaments, TournamentQuestions, TournamentGrades, WordAudios
+from shared.helpers.family_zone import get_family_zone_grade, get_kid
 from shared.mixins import CustomResponse
 from shared.utils.vocabbee import get_practice_words
 
@@ -22,12 +25,7 @@ class StartPractice(APIView):
                 data={},
                 description="Kid ID is required"
             )
-        kid = request.user.kids.filter(
-            id=kid_id,
-            is_active=True
-        ).select_related(
-            "grade"
-        ).first()
+        kid = get_kid(kid_id, request.user)
 
         if not kid:
             return CustomResponse().errorResponse(
@@ -35,12 +33,20 @@ class StartPractice(APIView):
                 description="Invalid kid"
             )
 
+        grade = get_family_zone_grade(kid)
+
+        if not grade:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Grade is not mapped for Family Zone. Please contact school admin."
+            )
+
         attempt = PracticeAttempts.objects.create(
             kid=kid,
             started_at=timezone.now(),
             total_questions=no_of_questions
         )
-        response = get_practice_words(kid, no_of_questions)
+        response = get_practice_words(kid, grade, no_of_questions)
         return CustomResponse().successResponse(
             data={
                 "attempt_id": str(attempt.id),
@@ -226,7 +232,8 @@ class SkipPracticeQuestion(APIView):
             "correct_word": word.word
         }
         if is_last_question:
-            next_words = get_practice_words(attempt.kid)
+            grade = get_family_zone_grade(attempt.kid)
+            next_words = get_practice_words(attempt.kid, grade) if grade else []
             response["next_words"] = next_words
         return CustomResponse().successResponse(
             data=response,
@@ -332,12 +339,7 @@ class PracticeStats(APIView):
                 description="Kid ID is required"
             )
 
-        kid = request.user.kids.filter(
-            id=kid_id,
-            is_active=True
-        ).select_related(
-            "grade"
-        ).first()
+        kid = get_kid(kid_id, request.user)
 
         if not kid:
             return CustomResponse().errorResponse(
@@ -345,8 +347,16 @@ class PracticeStats(APIView):
                 description="Invalid kid"
             )
 
+        grade = get_family_zone_grade(kid)
+
+        if not grade:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Grade is not mapped for Family Zone. Please contact school admin."
+            )
+
         total_words_in_grade = Words.objects.filter(
-            grade=kid.grade,
+            grade=grade,
             is_active=True
         ).count()
 
@@ -411,15 +421,15 @@ class PracticeHistoryAPIView(APIView):
         kid_id = request.GET.get(
             "kid_id"
         )
-        kid = request.user.kids.filter(
-            id=kid_id,
-            is_active=True
-        ).first()
+        kid = get_kid(kid_id, request.user)
+
         if not kid:
             return CustomResponse().errorResponse(
                 data={},
                 description="Invalid kid"
             )
+
+
         practice_attempts = PracticeAttempts.objects.filter(
             kid=kid
         ).values(
@@ -445,15 +455,15 @@ class HomeStats(APIView):
         kid_id = request.GET.get(
             "kid_id"
         )
-        kid = request.user.kids.filter(
-            id=kid_id,
-            is_active=True
-        ).first()
+        kid = get_kid(kid_id, request.user)
+
         if not kid:
             return CustomResponse().errorResponse(
                 data={},
                 description="Invalid kid"
             )
+
+
         mastered_words = KidWordProgress.objects.filter(
             kid=kid,
             is_mastered=True
@@ -468,14 +478,29 @@ class HomeStats(APIView):
 
 class DailyChallengesAPIView(APIView):
 
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     def get(self, request):
-        kid = Kids.objects.get(
-            id=request.GET.get("kid_id")
+        kid_id = request.GET.get(
+            "kid_id"
         )
+        kid = get_kid(kid_id, request.user)
+
+        if not kid:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Invalid kid"
+            )
+
+        grade = get_family_zone_grade(kid)
+
+        if not grade:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Grade is not mapped for Family Zone. Please contact school admin."
+            )
         page = int(request.GET.get("page",1))
         challenge_dates = DailyChallengeWords.objects.filter(
-            grade=kid.grade,
+            grade=grade,
             is_active=True
         ).values_list(
             "challenge_date",
@@ -520,6 +545,7 @@ class DailyChallengesAPIView(APIView):
                                                   description="")
 
 class DailyChallengeWordsAPIView(APIView):
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         kid_id = request.data.get("kid_id")
@@ -532,21 +558,26 @@ class DailyChallengeWordsAPIView(APIView):
             return CustomResponse.errorResponse(
                 description="challenge_date is required"
             )
-        try:
-            kid = Kids.objects.select_related(
-                "grade"
-            ).get(
-                id=kid_id
+        kid = get_kid(kid_id, request.user)
+
+        if not kid:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Invalid kid"
             )
-        except Kids.DoesNotExist:
-            return CustomResponse.errorResponse(
-                description="Kid not found"
+
+        grade = get_family_zone_grade(kid)
+
+        if not grade:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Grade is not mapped for Family Zone. Please contact school admin."
             )
         attempt, created = DailyChallengeAttempts.objects.get_or_create(
             kid=kid,
             challenge_date=challenge_date,
             defaults={
-                "grade": kid.grade,
+                "grade": grade,
                 "status": "IN_PROGRESS"
             }
         )
@@ -561,7 +592,7 @@ class DailyChallengeWordsAPIView(APIView):
             DailyChallengeWords.objects
             .filter(
                 challenge_date=challenge_date,
-                grade=kid.grade,
+                grade=grade,
                 is_active=True,
             )
             .exclude(
@@ -640,6 +671,8 @@ class DailyChallengeWordsAPIView(APIView):
 
 
 class DailyChallengeSubmitAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
 
     @transaction.atomic
     def post(self, request):
@@ -791,16 +824,24 @@ class DailyChallengeResultAPIView(APIView):
         )
 
 class DailyChallengeStatsAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         kid_id = request.GET.get("kid_id")
-        try:
-            kid = Kids.objects.get(
-                id=kid_id
+        kid = get_kid(kid_id, request.user)
+
+        if not kid:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Invalid kid"
             )
-        except Kids.DoesNotExist:
-            return CustomResponse.errorResponse(
-                description="Kid not found"
+
+        grade = get_family_zone_grade(kid)
+
+        if not grade:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Grade is not mapped for Family Zone. Please contact school admin."
             )
         attempts = (
             DailyChallengeAttempts.objects
@@ -991,15 +1032,20 @@ class AddKid(APIView):
                 description="Kid ID is required"
             )
 
-        kid = request.user.kids.filter(
-            id=kid_id,
-            is_active=True
-        ).first()
+        kid = get_kid(kid_id, request.user)
 
         if not kid:
             return CustomResponse().errorResponse(
                 data={},
                 description="Invalid kid"
+            )
+
+        grade = get_family_zone_grade(kid)
+
+        if not grade:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Grade is not mapped for Family Zone. Please contact school admin."
             )
 
         name = request.data.get("name")
@@ -1070,20 +1116,27 @@ class TournamentListAPIView(APIView):
 
     def get(self, request):
         kid_id = request.GET.get("kid_id")
-        kid = request.user.kids.filter(
-            id=kid_id,
-            is_active=True
-        ).first()
+        kid = get_kid(kid_id, request.user)
+
         if not kid:
             return CustomResponse().errorResponse(
-                description="Kid not found."
+                data={},
+                description="Invalid kid"
+            )
+
+        grade = get_family_zone_grade(kid)
+
+        if not grade:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Grade is not mapped for Family Zone. Please contact school admin."
             )
         tournaments = Tournaments.objects.filter(
             status__in=[
                 "UPCOMING",
                 "LIVE"
             ],
-            eligible_grades__grade=kid.grade
+            eligible_grades__grade=grade
         ).distinct().annotate(
             participant_count=Count("participants", distinct=True)
         ).order_by(
@@ -1137,14 +1190,20 @@ class TournamentJoinAPIView(APIView):
 
     def post(self, request, tournament_id):
         kid_id = request.GET.get("kid_id")
-        kid = request.user.kids.filter(
-            id=kid_id,
-            is_active=True
-        ).first()
+        kid = get_kid(kid_id, request.user)
 
         if not kid:
             return CustomResponse().errorResponse(
-                description="Kid not found."
+                data={},
+                description="Invalid kid"
+            )
+
+        grade = get_family_zone_grade(kid)
+
+        if not grade:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Grade is not mapped for Family Zone. Please contact school admin."
             )
         tournament = Tournaments.objects.filter(
             id=tournament_id
@@ -1159,7 +1218,7 @@ class TournamentJoinAPIView(APIView):
             )
         is_eligible = TournamentGrades.objects.filter(
             tournament=tournament,
-            grade=kid.grade
+            grade=grade
         ).exists()
         if not is_eligible:
             return CustomResponse().errorResponse(
@@ -1199,14 +1258,16 @@ class TournamentStartAPIView(APIView):
 
     def post(self, request, tournament_id):
         kid_id = request.GET.get("kid_id")
-        kid = request.user.kids.filter(
-            id=kid_id,
-            is_active=True
-        ).first()
+        kid = get_kid(kid_id, request.user)
+
         if not kid:
             return CustomResponse().errorResponse(
-                description="Kid not found."
+                data={},
+                description="Invalid kid"
             )
+
+
+
         tournament = Tournaments.objects.filter(
             id=tournament_id
         ).first()
@@ -1290,13 +1351,20 @@ class TournamentSubmitAnswerAPIView(APIView):
     def post(self, request, tournament_id):
         print(f"submit ans api request with payload ===> {request.data}")
         kid_id = request.GET.get("kid_id")
-        kid = request.user.kids.filter(
-            id=kid_id,
-            is_active=True
-        ).first()
+        kid = get_kid(kid_id, request.user)
+
         if not kid:
             return CustomResponse().errorResponse(
-                description="Kid not found."
+                data={},
+                description="Invalid kid"
+            )
+
+        grade = get_family_zone_grade(kid)
+
+        if not grade:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Grade is not mapped for Family Zone. Please contact school admin."
             )
         data = request.data
         question_id = data.get("question_id")
@@ -1411,13 +1479,20 @@ class TournamentLeaderboardAPIView(APIView):
 
     def get(self, request, tournament_id):
         kid_id = request.GET.get("kid_id")
-        kid = request.user.kids.filter(
-            id=kid_id,
-            is_active=True
-        ).first()
+        kid = get_kid(kid_id, request.user)
+
         if not kid:
             return CustomResponse().errorResponse(
-                description="Kid not found."
+                data={},
+                description="Invalid kid"
+            )
+
+        grade = get_family_zone_grade(kid)
+
+        if not grade:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Grade is not mapped for Family Zone. Please contact school admin."
             )
         tournament = Tournaments.objects.filter(
             id=tournament_id
@@ -1468,13 +1543,20 @@ class TournamentResultAPIView(APIView):
 
     def get(self, request, tournament_id):
         kid_id = request.GET.get("kid_id")
-        kid = request.user.kids.filter(
-            id=kid_id,
-            is_active=True
-        ).first()
+        kid = get_kid(kid_id, request.user)
+
         if not kid:
             return CustomResponse().errorResponse(
-                description="Kid not found."
+                data={},
+                description="Invalid kid"
+            )
+
+        grade = get_family_zone_grade(kid)
+
+        if not grade:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Grade is not mapped for Family Zone. Please contact school admin."
             )
         participant = TournamentParticipants.objects.filter(
             tournament_id=tournament_id,
@@ -1518,14 +1600,20 @@ class TournamentHistoryAPIView(APIView):
 
         kid_id = request.GET.get("kid_id")
 
-        kid = request.user.kids.filter(
-            id=kid_id,
-            is_active=True
-        ).first()
+        kid = get_kid(kid_id, request.user)
 
         if not kid:
             return CustomResponse().errorResponse(
-                description="Kid not found."
+                data={},
+                description="Invalid kid"
+            )
+
+        grade = get_family_zone_grade(kid)
+
+        if not grade:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Grade is not mapped for Family Zone. Please contact school admin."
             )
 
         page = int(request.GET.get("page", 1))

@@ -78,6 +78,35 @@ MODULE_PREFIX_MAPPING = {
     "academic_year": "Academic Setup",
     "grade_configuration": "Academic Setup",
     "subject": "Academic Setup",
+
+    # Existing modules: underscore prefixes the matcher misses
+    # ("examination_grade" does not match "examination" + ".")
+    "examination_grade": "Exam Management",
+    "examination_result": "Exam Management",
+    "examination_schedule": "Exam Management",
+    "examination_subject": "Exam Management",
+    "examination_type": "Exam Management",
+
+    "academic_calendar_weekend_rule": "Academic Calendar",
+    "bulletin_category": "Communication Management",
+    "feedback_category": "Feedback",
+    "feedback_response": "Feedback",
+    "remark_category": "Remarks",
+    "student_fee_assignment": "Fee Management",
+    "student_fee_payment": "Fee Management",
+
+    # Dashboards (new module)
+    "dashboard": "Dashboard",
+    "teacher_dashboard": "Dashboard",
+
+    # Family Zone (new modules) - assigned to CONTENT_MANAGER
+    "curriculum": "Curriculum",
+    "assessment": "Assessment",
+    "feed": "Edutainment",
+    "feed_category": "Edutainment",
+    "feels": "Feels",
+    "activity": "Activities",
+    "vocabbee": "Vocabbee",
 }
 
 
@@ -164,6 +193,22 @@ class Command(BaseCommand):
                                 permissions_found.add(
                                     class_node.value.value.strip()
                                 )
+
+                            # Per-method dict:
+                            # required_permissions = {"GET": "x.view", "POST": "x.create"}
+                            if (
+                                isinstance(target, ast.Name)
+                                and target.id == "required_permissions"
+                                and isinstance(class_node.value, ast.Dict)
+                            ):
+                                for value in class_node.value.values:
+                                    if (
+                                        isinstance(value, ast.Constant)
+                                        and isinstance(value.value, str)
+                                    ):
+                                        permissions_found.add(
+                                            value.value.strip()
+                                        )
 
         self.stdout.write(
             f"Scanned permissions: {len(permissions_found)}"

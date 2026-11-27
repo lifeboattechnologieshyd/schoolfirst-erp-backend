@@ -24,6 +24,7 @@ from django.db import transaction
 from apps.school.models.school import Student, StudentDocument
 from shared.enums.roles import RolesEnum
 from shared.helpers import get_user_roles, get_user_permissions
+from shared.helpers.family_zone import get_family_zone_grade
 from shared.mixins import CustomResponse
 
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -737,6 +738,7 @@ class VerifyOTPAPIView(APIView):
 
                 students = Student.objects.select_related(
                     "grade",
+                    "grade__standard_grade",
                     "section",
                     "academic_year",
                     "school",
@@ -780,6 +782,7 @@ class VerifyOTPAPIView(APIView):
                             relationship = "Mother"
                         else:
                             relationship = "Guardian"
+                        family_zone_grade = get_family_zone_grade(student)
 
                         student_data.append({
                             "student_id": str(student.id),
@@ -797,6 +800,10 @@ class VerifyOTPAPIView(APIView):
                                 "id": str(student.grade.id),
                                 "name": student.grade.name,
                             } if student.grade else None,
+                            "family_zone_grade": {
+                                "id": str(family_zone_grade.id),
+                                "name": family_zone_grade.name,
+                            } if family_zone_grade else None,
                             "section": {
                                 "id": str(student.section.id),
                                 "name": student.section.name,

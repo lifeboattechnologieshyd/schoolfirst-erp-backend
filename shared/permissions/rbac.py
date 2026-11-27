@@ -1,10 +1,11 @@
+from django.core.cache import cache
 from rest_framework.permissions import BasePermission
 
-from apps.core.models import UserRoles
+from apps.core.models import UserRoles, UserPermissions, RolePermissions
 from apps.school.models import School
 from shared.helpers.rbac import (
     get_user_roles,
-    has_permission, get_user_permissions,
+    has_permission, get_user_permissions, CACHE_TIMEOUT,
 )
 from shared.utils.logger import auth_logger
 
@@ -96,6 +97,15 @@ class HasPermission(BasePermission):
             None,
         )
 
+        method_permissions = getattr(
+            view,
+            "required_permissions",
+            None,
+        )
+
+        if method_permissions:
+            required_permission = method_permissions.get(request.method)
+
         school = getattr(
             request,
             "school",
@@ -150,15 +160,28 @@ class HasPermission(BasePermission):
 
             if school is None or school_id is None:
 
-                auth_logger.warning(
-                    "permission_check_denied",
-                    user_id=str(request.user.id),
-                    required_permission=required_permission,
-                    view_name=view.__class__.__name__,
-                    reason="school_context_not_found",
+                result = required_permission in get_global_permissions(
+                    request.user
                 )
 
-                return False
+                if result:
+                    auth_logger.info(
+                        "permission_check_allowed",
+                        user_id=str(request.user.id),
+                        required_permission=required_permission,
+                        view_name=view.__class__.__name__,
+                        reason="global_permission",
+                    )
+                else:
+                    auth_logger.warning(
+                        "permission_check_denied",
+                        user_id=str(request.user.id),
+                        required_permission=required_permission,
+                        view_name=view.__class__.__name__,
+                        reason="global_permission_not_assigned",
+                    )
+
+                return result
 
             result = has_permission(
                 user=request.user,
@@ -265,3 +288,57 @@ class HasPermission(BasePermission):
 #         print("=" * 80)
 #
 #         return has_access
+
+
+def get_global_permissions(user):
+    """
+    Permissions from roles / direct grants NOT tied to a school
+    (school = NULL), e.g. CONTENT_MANAGER. Used for global APIs
+    and the superadmin panel menu.
+
+    Do NOT use get_user_permissions(user, None) for this: with no
+    school_id it returns permissions from ALL roles, including
+    school-level ones.
+    """
+
+    cache_key = f"user_permissions:{user.id}:global"
+
+    permissions = cache.get(cache_key)
+
+    if permissions is not None:
+        return permissions
+
+    role_ids = UserRoles.objects.filter(
+        user=user,
+        school__isnull=True,
+        is_deleted=False,
+    ).values("role_id")
+
+    role_permissions = RolePermissions.objects.filter(
+        role_id__in=role_ids,
+        is_deleted=False,
+    ).values_list(
+        "permission__permission_name",
+        flat=True,
+    )
+
+    direct_permissions = UserPermissions.objects.filter(
+        user=user,
+        school__isnull=True,
+        is_deleted=False,
+    ).values_list(
+        "permission__permission_name",
+        flat=True,
+    )
+
+    permissions = list(
+        set(role_permissions) | set(direct_permissions)
+    )
+
+    cache.set(
+        cache_key,
+        permissions,
+        CACHE_TIMEOUT,
+    )
+
+    return permissions

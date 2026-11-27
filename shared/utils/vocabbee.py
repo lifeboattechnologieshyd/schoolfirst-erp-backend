@@ -1,7 +1,7 @@
 from apps.vocabbee.models import KidWordProgress, Words
 
 
-def get_practice_words(kid, no_of_questions=10):
+def get_practice_words(kid, grade, no_of_questions=10):
 
     attempted_word_ids = KidWordProgress.objects.filter(
         kid=kid
@@ -12,7 +12,7 @@ def get_practice_words(kid, no_of_questions=10):
 
     selected_words = list(
         Words.objects.filter(
-            grade=kid.grade,
+            grade=grade,
             is_active=True,
             voice_status="GENERATED",
             is_valid=True
@@ -33,7 +33,7 @@ def get_practice_words(kid, no_of_questions=10):
 
         additional_words = list(
             Words.objects.filter(
-                grade=kid.grade,
+                grade=grade,
                 is_active=True,
                 voice_status="GENERATED",
                 is_valid=True

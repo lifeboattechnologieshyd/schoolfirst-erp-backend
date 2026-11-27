@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "8d3397e6-17fa-4574-963b-71c1ca3ecb8e",
+    "_postman_id": "fdfaea4e-a907-43e2-82e4-ab5ae873d709",
     "name": "SchoolFirst ERP - All APIs",
     "description": "Generated from the project's urls.py and views (every endpoint, method, query and body field).\n1. Fill baseUrl, mobile/otp (admin or staff), parentMobile/parentOtp (parent).\n2. Run 'Auth & Profile > Admin verify OTP' -> saves token (backoffice APIs).\n3. Run 'Parent verify OTP' -> saves parentToken, kidId, schoolId (app APIs).\n4. Optional query params are included but disabled; enable what you need.\nExample values are placeholders - replace with real data.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -4422,21 +4422,28 @@
               ],
               "query": [
                 {
-                  "key": "page",
-                  "value": "1",
-                  "disabled": false
-                },
-                {
                   "key": "kid_id",
                   "value": "{{kidId}}",
                   "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
                 }
               ]
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parentToken}}",
+                  "type": "string"
+                }
+              ]
             },
-            "description": "View: DailyChallengesAPIView (apps.vocabbee.views.vocabbee)\nPublic (no token).\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: DailyChallengesAPIView (apps.vocabbee.views.vocabbee)\nApp API: uses {{parentToken}}.\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -15762,7 +15769,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"branch_id\": \"{{branchId}}\",\n  \"name\": \"Sample name\",\n  \"display_order\": 1,\n  \"status\": \"ACTIVE\",\n  \"academic_year_id\": \"{{academicYearId}}\"\n}",
+              "raw": "{\n  \"branch_id\": \"{{branchId}}\",\n  \"standard_grade_id\": \"{{standardGradeId}}\",\n  \"name\": \"Sample name\",\n  \"display_order\": 1,\n  \"status\": \"ACTIVE\",\n  \"academic_year_id\": \"{{academicYearId}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -15837,7 +15844,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"academic_year_id\": \"{{academicYearId}}\",\n  \"branch_id\": \"{{branchId}}\",\n  \"name\": \"Sample name\",\n  \"display_order\": 1,\n  \"status\": \"ACTIVE\"\n}",
+              "raw": "{\n  \"academic_year_id\": \"{{academicYearId}}\",\n  \"branch_id\": \"{{branchId}}\",\n  \"standard_grade_id\": \"{{standardGradeId}}\",\n  \"name\": \"Sample name\",\n  \"display_order\": 1,\n  \"status\": \"ACTIVE\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -19931,7 +19938,7 @@
                 "dashboard"
               ]
             },
-            "description": "View: DashboardAPIView (apps.backoffice.views.vocabbee)\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: DashboardAPIView (apps.backoffice.views.vocabbee)\nPermission: vocabbee.dashboard.view\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -20461,7 +20468,7 @@
                 }
               ]
             },
-            "description": "View: SubjectDeleteAPIView (apps.backoffice.views.vocabbee)\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: SubjectDeleteAPIView (apps.backoffice.views.vocabbee)\nPermission: vocabbee.subject.delete\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -20666,10 +20673,7 @@
                 }
               ]
             },
-            "auth": {
-              "type": "noauth"
-            },
-            "description": "View: UploadWords (apps.backoffice.views.vocabbee)\nPublic (no token).\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: UploadWords (apps.backoffice.views.vocabbee)\nPermission: vocabbee.word.import\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -20797,7 +20801,7 @@
                 }
               ]
             },
-            "description": "View: TournamentDetailsAPIView (apps.backoffice.views.vocabbee)\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: TournamentDetailsAPIView (apps.backoffice.views.vocabbee)\nPermission: vocabbee.tournament.view\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -20843,7 +20847,7 @@
                 }
               }
             },
-            "description": "View: TournamentAssignGradesAPIView (apps.backoffice.views.vocabbee)\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: TournamentAssignGradesAPIView (apps.backoffice.views.vocabbee)\nPermission: vocabbee.tournament.update\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -20883,7 +20887,7 @@
                 }
               }
             },
-            "description": "View: TournamentAvailableWordsAPIView (apps.backoffice.views.vocabbee)\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: TournamentAvailableWordsAPIView (apps.backoffice.views.vocabbee)\nPermission: vocabbee.tournament.view\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -20930,7 +20934,7 @@
                 }
               }
             },
-            "description": "View: TournamentAssignQuestionsAPIView (apps.backoffice.views.vocabbee)\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: TournamentAssignQuestionsAPIView (apps.backoffice.views.vocabbee)\nPermission: vocabbee.tournament.update\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -20963,7 +20967,7 @@
                 }
               ]
             },
-            "description": "View: TournamentCancelAPIView (apps.backoffice.views.vocabbee)\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: TournamentCancelAPIView (apps.backoffice.views.vocabbee)\nPermission: vocabbee.tournament.cancel\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -20996,7 +21000,7 @@
                 }
               ]
             },
-            "description": "View: TournamentPublishAPIView (apps.backoffice.views.vocabbee)\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: TournamentPublishAPIView (apps.backoffice.views.vocabbee)\nPermission: vocabbee.tournament.publish\nBody/query fields are read from the code; example values are placeholders."
           }
         }
       ]
@@ -21115,6 +21119,11 @@
     },
     {
       "key": "documentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "standardGradeId",
       "value": "",
       "type": "string"
     },
