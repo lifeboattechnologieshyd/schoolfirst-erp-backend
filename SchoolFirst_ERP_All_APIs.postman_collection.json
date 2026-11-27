@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "040ba94e-9e36-4802-8d47-5b9bc163109f",
+    "_postman_id": "73810ecb-ac2f-420d-859e-1b7d3ba2ebcb",
     "name": "SchoolFirst ERP - All APIs",
     "description": "Generated from the project's urls.py and views (every endpoint, method, query and body field).\n1. Fill baseUrl, mobile/otp (admin or staff), parentMobile/parentOtp (parent).\n2. Run 'Auth & Profile > Admin verify OTP' -> saves token (backoffice APIs).\n3. Run 'Parent verify OTP' -> saves parentToken, kidId, schoolId (app APIs).\n4. Optional query params are included but disabled; enable what you need.\nExample values are placeholders - replace with real data.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -19938,7 +19938,7 @@
                 "dashboard"
               ]
             },
-            "description": "View: DashboardAPIView (apps.backoffice.views.vocabbee)\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: DashboardAPIView (apps.backoffice.views.vocabbee)\nPermission: vocabbee.dashboard.view\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -20468,7 +20468,7 @@
                 }
               ]
             },
-            "description": "View: SubjectDeleteAPIView (apps.backoffice.views.vocabbee)\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: SubjectDeleteAPIView (apps.backoffice.views.vocabbee)\nPermission: vocabbee.subject.delete\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -20673,10 +20673,7 @@
                 }
               ]
             },
-            "auth": {
-              "type": "noauth"
-            },
-            "description": "View: UploadWords (apps.backoffice.views.vocabbee)\nPublic (no token).\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: UploadWords (apps.backoffice.views.vocabbee)\nPermission: vocabbee.word.import\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -20804,7 +20801,7 @@
                 }
               ]
             },
-            "description": "View: TournamentDetailsAPIView (apps.backoffice.views.vocabbee)\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: TournamentDetailsAPIView (apps.backoffice.views.vocabbee)\nPermission: vocabbee.tournament.view\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -20850,7 +20847,7 @@
                 }
               }
             },
-            "description": "View: TournamentAssignGradesAPIView (apps.backoffice.views.vocabbee)\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: TournamentAssignGradesAPIView (apps.backoffice.views.vocabbee)\nPermission: vocabbee.tournament.update\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -20890,7 +20887,7 @@
                 }
               }
             },
-            "description": "View: TournamentAvailableWordsAPIView (apps.backoffice.views.vocabbee)\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: TournamentAvailableWordsAPIView (apps.backoffice.views.vocabbee)\nPermission: vocabbee.tournament.view\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -20937,7 +20934,7 @@
                 }
               }
             },
-            "description": "View: TournamentAssignQuestionsAPIView (apps.backoffice.views.vocabbee)\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: TournamentAssignQuestionsAPIView (apps.backoffice.views.vocabbee)\nPermission: vocabbee.tournament.update\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -20970,7 +20967,7 @@
                 }
               ]
             },
-            "description": "View: TournamentCancelAPIView (apps.backoffice.views.vocabbee)\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: TournamentCancelAPIView (apps.backoffice.views.vocabbee)\nPermission: vocabbee.tournament.cancel\nBody/query fields are read from the code; example values are placeholders."
           }
         },
         {
@@ -21003,7 +21000,7 @@
                 }
               ]
             },
-            "description": "View: TournamentPublishAPIView (apps.backoffice.views.vocabbee)\nBody/query fields are read from the code; example values are placeholders."
+            "description": "View: TournamentPublishAPIView (apps.backoffice.views.vocabbee)\nPermission: vocabbee.tournament.publish\nBody/query fields are read from the code; example values are placeholders."
           }
         }
       ]

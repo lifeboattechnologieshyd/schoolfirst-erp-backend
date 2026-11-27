@@ -17,10 +17,14 @@ from apps.core.models import UserMaster
 from apps.vocabbee.models import Grades, Words, WordAudios, PracticeAttempts, Subjects, Tournaments, Devices, \
     TournamentGrades, TournamentQuestions, TournamentParticipants
 from shared.mixins import CustomResponse
+from shared.permissions import HasPermission
 from shared.utils.s3 import save_to_s3
 
 
 class GradesList(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permissions = {"GET": "vocabbee.grade.view", "POST": "vocabbee.grade.create",
+                            "PUT": "vocabbee.grade.update", "DELETE": "vocabbee.grade.delete"}
 
     def get(self, request):
 
@@ -206,6 +210,9 @@ def download_file_from_s3(url, word):
 
 
 class WordsCrud(APIView):
+    permission_classes = [IsAuthenticated]
+    required_permissions = {"GET": "vocabbee.word.view", "POST": "vocabbee.word.create", "PUT": "vocabbee.word.update",
+                            "DELETE": "vocabbee.word.delete"}
 
     def post(self, request):
 
@@ -747,12 +754,13 @@ class WordsCrud(APIView):
 
 class UploadWords(APIView):
 
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     parser_classes = [
         MultiPartParser,
         FormParser
     ]
+    required_permission = "vocabbee.word.import"
 
     def post(self, request):
 
@@ -1096,6 +1104,8 @@ class UploadWords(APIView):
 
 
 class DashboardAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    required_permission = "vocabbee.dashboard.view"
 
     def get(self, request):
         today = timezone.localdate()
@@ -1123,6 +1133,8 @@ class DashboardAPIView(APIView):
 
 
 class SubjectCrud(APIView):
+    permission_classes = [IsAuthenticated]
+    required_permissions = {"GET": "vocabbee.subject.view", "POST": "vocabbee.subject.create"}
 
     def post(self, request):
         name = request.data.get("name", "").strip()
@@ -1181,6 +1193,8 @@ class SubjectCrud(APIView):
         return CustomResponse().successResponse(data=data)
 
 class SubjectDeleteAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    required_permission = "vocabbee.subject.delete"
     def delete(self, request, subject_id):
         subject = Subjects.objects.filter(
             id=subject_id
@@ -1201,8 +1215,9 @@ class SubjectDeleteAPIView(APIView):
 
 
 class TournamentCreateAPIView(APIView):
-
     permission_classes = [IsAuthenticated]
+    required_permissions = {"GET": "vocabbee.tournament.view", "POST": "vocabbee.tournament.create"}
+
     def post(self, request):
         data = request.data
         title = data.get("title")
@@ -1350,6 +1365,8 @@ class TournamentCreateAPIView(APIView):
         )
 
 class TournamentDetailsAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    required_permission = "vocabbee.tournament.view"
 
     def get(self, request, tournament_id):
 
@@ -1419,6 +1436,8 @@ class TournamentDetailsAPIView(APIView):
 
 
 class TournamentAssignGradesAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    required_permission = "vocabbee.tournament.update"
 
     def post(self, request, tournament_id):
         data = request.data
@@ -1467,6 +1486,8 @@ class TournamentAssignGradesAPIView(APIView):
 
 
 class TournamentAvailableWordsAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    required_permission = "vocabbee.tournament.view"
 
     def post(self, request):
         page = int(request.data.get("page", 1))
@@ -1514,6 +1535,8 @@ class TournamentAvailableWordsAPIView(APIView):
         )
 
 class TournamentAssignQuestionsAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    required_permission = "vocabbee.tournament.update"
 
     def post(self, request, tournament_id):
 
@@ -1578,6 +1601,8 @@ class TournamentAssignQuestionsAPIView(APIView):
         )
 
 class TournamentPublishAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    required_permission = "vocabbee.tournament.publish"
 
     def post(self, request, tournament_id):
 
@@ -1626,6 +1651,8 @@ class TournamentPublishAPIView(APIView):
         )
 
 class TournamentCancelAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    required_permission = "vocabbee.tournament.cancel"
 
     def post(self, request, tournament_id):
 
