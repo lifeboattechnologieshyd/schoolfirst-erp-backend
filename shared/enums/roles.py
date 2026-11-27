@@ -13,3 +13,10 @@ class RolesEnum:
     DRIVER = "DRIVER"
 
     PARENT = "PARENT"
+
+    CONTENT_MANAGER = "CONTENT_MANAGER"
+
+SUPERADMIN_PANEL_ROLES = [
+    RolesEnum.SUPERADMIN,
+    RolesEnum.CONTENT_MANAGER,
+]

@@ -11,7 +11,7 @@ from apps.backoffice.views.leads import normalize_email, normalize_mobile
 from apps.core.models import UserRoles, Roles, Permissions, RolePermissions, UserOTP, UserMaster
 from apps.school.models import SchoolLead
 from apps.school.models.school import Organization, School, Branch, SchoolConfiguration, SchoolClient
-from shared.enums.roles import RolesEnum
+from shared.enums.roles import RolesEnum, SUPERADMIN_PANEL_ROLES
 from shared.helpers.rbac import check_permission, has_role
 from shared.mixins import CustomResponse, CustomPageNumberPagination
 
@@ -147,7 +147,11 @@ class SuperAdminRequestOTPAPIView(APIView):
 
         try:
 
-            if not mobile:
+            # --------------------------------------------------
+            # Mobile validation
+            # --------------------------------------------------
+
+            if not request.data.get("phone_number"):
 
                 application_logger.warning(
                     "superadmin_request_otp_failed",
@@ -155,16 +159,32 @@ class SuperAdminRequestOTPAPIView(APIView):
                 )
 
                 return CustomResponse.errorResponse(
-                    description="mobile is required.",
+                    description="Phone number is required.",
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            if not mobile or not str(mobile).isdigit() or len(str(mobile)) != 10:
+
+                application_logger.warning(
+                    "superadmin_request_otp_failed",
+                    reason="mobile_invalid",
+                    mobile=mobile,
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Enter a valid 10-digit phone number.",
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # --------------------------------------------------
+            # User
+            # --------------------------------------------------
+
             user = UserMaster.objects.filter(
                 mobile=mobile,
-                is_active=True,
             ).first()
 
-            if not user:
+            if user is None:
 
                 application_logger.warning(
                     "superadmin_request_otp_failed",
@@ -173,8 +193,21 @@ class SuperAdminRequestOTPAPIView(APIView):
                 )
 
                 return CustomResponse.errorResponse(
-                    description="User not found.",
+                    description="No account found with this phone number.",
                     status=status.HTTP_404_NOT_FOUND,
+                )
+
+            if not user.is_active:
+
+                application_logger.warning(
+                    "superadmin_request_otp_failed",
+                    reason="user_inactive",
+                    user_id=str(user.id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Your account is inactive. Please contact the administrator.",
+                    status=status.HTTP_403_FORBIDDEN,
                 )
 
             application_logger.info(
@@ -183,30 +216,65 @@ class SuperAdminRequestOTPAPIView(APIView):
                 mobile=user.mobile,
             )
 
-            is_superadmin = UserRoles.objects.filter(
-                user=user,
-                role__role_name="SUPERADMIN",
-            ).exists()
+            # --------------------------------------------------
+            # Panel role (SUPERADMIN / CONTENT_MANAGER)
+            # --------------------------------------------------
 
-            if not is_superadmin:
+            panel_roles = UserRoles.objects.filter(
+                user=user,
+                role__role_name__in=SUPERADMIN_PANEL_ROLES,
+                is_deleted=False,
+            )
+
+            if not panel_roles.exists():
 
                 application_logger.warning(
                     "superadmin_request_otp_failed",
-                    reason="not_superadmin",
+                    reason="panel_role_not_assigned",
                     user_id=str(user.id),
                 )
 
                 return CustomResponse.errorResponse(
-                    description="Only SUPERADMIN can login here.",
+                    description="You don't have access to this panel.",
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
+            if not panel_roles.filter(school__isnull=True).exists():
+
+                application_logger.warning(
+                    "superadmin_request_otp_failed",
+                    reason="panel_role_school_scoped",
+                    user_id=str(user.id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Your role is assigned to a school. Please use the school admin login.",
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            # --------------------------------------------------
+            # OTP
+            # --------------------------------------------------
+
             otp = generate_otp()
 
-            send_otp_to_mobile(
+            is_sent = send_otp_to_mobile(
                 otp,
                 mobile,
             )
+
+            if not is_sent:
+
+                application_logger.error(
+                    "superadmin_request_otp_failed",
+                    reason="sms_send_failed",
+                    user_id=str(user.id),
+                )
+
+                return CustomResponse.errorResponse(
+                    description="Unable to send OTP right now. Please try again.",
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
 
             UserOTP.objects.create(
                 mobile=int(mobile),
@@ -222,9 +290,7 @@ class SuperAdminRequestOTPAPIView(APIView):
             )
 
             return CustomResponse.successResponse(
-                data={
-                    # "mobile_otp": otp,
-                },
+                data={},
                 description="OTP sent successfully.",
                 status=status.HTTP_200_OK,
             )
@@ -239,8 +305,8 @@ class SuperAdminRequestOTPAPIView(APIView):
 
             return CustomResponse.errorResponse(
                 description="Something went wrong while sending OTP.",
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
 
 class SuperAdminVerifyOTPAPIView(APIView):
 

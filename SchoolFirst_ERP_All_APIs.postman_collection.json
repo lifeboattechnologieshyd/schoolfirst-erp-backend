@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "44619e25-3294-4987-8cf5-4e7ae29a10f5",
+    "_postman_id": "040ba94e-9e36-4802-8d47-5b9bc163109f",
     "name": "SchoolFirst ERP - All APIs",
     "description": "Generated from the project's urls.py and views (every endpoint, method, query and body field).\n1. Fill baseUrl, mobile/otp (admin or staff), parentMobile/parentOtp (parent).\n2. Run 'Auth & Profile > Admin verify OTP' -> saves token (backoffice APIs).\n3. Run 'Parent verify OTP' -> saves parentToken, kidId, schoolId (app APIs).\n4. Optional query params are included but disabled; enable what you need.\nExample values are placeholders - replace with real data.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"

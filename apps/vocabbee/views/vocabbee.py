@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
@@ -44,7 +46,7 @@ class StartPractice(APIView):
             started_at=timezone.now(),
             total_questions=no_of_questions
         )
-        response = get_practice_words(kid, no_of_questions)
+        response = get_practice_words(kid, grade, no_of_questions)
         return CustomResponse().successResponse(
             data={
                 "attempt_id": str(attempt.id),
@@ -354,7 +356,7 @@ class PracticeStats(APIView):
             )
 
         total_words_in_grade = Words.objects.filter(
-            grade=kid.grade,
+            grade=grade,
             is_active=True
         ).count()
 
@@ -427,13 +429,7 @@ class PracticeHistoryAPIView(APIView):
                 description="Invalid kid"
             )
 
-        grade = get_family_zone_grade(kid)
 
-        if not grade:
-            return CustomResponse().errorResponse(
-                data={},
-                description="Grade is not mapped for Family Zone. Please contact school admin."
-            )
         practice_attempts = PracticeAttempts.objects.filter(
             kid=kid
         ).values(
@@ -467,13 +463,7 @@ class HomeStats(APIView):
                 description="Invalid kid"
             )
 
-        grade = get_family_zone_grade(kid)
 
-        if not grade:
-            return CustomResponse().errorResponse(
-                data={},
-                description="Grade is not mapped for Family Zone. Please contact school admin."
-            )
         mastered_words = KidWordProgress.objects.filter(
             kid=kid,
             is_mastered=True
@@ -1042,15 +1032,20 @@ class AddKid(APIView):
                 description="Kid ID is required"
             )
 
-        kid = request.user.kids.filter(
-            id=kid_id,
-            is_active=True
-        ).first()
+        kid = get_kid(kid_id, request.user)
 
         if not kid:
             return CustomResponse().errorResponse(
                 data={},
                 description="Invalid kid"
+            )
+
+        grade = get_family_zone_grade(kid)
+
+        if not grade:
+            return CustomResponse().errorResponse(
+                data={},
+                description="Grade is not mapped for Family Zone. Please contact school admin."
             )
 
         name = request.data.get("name")
@@ -1271,13 +1266,8 @@ class TournamentStartAPIView(APIView):
                 description="Invalid kid"
             )
 
-        grade = get_family_zone_grade(kid)
 
-        if not grade:
-            return CustomResponse().errorResponse(
-                data={},
-                description="Grade is not mapped for Family Zone. Please contact school admin."
-            )
+
         tournament = Tournaments.objects.filter(
             id=tournament_id
         ).first()
