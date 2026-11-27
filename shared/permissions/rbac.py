@@ -1,4 +1,4 @@
-from django.utils import cache
+from django.core.cache import cache
 from rest_framework.permissions import BasePermission
 
 from apps.core.models import UserRoles, UserPermissions, RolePermissions
