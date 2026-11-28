@@ -1066,6 +1066,8 @@ class CreateSchoolAPIView(APIView):
                     country=request.data.get("country", "India"),
                     primary_color=request.data.get("primary_color"),
                     secondary_color=request.data.get("secondary_color"),
+                    longitude = request.data.get("longitude"),
+                    latitude = request.data.get("latitude"),
                 )
 
                 # Assign SCHOOL_ADMIN to organization user
@@ -1207,6 +1209,8 @@ class SchoolListAPIView(APIView):
                     "is_email_verified": obj.is_email_verified,
                     "is_phone_verified": obj.is_phone_verified,
                     "status": obj.status,
+                    "longitude": obj.longitude,
+                    "latitude": obj.latitude,
                     "branches": branches,
                 })
 
@@ -1356,6 +1360,14 @@ class UpdateSchoolAPIView(APIView):
             school.pincode = request.data.get(
                 "pincode",
                 school.pincode,
+            )
+            school.latitude = request.data.get(
+                "latitude",
+                school.latitude,
+            )
+            school.longitude = request.data.get(
+                "longitude",
+                school.longitude,
             )
 
             school.save()

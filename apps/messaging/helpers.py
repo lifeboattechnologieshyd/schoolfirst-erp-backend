@@ -151,22 +151,36 @@ def get_parent_display_name(user, student):
 # =====================================================================
 def get_student_teachers(student):
     """
-    Class teacher first, then subject teachers from the active timetable
-    of the student's section.
-    Returns [{"staff", "subjects", "is_class_teacher"}].
+    All ACTIVE teachers of the student's school (and branch, if the
+    student has one; school-wide teachers with no branch are included).
+    Class teacher and timetable subjects are added when available.
+    Returns [{"staff", "subjects", "is_class_teacher"}], class teacher first.
     """
-    teachers = {}
+
+    staff_qs = Staff.objects.filter(
+        school_id=student.school_id,
+        staff_type=Staff.StaffType.TEACHER,
+        status=Staff.Status.ACTIVE,
+    ).select_related(
+        "chat_profile",
+    )
+
+    if student.branch_id:
+        staff_qs = staff_qs.filter(
+            Q(branch_id=student.branch_id) | Q(branch__isnull=True)
+        )
+
+    class_teacher_id = None
+    subjects_by_teacher = {}
 
     if student.section_id:
+
         class_teacher_id = Section.objects.filter(
             id=student.section_id,
-        ).values_list("class_teacher_id", flat=True).first()
-
-        if class_teacher_id:
-            teachers[class_teacher_id] = {
-                "subjects": [],
-                "is_class_teacher": True,
-            }
+        ).values_list(
+            "class_teacher_id",
+            flat=True,
+        ).first()
 
         today = get_school_now().date()
 
@@ -184,46 +198,22 @@ def get_student_teachers(student):
         )
 
         for teacher_id, subject_name in entries:
-            item = teachers.setdefault(
-                teacher_id,
-                {
-                    "subjects": [],
-                    "is_class_teacher": False,
-                },
-            )
+            subjects = subjects_by_teacher.setdefault(teacher_id, [])
+            if subject_name and subject_name not in subjects:
+                subjects.append(subject_name)
 
-            if subject_name and subject_name not in item["subjects"]:
-                item["subjects"].append(subject_name)
-
-    staff_by_id = {
-        staff.id: staff
-        for staff in Staff.objects.filter(
-            id__in=teachers.keys(),
-            school=student.school_id,
-            status=Staff.Status.ACTIVE,
-        ).select_related(
-            "chat_profile",
-        )
-    }
-
-    result = []
-
-    for staff_id, item in teachers.items():
-        staff = staff_by_id.get(staff_id)
-
-        if staff is None:
-            continue
-
-        result.append({
+    result = [
+        {
             "staff": staff,
-            "subjects": item["subjects"],
-            "is_class_teacher": item["is_class_teacher"],
-        })
+            "subjects": subjects_by_teacher.get(staff.id, []),
+            "is_class_teacher": staff.id == class_teacher_id,
+        }
+        for staff in staff_qs
+    ]
 
     result.sort(key=lambda item: (not item["is_class_teacher"], item["staff"].name))
 
     return result
-
 
 def teacher_role(item):
     if item["is_class_teacher"]:
