@@ -654,7 +654,7 @@ class SchoolDashboardAPIView(APIView):
 
             full_name = " ".join(
                 part for part in [user.first_name, user.last_name] if part
-            ) or user.username
+            )
 
             data = {
                 "greeting": get_greeting(now),
@@ -662,7 +662,7 @@ class SchoolDashboardAPIView(APIView):
                 "time": now.strftime("%H:%M"),
                 "user": {
                     "id": str(user.id),
-                    "name": full_name,
+                    "name": full_name if full_name else None,
                     "roles": role_names,
                 },
                 "school": {
